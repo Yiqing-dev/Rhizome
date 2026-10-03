@@ -190,7 +190,7 @@ jobs:
           if ($cmd -ne (Join-Path $installDir "server\rhz.exe")) { Write-Error "Claude config command is $cmd"; exit 1 }
           # ...and that command really works as an MCP server
           $env:RHIZOME_DATA_DIR = $dataDir
-          python desktop\ci\mcp_smoke.py $cmd
+          python desktop\ci\mcp_smoke.py $cmd DomainGAT   # this library only holds the inbox paper
           if ($LASTEXITCODE) { exit 1 }
           Remove-Item Env:RHIZOME_DATA_DIR
 
