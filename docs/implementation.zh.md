@@ -38,7 +38,7 @@
 | 夜间批任务、任务表 + 后台 worker | ✅ | `jobs.py` |
 | 迁移前自动备份、`rhz backup`、诊断包（不含论文内容） | ✅ | `db/session.py`，`cli.py diag` |
 | 检索回归集 / `rhz bench`（G2 门槛） | ✅ | `services/bench.py`，`tests/fixtures/bench-synthetic.yaml` |
-| Windows 桌面应用（Tauri 外壳 + PyInstaller 目录版后台 + NSIS 安装包） | ✅ | `desktop/`、`.github/workflows/release.yml`；CI 在干净的 Windows 上静默安装 → 启动 → 后台响应 → 杀掉外壳后后台自动退出 → 卸载（资料库保留） |
+| Windows 桌面应用（Tauri 外壳 + PyInstaller 目录版后台 + NSIS 安装包，按用户安装、无需管理员） | ✅ | `desktop/`、`.github/workflows/release.yml`；CI 在干净的 Windows 上全程使用**中文 + 空格路径**：安装到 `C:\软件 工具\Rhizome 程序`，资料库在 `C:\研究 资料\Rhizome 资料库`，收件箱里中文文件名的论文自动摄入，一键写入 Claude Desktop 配置并用该命令跑通 MCP，杀掉外壳后后台自动退出，卸载后资料库保留 |
 | CI：Windows + Linux 测试、许可证检查、gitleaks、SPDX | ◐ | `.github/workflows/ci.yml`（第一次推送后才会真正运行） |
 | PostgreSQL 后端 | ◐ | 模型和迁移可移植；未在 Postgres 上跑测试；PG 下关键词检索退化为子串匹配 |
 | API key 存入系统凭据管理器 | ○ | 目前没有任何 API 插件，所以还没接 keyring；插件出现时一起做 |
@@ -93,6 +93,12 @@
 | 干净安装会解析到刚发布的 mcp 2.x（`FastMCP` 改名） | MCP 服务器无法启动 | 直接依赖加大版本上限；安装包按 `desktop/constraints.txt` 锁定版本构建 |
 | MCP 工具里首次懒加载 numpy 的 C 扩展时，stdin 读取线程正阻塞在管道上 → 死锁 | 在 Claude Desktop 里一调用就卡死 | 启动 stdio 之前预加载模块并打开资料库 |
 | `pyproject` 引用了上级目录的 README，且 `web/` 没在 package-data 里 | 非可编辑安装失败或没有界面 | 修正打包配置；CI 检查界面是否已打包 |
+
+### 中文路径专项（2026-10-03）
+
+- 安装器原为"所有用户/当前用户"两可模式，NSIS 的多用户初始化会把安装目录重置为 Program Files，命令行 `/D=` 指定的目录（包括中文目录）被忽略；改为按当前用户安装后，安装目录与图形界面选择的目录走同一路径，已在 Windows 上验证中文目录。
+- 用户手动编辑的 JSON（设置、资料库位置指向文件、Claude Desktop 配置、token）改为兼容 BOM 读取：旧版记事本保存的 UTF-8 文件带 BOM，原来会被静默忽略。
+- 本地测试覆盖中文+空格的资料库、收件箱文件名、备份、快照、只读模式、迁移资料库和 Claude 配置路径。
 
 ## 还需要你来做的（M0）
 
