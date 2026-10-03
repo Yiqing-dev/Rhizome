@@ -6,6 +6,12 @@ on:
   workflow_dispatch:
   push:
     tags: ["v*"]
+    branches: ["claude/**", "main"]
+    paths:
+      - "desktop/**"
+      - "backend/**"
+      - "frontend/**"
+      - ".github/workflows/release.yml"
 
 permissions:
   contents: write
