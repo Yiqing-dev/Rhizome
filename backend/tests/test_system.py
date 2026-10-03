@@ -172,3 +172,22 @@ def test_data_dir_with_windows_like_characters(tmp_path, dirname, monkeypatch):
 
         assert search(s, "DomainGAT")
     dispose_all()
+
+
+def test_copy_sqlite_closes_handles(tmp_path):
+    """Windows cannot rename/delete an open file: every handle must be closed after a copy."""
+    import gc
+    import sqlite3
+    import warnings
+
+    from rhizome.db.session import copy_sqlite
+
+    src = tmp_path / "a.db"
+    with sqlite3.connect(src) as c:
+        c.execute("create table t(x)")
+    c.close()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", ResourceWarning)  # an unclosed connection would warn here
+        copy_sqlite(src, tmp_path / "out" / "b.db")
+        gc.collect()
+    assert (tmp_path / "out" / "b.db").exists() and not (tmp_path / "out" / "b.db.tmp").exists()

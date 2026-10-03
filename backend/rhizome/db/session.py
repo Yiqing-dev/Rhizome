@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import logging
-import shutil
+import os
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
@@ -140,15 +140,17 @@ def backup_database(settings: Settings, tag: str = "backup") -> Path | None:
 
 
 def copy_sqlite(src: Path, dst: Path) -> None:
-    import sqlite3
+    """Consistent copy of a live database. Connections are closed explicitly: sqlite3's context
+    manager only commits, and Windows refuses to rename a file that is still open."""
+    from contextlib import closing
 
     dst.parent.mkdir(parents=True, exist_ok=True)
     tmp = dst.with_suffix(dst.suffix + ".tmp")
     if tmp.exists():
         tmp.unlink()
-    with sqlite3.connect(str(src)) as s, sqlite3.connect(str(tmp)) as d:
+    with closing(sqlite3.connect(str(src))) as s, closing(sqlite3.connect(str(tmp))) as d:
         s.backup(d)
-    shutil.move(str(tmp), str(dst))
+    os.replace(tmp, dst)
 
 
 def init_db(settings: Settings | None = None) -> Engine:
