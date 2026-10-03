@@ -147,10 +147,15 @@ jobs:
           Copy-Item rxf-spec\examples\light-spatial-domains.yaml (Join-Path $dataDir "inbox\空间 结构域.yaml")
 
           $setup = Get-ChildItem dist\*_x64-setup.exe | Select-Object -First 1
-          # NSIS: /D= must come last and is not quoted, even with spaces
-          Start-Process $setup.FullName -ArgumentList "/S", "/D=$installDir" -Wait
+          # NSIS: /D= must come last and must NOT be quoted, even with spaces. Start-Process quotes
+          # array elements that contain spaces, so pass the whole command line as one string.
+          Start-Process $setup.FullName -ArgumentList "/S /D=$installDir" -Wait
           $exe = Join-Path $installDir "Rhizome.exe"
-          if (-not (Test-Path $exe)) { Write-Error "Rhizome.exe not found in $installDir"; Get-ChildItem C:\ ; exit 1 }
+          if (-not (Test-Path $exe)) {
+            Write-Host "Rhizome.exe not found in $installDir; candidates:"
+            Get-ChildItem "C:\", "$env:ProgramFiles", "$env:LOCALAPPDATA" -Filter "Rhizome*" -ErrorAction SilentlyContinue | Format-Table FullName
+            Write-Error "install dir not honoured"; exit 1
+          }
           Write-Host "installed to $installDir"
           foreach ($f in "server\rhz.exe", "server\_internal\rhizome\web\index.html", "rhz.cmd") {
             if (-not (Test-Path (Join-Path $installDir $f))) { Write-Error "missing $f"; exit 1 }
