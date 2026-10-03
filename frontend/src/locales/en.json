@@ -71,7 +71,7 @@
     "cards_due": "cards due",
     "ingest_title": "Add a paper",
     "ingest_hint": "Drop an RXF file exported from Claude or ChatGPT, or save it into the inbox folder.",
-    "drop": "Drop RXF file here or click to choose",
+    "drop": "Drop RXF files (several at once, optionally with same-named PDFs) here or click to choose",
     "related": "Related papers you have read:",
     "recall_title": "Recall",
     "recall_placeholder": "Paste an analysis plan, a paragraph or code…",
@@ -86,7 +86,9 @@
     "step3": "Search by asset, open topic pages, and let recall surface what you forgot.",
     "recall_hint": "Paste what you are working on; Rhizome ranks your own assets by relevance × how long since you last saw them.",
     "recall_empty_hint": "Nothing above the relevance threshold. Try a more specific description.",
-    "open_inbox": "Open inbox folder"
+    "open_inbox": "Open inbox folder",
+    "ingested_dup": "Already in the library: {{work}}",
+    "drop_not_rxf": "Only RXF files (.yaml / .yml) are accepted; a same-named PDF may come along"
   },
   "action": {
     "confirm": "confirm",

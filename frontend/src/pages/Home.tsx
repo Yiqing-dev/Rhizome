@@ -19,15 +19,31 @@ export default function Home() {
   const [over, setOver] = useState(false);
   const [ingestMsg, setIngestMsg] = useState<{ ok: boolean; text: string; related?: any[] } | null>(null);
 
-  async function onFile(f: File) {
-    try {
-      const r = await api.ingest(await f.text(), f.name);
-      setIngestMsg({ ok: true, text: t("home.ingested", { work: r.work_key }), related: r.related });
-      stats.reload();
-    } catch (e) {
-      const d = (e as ApiError).detail as { report?: string } | undefined;
-      setIngestMsg({ ok: false, text: d?.report ?? t("common.error") });
+  async function onFiles(list: FileList | null) {
+    const files = Array.from(list ?? []);
+    const stem = (n: string) => n.replace(/\.[^.]+$/, "").toLowerCase();
+    const rxf = files.filter((f) => /\.ya?ml$/i.test(f.name));
+    if (!rxf.length) {
+      setIngestMsg({ ok: false, text: t("home.drop_not_rxf") });
+      return;
     }
+    const pdfs = new Map(files.filter((f) => /\.pdf$/i.test(f.name)).map((f) => [stem(f.name), f]));
+    const lines: string[] = [];
+    let ok = true;
+    let related: any[] = [];
+    for (const f of rxf) {
+      try {
+        const r = await api.ingestFile(f, pdfs.get(stem(f.name)));
+        lines.push(t(r.duplicate ? "home.ingested_dup" : "home.ingested", { work: r.work_key }));
+        related = related.concat(r.related ?? []);
+      } catch (e) {
+        ok = false;
+        const d = (e as ApiError).detail as { report?: string } | string | undefined;
+        lines.push(`${f.name}: ${(typeof d === "string" ? d : d?.report) ?? t("common.error")}`);
+      }
+    }
+    setIngestMsg({ ok, text: lines.join("\n\n"), related: [...new Map(related.map((r) => [r.work_id, r])).values()] });
+    stats.reload();
   }
 
   const s = stats.data;
@@ -80,8 +96,8 @@ export default function Home() {
           <label className={`drop ${over ? "over" : ""}`}
             onDragOver={(e) => { e.preventDefault(); setOver(true); }}
             onDragLeave={() => setOver(false)}
-            onDrop={(e) => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files[0]; if (f) onFile(f); }}>
-            <input type="file" accept=".yaml,.yml" hidden onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+            onDrop={(e) => { e.preventDefault(); setOver(false); onFiles(e.dataTransfer.files); }}>
+            <input type="file" accept=".yaml,.yml,.pdf" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }} />
             <UploadIcon />
             <span>{t("home.drop")}</span>
           </label>

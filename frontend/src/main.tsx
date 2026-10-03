@@ -9,6 +9,8 @@ import App from "./App";
 import "./styles.css";
 
 captureToken();
+// A file dropped outside a drop zone must not make the webview navigate away from the app.
+for (const ev of ["dragover", "drop"]) window.addEventListener(ev, (e) => e.preventDefault());
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />

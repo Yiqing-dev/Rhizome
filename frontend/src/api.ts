@@ -114,6 +114,17 @@ export const api = {
   resolve: (id: number, action: string, note?: string) => req<{ status: string }>("POST", `/review/${id}`, { action, note }),
   decide: (op: string, payload: Record<string, unknown>) => req<{ id: number }>("POST", "/decision", { op, payload }),
   ingest: (text: string, filename: string) => req<any>("POST", "/ingest", { text, filename }),
+  ingestFile: async (file: File, pdf?: File) => {
+    const form = new FormData();
+    form.append("file", file, file.name);
+    if (pdf) form.append("pdf", pdf, pdf.name);
+    const res = await fetch(new URL(BASE + "/ingest", window.location.origin), {
+      method: "POST", headers: { Authorization: `Bearer ${token()}` }, body: form,
+    });
+    const data = (res.headers.get("content-type") ?? "").includes("json") ? await res.json() : await res.text();
+    if (!res.ok) throw new ApiError(res.status, (data as { detail?: unknown })?.detail ?? data);
+    return data;
+  },
   recall: (text: string) => req<{ results: Hit[] }>("POST", "/recall", { text }),
   cardsDue: () => req<{ cards: DueCard[] }>("GET", "/cards/due"),
   grade: (id: string, rating: number) => req<{ interval_days: number }>("POST", `/cards/${id}/grade`, { rating }),

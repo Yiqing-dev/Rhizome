@@ -71,7 +71,7 @@
     "cards_due": "张待复习",
     "ingest_title": "存入论文",
     "ingest_hint": "拖入从 Claude 或 ChatGPT 导出的 RXF 文件，或直接保存到收件箱目录。",
-    "drop": "把 RXF 文件拖到这里，或点击选择",
+    "drop": "把 RXF 文件（可多个，可附同名 PDF）拖到这里，或点击选择",
     "related": "与你读过的这些论文相关：",
     "recall_title": "召回",
     "recall_placeholder": "粘贴分析方案、段落或代码…",
@@ -86,7 +86,9 @@
     "step3": "按资产检索、打开主题页，让主动召回把忘掉的东西带回来。",
     "recall_hint": "粘贴你正在做的事，Rhizome 按“相关度 × 距上次查看的时长”排出你自己的资产。",
     "recall_empty_hint": "没有超过相关度阈值的结果，试试更具体的描述。",
-    "open_inbox": "打开收件箱目录"
+    "open_inbox": "打开收件箱目录",
+    "ingested_dup": "已存在（重复文件）：{{work}}",
+    "drop_not_rxf": "只接受 RXF 文件（.yaml / .yml），可同时拖入同名 PDF"
   },
   "action": {
     "confirm": "确认",
