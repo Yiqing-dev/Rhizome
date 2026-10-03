@@ -38,12 +38,13 @@
 | 夜间批任务、任务表 + 后台 worker | ✅ | `jobs.py` |
 | 迁移前自动备份、`rhz backup`、诊断包（不含论文内容） | ✅ | `db/session.py`，`cli.py diag` |
 | 检索回归集 / `rhz bench`（G2 门槛） | ✅ | `services/bench.py`，`tests/fixtures/bench-synthetic.yaml` |
-| Tauri 桌面外壳 + PyInstaller sidecar + MSI | ◐ | `desktop/`；本环境没有编译，`release.yml` 尚未在 Windows runner 上跑过 |
+| Windows 桌面应用（Tauri 外壳 + PyInstaller 目录版后台 + NSIS 安装包） | ✅ | `desktop/`、`.github/workflows/release.yml`；CI 在干净的 Windows 上静默安装 → 启动 → 后台响应 → 杀掉外壳后后台自动退出 → 卸载（资料库保留） |
 | CI：Windows + Linux 测试、许可证检查、gitleaks、SPDX | ◐ | `.github/workflows/ci.yml`（第一次推送后才会真正运行） |
 | PostgreSQL 后端 | ◐ | 模型和迁移可移植；未在 Postgres 上跑测试；PG 下关键词检索退化为子串匹配 |
 | API key 存入系统凭据管理器 | ○ | 目前没有任何 API 插件，所以还没接 keyring；插件出现时一起做 |
 | 每月主题变化摘要 | ◐ | `GET /topic/{id}/changes` 提供统计；文字总结按设计交给 Claude（MCP 侧还没有专门的工具） |
-| Tauri 自动更新 | ○ | 已接 updater 插件，但 endpoints / 公钥要在首次公开发布前配置 |
+| Tauri 自动更新 | ○ | 未启用：需要签名密钥和发布地址，首次公开发布前再接 |
+| 代码签名 | ○ | 安装包未签名，首次运行 SmartScreen 会提示"未知发布者" |
 
 ## 与设计的偏差（均为有意为之）
 
@@ -80,6 +81,18 @@
 | 审核队列里过期的合并项（一方已被合并走） | 跟随重定向；两边已是同一实体则标记 obsolete |
 | 前端把无时区的 UTC 时间当本地时间 | 前端按 UTC 解析 |
 | `rhz ingest` 不带 `--move` 时忽略同名 PDF | 两种客户端都支持附 PDF |
+
+## Windows 打包时在真机上发现并修复的问题（2026-10-03）
+
+这些问题在 Linux 开发环境里都不会出现，是 Windows CI 抓到的：
+
+| 问题 | 影响 | 修正 |
+| --- | --- | --- |
+| 数据库路径里的 `D:` 被 Alembic 配置转义成 `D%3A`，`configparser` 又把 `%` 当插值 | 每个 Windows 用户首次启动就崩溃 | 转义 `%`；只读快照改用标准 `file:///D:/…` URI |
+| `with sqlite3.connect()` 不关闭连接，Windows 不允许移动仍被打开的文件 | 快照、迁移前备份、迁移数据目录全部失败 | 显式关闭连接后再替换文件 |
+| 干净安装会解析到刚发布的 mcp 2.x（`FastMCP` 改名） | MCP 服务器无法启动 | 直接依赖加大版本上限；安装包按 `desktop/constraints.txt` 锁定版本构建 |
+| MCP 工具里首次懒加载 numpy 的 C 扩展时，stdin 读取线程正阻塞在管道上 → 死锁 | 在 Claude Desktop 里一调用就卡死 | 启动 stdio 之前预加载模块并打开资料库 |
+| `pyproject` 引用了上级目录的 README，且 `web/` 没在 package-data 里 | 非可编辑安装失败或没有界面 | 修正打包配置；CI 检查界面是否已打包 |
 
 ## 还需要你来做的（M0）
 
