@@ -129,3 +129,19 @@ def test_vocab_export(library, session):
     text = export_vocab(session)
     assert "name: GRN inference" in text and "基因调控网络推断" in text
     assert "benchmarking" not in text  # candidates are excluded
+
+
+def test_stale_running_jobs_are_recovered(library, session):
+    from datetime import timedelta
+
+    from rhizome.db.models import Job
+
+    j = jobs.enqueue(session, "nightly", {})
+    j.status, j.started_at = "running", utcnow() - timedelta(days=1)  # process died mid-run
+    session.commit()
+    assert jobs.maybe_schedule_nightly(session) is not None  # a day-old "running" job does not block
+    assert jobs.recover_stale_jobs(session) == 1
+    session.commit()
+    jobs.run_all()
+    session.expire_all()
+    assert session.get(Job, j.id).status == "done"

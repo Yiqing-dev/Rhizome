@@ -48,6 +48,8 @@ def resolve_work(g: Graph, *, openalex_id: str | None, doi: str | None, title: s
         keys.append(f"work:doi:{normalize_doi(doi)}")
     for k in keys:
         e = g.by_key(k)
+        if e is not None and e.type != "work":  # a stale cross-type redirect; never fold a paper into it
+            e = None
         if e:
             break
     else:
@@ -94,6 +96,14 @@ def _strength(evidence_type: str, logic_jump: bool) -> str:
 
 
 def materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
+    g.clock = ex.created_at
+    try:
+        return _materialize_rxf(g, ex)
+    finally:
+        g.clock = None
+
+
+def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
     doc = RxfDocument.model_validate(ex.output)
     meta = ex.meta or {}
     checks: dict[str, str] = meta.get("checks", {})
@@ -192,6 +202,7 @@ def materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
 
     if doc.depth == "deep":
         _make_cards(g, doc, work, out.assets)
+    g.reindex(work)  # attrs (tldr, depth) were attached after create(); index the final text
     return out
 
 
@@ -213,6 +224,7 @@ def _dataset(g: Graph, d, checks: dict[str, str]) -> Entity | None:
             g.add_alias(e, acc)
             if d.name:
                 g.add_alias(e, d.name)
+            g.reindex(e)
         return e
     return resolve_free(g, "dataset", d.name, attrs=attrs).entity
 
@@ -235,6 +247,7 @@ def _method(g: Graph, m, checks: dict[str, str]) -> Entity | None:
             g.update_attrs(e, **attrs)
             g.add_alias(e, m.name)
             g.add_alias(e, repo)
+            g.reindex(e)
         return e
     return resolve_free(g, "method", m.name, attrs=attrs).entity
 
@@ -329,6 +342,14 @@ def template_card(e: Entity, work: Entity) -> tuple[str, str] | None:
 # ---- OpenAlex (T0) -----------------------------------------------------------------------
 
 def materialize_openalex(g: Graph, ex: Extraction) -> Entity:
+    g.clock = ex.created_at
+    try:
+        return _materialize_openalex(g, ex)
+    finally:
+        g.clock = None
+
+
+def _materialize_openalex(g: Graph, ex: Extraction) -> Entity:
     o = ex.output
     work = resolve_work(g, openalex_id=o["id"], doi=o.get("doi"), title=o.get("title") or o["id"],
                         year=o.get("year"))
@@ -364,11 +385,15 @@ def materialize_retro(g: Graph, ex: Extraction) -> None:
     topic = g.by_key(ex.output["topic"])
     if topic is None:
         return
-    for a in ex.output.get("assignments", []):
-        e = g.by_key(a["key"])
-        if e is not None:
-            g.upsert_edge(e, topic, a["relation"], confidence=a["confidence"], extraction_id=ex.id,
-                          attrs={"via": "retro_tag"})
+    g.clock = ex.created_at
+    try:
+        for a in ex.output.get("assignments", []):
+            e = g.by_key(a["key"])
+            if e is not None:
+                g.upsert_edge(e, topic, a["relation"], confidence=a["confidence"], extraction_id=ex.id,
+                              attrs={"via": "retro_tag"})
+    finally:
+        g.clock = None
 
 
 # ---- topics ----------------------------------------------------------------------------------

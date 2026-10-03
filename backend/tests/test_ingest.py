@@ -4,7 +4,7 @@ from sqlalchemy import select
 from conftest import example
 from rhizome.db.models import Edge, Entity, Extraction, RawObject, ReviewCard, Work
 from rhizome.pipeline.graph import Graph
-from rhizome.pipeline.ingest import ingest_path, ingest_text
+from rhizome.pipeline.ingest import ingest_text
 
 
 def _edge_types(s, src_key):
@@ -119,19 +119,77 @@ def test_raw_layer_is_content_addressed(library, session, settings):
         assert (settings.raw_dir / o.sha256[:2] / f"{o.sha256}.yaml").exists()
 
 
-def test_inbox_moves_files(settings, session):
+def test_inbox_moves_files_after_commit(settings, session, monkeypatch):
+    from rhizome.pipeline.ingest import ingest_file
+
     inbox = settings.inbox
     good = inbox / "good.yaml"
     good.write_text(example("light-spatial-domains.yaml"), "utf-8")
     (inbox / "good.pdf").write_bytes(b"%PDF-1.4 synthetic")
     bad = inbox / "bad.yaml"
     bad.write_text(example("invalid/missing-evidence.yaml"), "utf-8")
-    assert ingest_path(session, good).ok
-    assert not ingest_path(session, bad).ok
+    crash = inbox / "crash.yaml"
+    crash.write_text(example("light-scenic-benchmark.yaml"), "utf-8")
+
+    assert ingest_file(good).ok
+    assert not ingest_file(bad).ok
+    import rhizome.pipeline.ingest as ing
+
+    real = ing.ingest_text
+
+    def boom(*a, **k):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(ing, "ingest_text", boom)
+    assert not ingest_file(crash).ok  # an exception never escapes, so the watcher thread survives
+    monkeypatch.setattr(ing, "ingest_text", real)
+
     assert (inbox / "done" / "good.yaml").exists() and (inbox / "done" / "good.pdf").exists()
     assert (inbox / "error" / "bad.yaml").exists()
-    report = (inbox / "error" / "bad.yaml.error.txt").read_text("utf-8")
-    assert "claims.0" in report
+    assert "claims.0" in (inbox / "error" / "bad.yaml.error.txt").read_text("utf-8")
+    assert (inbox / "error" / "crash.yaml").exists()
+    assert "database is locked" in (inbox / "error" / "crash.yaml.error.txt").read_text("utf-8")
+    session.expire_all()
+    assert session.query(Work).count() == 1  # the crashed file stored nothing
+    assert session.query(RawObject).filter(RawObject.kind == "pdf").count() == 1
+
+
+def test_work_summary_is_indexed(library, session):
+    """TL;DR text is attached after the node is created; the index must see the final text."""
+    from rhizome.services.search import Filters, search
+
+    hits = search(session, "TCP factors gate meristem elongation zone", Filters(types=("work",)), rerank=False)
+    assert hits and hits[0]["key"] == "work:doi:10.5555/rhz.example.0001"
+    row = session.execute(select(Entity).where(Entity.key == hits[0]["key"])).scalar_one()
+    from sqlalchemy import text as sqltext
+
+    fts = session.execute(sqltext("select text from entity_fts where entity_id = :i"), {"i": row.id}).scalar_one()
+    assert "TCP factors" in fts
+
+
+def test_exports_follow_the_resolved_work(library, session):
+    """A journal version collapses into the preprint node; its export must show on that card."""
+    from rhizome.services.views import entity_card
+
+    text = example("light-spatial-domains.yaml").replace("10.5555/rhz.example.0003", "10.5555/rhz.journal.0003")
+    r = ingest_text(session, text.replace("depth: light", "depth: deep"), "journal.yaml")
+    assert r.ok and r.work_key == "work:doi:10.5555/rhz.example.0003"
+    card = entity_card(session, r.work_id)
+    assert len(card["exports"]) == 2
+    assert all(ex.work_key == r.work_key for ex in session.query(Extraction).filter(Extraction.kind == "rxf",
+               Extraction.output["paper"]["doi"].as_string() == "10.5555/rhz.journal.0003"))
+    dup = ingest_text(session, text.replace("depth: light", "depth: deep"), "journal-again.yaml")
+    assert dup.duplicate and dup.work_id == r.work_id
+
+
+def test_pdf_attaches_through_clients(settings, tmp_path):
+    from rhizome.client import LocalClient
+
+    c = LocalClient(settings)
+    r = c.ingest(example("light-spatial-domains.yaml"), "p.yaml", pdf=b"%PDF-1.4 synthetic")
+    assert r["ok"]
+    card = c.get(r["work_id"])
+    assert card["exports"][0]["has_pdf"] and card["work"]["tier"] == 1
 
 
 def test_chinese_topic_and_alias(library, session):

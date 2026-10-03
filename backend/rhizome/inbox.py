@@ -14,7 +14,6 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
 from .config import get_settings
-from .db.session import session_scope
 
 log = logging.getLogger(__name__)
 SUFFIXES = (".yaml", ".yml", ".rxf")
@@ -34,15 +33,18 @@ def _stable(p: Path, wait: float = 0.5, tries: int = 20) -> bool:
 
 
 def process(path: Path, on_result: Callable | None = None):
-    from .pipeline.ingest import ingest_path
+    """One file: ingest in its own transaction, then move it. Never raises (see ingest_file)."""
+    from .pipeline.ingest import ingest_file
 
     if path.suffix.lower() not in SUFFIXES or not _stable(path):
         return None
-    with session_scope() as s:
-        res = ingest_path(s, path)
+    res = ingest_file(path)
     log.info("inbox: %s -> %s", path.name, "ok" if res.ok else "error")
     if on_result:
-        on_result(path, res)
+        try:
+            on_result(path, res)
+        except Exception:
+            log.exception("inbox callback failed")
     return res
 
 
@@ -51,7 +53,10 @@ def scan(on_result: Callable | None = None) -> int:
     n = 0
     for p in sorted(inbox.iterdir()) if inbox.exists() else []:
         if p.is_file() and p.suffix.lower() in SUFFIXES:
-            process(p, on_result)
+            try:
+                process(p, on_result)
+            except Exception:  # a single bad file must not stop the scan or kill the watcher thread
+                log.exception("inbox: %s could not be processed", p)
             n += 1
     return n
 
@@ -63,7 +68,7 @@ class _Handler(FileSystemEventHandler):
 
     def _handle(self, path: str) -> None:
         p = Path(path)
-        if p.parent != get_settings().inbox:
+        if p.parent.resolve() != get_settings().inbox.resolve():
             return
         with self._lock:
             try:

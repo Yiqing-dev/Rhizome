@@ -78,6 +78,16 @@ def run_all() -> int:
     return n
 
 
+STALE_RUNNING = timedelta(hours=6)
+
+
+def recover_stale_jobs(s: Session) -> int:
+    """Jobs left `running` by a crashed or killed process are re-queued (every handler is idempotent)."""
+    n = s.execute(update(Job).where(Job.status == "running")
+                  .values(status="queued", started_at=None, error="requeued after restart")).rowcount
+    return int(n or 0)
+
+
 def maybe_schedule_nightly(s: Session) -> Job | None:
     row = s.get(KV, "last_nightly")
     last = row.v.get("at") if row and row.v else None
@@ -85,7 +95,10 @@ def maybe_schedule_nightly(s: Session) -> Job | None:
 
     if last and utcnow() - datetime.fromisoformat(last) < timedelta(hours=24):
         return None
-    pending = s.execute(select(Job).where(Job.kind == "nightly", Job.status.in_(("queued", "running")))).first()
+    pending = s.execute(select(Job).where(
+        Job.kind == "nightly",
+        (Job.status == "queued") | ((Job.status == "running") & (Job.started_at > utcnow() - STALE_RUNNING)),
+    )).first()
     if pending:
         return None
     return enqueue(s, "nightly")
@@ -102,6 +115,11 @@ class Worker(threading.Thread):
 
     def run(self) -> None:  # pragma: no cover - exercised by the app, not unit tests
         ticks = 0
+        try:
+            with session_scope() as s:
+                recover_stale_jobs(s)
+        except Exception:
+            log.exception("could not recover stale jobs")
         while not self._stop.is_set():
             try:
                 if run_next() is None:

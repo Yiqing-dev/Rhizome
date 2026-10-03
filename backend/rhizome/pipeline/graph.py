@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from datetime import datetime
 from typing import Any, Iterable
 
 import numpy as np
@@ -12,16 +13,20 @@ from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.orm import Session
 
 from ..db.models import (
+    KV,
     AccessLog,
     Edge,
     Embedding,
     Entity,
     EntityAlias,
+    Extraction,
     HumanDecision,
+    RawObject,
     ReviewCard,
     ReviewItem,
     VectorCache,
     Work,
+    utcnow,
 )
 from ..db.session import has_fts
 from ..ml import get_embedder
@@ -66,7 +71,7 @@ class _VectorCache:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._data: dict[tuple[str, str], tuple[tuple[int, int], np.ndarray, np.ndarray, np.ndarray]] = {}
+        self._data: dict[tuple[str, str], tuple[tuple[int, int, int], np.ndarray, np.ndarray, np.ndarray]] = {}
 
     @staticmethod
     def _key(s: Session, model: str) -> tuple[str, str]:
@@ -74,9 +79,10 @@ class _VectorCache:
 
     def get(self, s: Session, model: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         key = self._key(s, model)
-        sig = tuple(s.execute(
+        count, id_sum = s.execute(
             select(func.count(), func.coalesce(func.sum(Embedding.entity_id), 0)).where(Embedding.model == model)
-        ).one())
+        ).one()
+        sig = (int(count), int(id_sum), embedding_version(s))
         with self._lock:
             hit = self._data.get(key)
             if hit and hit[0] == sig:
@@ -93,7 +99,7 @@ class _VectorCache:
             self._data[key] = (sig, ids, types, mat)
         return ids, types, mat
 
-    def upsert(self, s: Session, model: str, entity_id: int, etype: str, vec: np.ndarray) -> None:
+    def upsert(self, s: Session, model: str, entity_id: int, etype: str, vec: np.ndarray, version: int) -> None:
         """Keep a loaded index current after an embedding is written or replaced (rename, edit)."""
         key = self._key(s, model)
         with self._lock:
@@ -111,9 +117,9 @@ class _VectorCache:
                 ids = np.append(ids, entity_id)
                 types = np.append(types, etype)
                 mat = np.vstack([mat, vec[None, :].astype(np.float32)])
-            self._data[key] = ((int(len(ids)), int(ids.sum())), ids, types, mat)
+            self._data[key] = ((int(len(ids)), int(ids.sum()), version), ids, types, mat)
 
-    def remove(self, s: Session, model: str, entity_id: int) -> None:
+    def remove(self, s: Session, model: str, entity_id: int, version: int) -> None:
         key = self._key(s, model)
         with self._lock:
             hit = self._data.get(key)
@@ -122,7 +128,7 @@ class _VectorCache:
             _, ids, types, mat = hit
             keep = ids != entity_id
             ids, types, mat = ids[keep], types[keep], mat[keep]
-            self._data[key] = ((int(len(ids)), int(ids.sum())), ids, types, mat)
+            self._data[key] = ((int(len(ids)), int(ids.sum()), version), ids, types, mat)
 
     def clear(self) -> None:
         with self._lock:
@@ -130,6 +136,24 @@ class _VectorCache:
 
 
 VECTORS = _VectorCache()
+
+EMB_VERSION_KEY = "embedding_version"
+
+
+def embedding_version(s: Session) -> int:
+    row = s.get(KV, EMB_VERSION_KEY)
+    return int((row.v or {}).get("v", 0)) if row else 0
+
+
+def bump_embedding_version(s: Session) -> int:
+    """Called on every embedding write/delete so other processes' caches notice in-place changes."""
+    row = s.get(KV, EMB_VERSION_KEY)
+    v = embedding_version(s) + 1
+    if row is None:
+        s.add(KV(k=EMB_VERSION_KEY, v={"v": v}))
+    else:
+        row.v = {"v": v}
+    return v
 
 
 def knn(s: Session, query_vec: np.ndarray, types: Iterable[str] | None = None, k: int = 10,
@@ -181,6 +205,8 @@ class Graph:
         self.s = session
         self._fts = has_fts(session)
         self._redirects: dict[str, str] | None = None
+        # When set (replaying an extraction), new entities and edges are stamped with this time.
+        self.clock: datetime | None = None
 
     # -- keys / redirects (from human merge decisions) --
     def redirects(self) -> dict[str, str]:
@@ -232,7 +258,7 @@ class Graph:
                status: str = "active", attrs: dict[str, Any] | None = None,
                aliases: Iterable[str] = (), embed: bool = True) -> Entity:
         e = Entity(type=etype, key=key, canonical_name=name, external_id=external_id, status=status,
-                   attrs=attrs or {})
+                   attrs=attrs or {}, created_at=self.clock or utcnow())
         self.s.add(e)
         self.s.flush()
         for a in [name, *aliases]:
@@ -273,7 +299,7 @@ class Graph:
             self.s.merge(Embedding(entity_id=e.id, model=model, dim=int(vec.shape[0]),
                                    vec=vec.astype(np.float32).tobytes()))
             self.s.flush()
-            VECTORS.upsert(self.s, model, e.id, e.type, vec)
+            VECTORS.upsert(self.s, model, e.id, e.type, vec, bump_embedding_version(self.s))
 
     def delete_entity(self, e: Entity) -> None:
         if self._fts:
@@ -284,7 +310,7 @@ class Graph:
         self.s.execute(delete(Work).where(Work.entity_id == e.id))
         self.s.delete(e)
         self.s.flush()
-        VECTORS.remove(self.s, get_embedder().name, e.id)
+        VECTORS.remove(self.s, get_embedder().name, e.id, bump_embedding_version(self.s))
 
     # -- edges --
     def edge(self, src: Entity, dst: Entity, etype: str) -> Edge | None:
@@ -299,7 +325,7 @@ class Graph:
         ed = self.edge(src, dst, etype)
         if ed is None:
             ed = Edge(src=src.id, dst=dst.id, type=etype, confidence=confidence, extraction_id=extraction_id,
-                      evidence=evidence, attrs=attrs or {}, status=status)
+                      evidence=evidence, attrs=attrs or {}, status=status, created_at=self.clock or utcnow())
             self.s.add(ed)
             self.s.flush()
             return ed
@@ -346,6 +372,8 @@ class Graph:
                     w_src.openalex_id = None
                     self.s.flush()
                     w_into.openalex_id = oid
+            self.s.execute(update(Extraction).where(Extraction.work_key == src.key).values(work_key=into.key))
+            self.s.execute(update(RawObject).where(RawObject.work_key == src.key).values(work_key=into.key))
         merged_attrs = dict(src.attrs or {})
         merged_attrs.update(into.attrs or {})
         into.attrs = merged_attrs

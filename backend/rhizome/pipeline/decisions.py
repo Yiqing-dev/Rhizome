@@ -40,15 +40,18 @@ class DecisionError(ValueError):
 
 
 def record(g: Graph, op: str, payload: dict[str, Any]) -> HumanDecision:
+    """Apply first, persist only if it took effect: a decision that cannot be applied now would be
+    replayed on every rebuild and (for merges) poison the key redirect map."""
     if op not in OPS:
         raise DecisionError(f"unknown op {op}")
     _validate(op, payload)
     d = HumanDecision(op=op, payload=payload)
+    if not apply(g, d, strict=True):
+        raise DecisionError(f"{op} had no effect")
     g.s.add(d)
     g.s.flush()
     if op == "merge":
         g.invalidate_redirects()
-    apply(g, d)
     return d
 
 
@@ -77,14 +80,16 @@ def _validate(op: str, p: dict[str, Any]) -> None:
         raise DecisionError("status must be confirmed | rejected | auto")
 
 
-def apply(g: Graph, d: HumanDecision) -> bool:
+def apply(g: Graph, d: HumanDecision, strict: bool = False) -> bool:
     p = d.payload
     try:
         fn = globals()[f"_op_{d.op}"]
         return bool(fn(g, p))
     except DecisionError:
         raise
-    except Exception as e:  # a stale decision must never break a rebuild
+    except Exception as e:  # on replay a stale decision must never break a rebuild
+        if strict:
+            raise DecisionError(f"{d.op}: {e}") from e
         log.warning("decision %s (%s) not applied: %s", d.id, d.op, e)
         return False
 
@@ -94,7 +99,11 @@ def apply_all(g: Graph) -> int:
     g.invalidate_redirects()
     for d in g.s.execute(select(HumanDecision).where(HumanDecision.revoked_at.is_(None))
                          .order_by(HumanDecision.id)).scalars().all():
-        n += apply(g, d)
+        g.clock = d.created_at  # entities a decision creates keep the date the decision was made
+        try:
+            n += apply(g, d)
+        finally:
+            g.clock = None
     return n
 
 
@@ -103,20 +112,30 @@ def apply_all(g: Graph) -> int:
 def _need(g: Graph, key: str) -> Entity:
     e = g.by_key(key)
     if e is None:
-        raise LookupError(f"entity {key} not found")
+        raise DecisionError(f"entity {key} not found")
     return e
 
 
 def _op_merge(g: Graph, p):
+    into = g.by_key(p["into"])  # may itself be a redirect from an earlier merge
+    if into is None:
+        raise DecisionError(f"merge target {p['into']} not found")
     src = g.s.execute(select(Entity).where(Entity.key == p["from"])).scalar_one_or_none()
-    into = _need(g, p["into"])
-    if src is None or src.id == into.id:
-        return False
+    if src is None:
+        if g.resolve_key(p["from"]) != p["from"]:
+            # already merged away by an earlier decision; nothing to do (a replay, or a stale queue item)
+            return g.resolve_key(p["from"]) == into.key
+        raise DecisionError(f"merge source {p['from']} not found")
+    if src.id == into.id:
+        raise DecisionError("cannot merge an entity into itself")
+    if src.type != into.type:
+        raise DecisionError(f"cannot merge {src.type} into {into.type}")
     g.merge(src, into)
     return True
 
 
 def _op_distinct(g: Graph, p):
+    _need(g, p["a"]), _need(g, p["b"])
     return True  # consulted by canonicalisation via Graph.distinct_pairs()
 
 
@@ -152,7 +171,10 @@ def _op_edge_status(g: Graph, p):
 
 def _op_add_edge(g: Graph, p):
     src, dst = _need(g, p["src"]), _need(g, p["dst"])
-    g.upsert_edge(src, dst, p["type"], attrs={**(p.get("attrs") or {}), "origin": "user"}, status="confirmed")
+    ed = g.upsert_edge(src, dst, p["type"], attrs={**(p.get("attrs") or {}), "origin": "user"}, status="confirmed")
+    if ed is None:
+        raise DecisionError("cannot link an entity to itself")
+    ed.status = "confirmed"  # an explicit add overrides an earlier rejection (upsert never lowers 'rejected')
     return True
 
 

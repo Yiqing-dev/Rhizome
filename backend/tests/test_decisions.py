@@ -128,3 +128,65 @@ def test_vector_index_follows_renames_in_process(library, session):
     decisions.record(g, "rename", {"key": topic.key, "name": "zebrafish regeneration atlases"})
     qvec = embed_texts(session, ["zebrafish regeneration atlases"])[0]
     assert knn(session, qvec, types=["topic"], k=1)[0][0] == topic.id  # vector path alone, no FTS
+
+
+def test_failed_decisions_are_not_persisted(library, session):
+    import pytest
+    from sqlalchemy import func
+
+    from rhizome.db.models import HumanDecision
+
+    g = Graph(session)
+    before = session.execute(select(func.count()).select_from(HumanDecision)).scalar_one()
+    with pytest.raises(decisions.DecisionError):
+        decisions.record(g, "merge", {"from": "topic:grn inference", "into": "topic:does-not-exist"})
+    with pytest.raises(decisions.DecisionError):  # cross-type
+        decisions.record(g, "merge", {"from": W1, "into": "topic:grn inference"})
+    with pytest.raises(decisions.DecisionError):
+        decisions.record(g, "edge_status", {"src": W1, "dst": "topic:nope", "type": "about", "status": "rejected"})
+    assert session.execute(select(func.count()).select_from(HumanDecision)).scalar_one() == before
+    assert g.by_key("topic:grn inference") is not None  # redirect map untouched
+    assert g.by_key(W1).type == "work"
+
+
+def test_merge_cycle_and_stale_queue_item(library, session):
+    import pytest
+
+    from rhizome.services.review import list_items, resolve
+
+    g = Graph(session)
+    a, b = "topic:gene regulatory network inference", "topic:grn inference"
+    item = next(i for i in list_items(session, "topic_relation")["items"]
+                if {i["payload"]["a"], i["payload"]["b"]} == {a, b})
+    decisions.record(g, "merge", {"from": a, "into": b})
+    with pytest.raises(decisions.DecisionError):  # b -> a would form a cycle through the redirect
+        decisions.record(g, "merge", {"from": b, "into": a})
+    out = resolve(session, item["id"], "merge")  # queued before the merge: both sides are one entity now
+    assert out["status"] == "obsolete" and out["decision_id"] is None
+    assert g.by_key(a).key == b
+    session.commit()
+    rebuild(session, backup=False)
+    assert Graph(session).by_key(a).key == b
+
+
+def test_add_edge_overrides_earlier_rejection(library, session):
+    g = Graph(session)
+    decisions.record(g, "edge_status", {"src": W1, "dst": "topic:grn inference", "type": "about", "status": "rejected"})
+    decisions.record(g, "add_edge", {"src": W1, "dst": "topic:grn inference", "type": "about"})
+    assert g.edge(g.by_key(W1), g.by_key("topic:grn inference"), "about").status == "confirmed"
+
+
+def test_rebuild_keeps_creation_dates(library, session):
+    from datetime import datetime
+
+    from rhizome.db.models import Entity, Extraction
+
+    old = datetime(2020, 1, 2, 3, 4, 5)
+    for ex in session.query(Extraction):
+        ex.created_at = old
+    session.commit()
+    rebuild(session, backup=False)
+    dates = {e.key: e.created_at for e in session.query(Entity).filter(Entity.type != "organism",
+                                                                        Entity.type != "modality")}
+    assert dates and all(d == old for d in dates.values()), dates
+    assert all(ed.created_at == old for ed in session.query(Edge))

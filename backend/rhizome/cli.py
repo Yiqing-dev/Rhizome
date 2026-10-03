@@ -129,18 +129,20 @@ def _print_ingest(name: str, r: dict[str, Any]) -> None:
 def ingest(files: list[Path], move: bool = typer.Option(False, help="Move files to done/ or error/")) -> None:
     """Ingest RXF files (a same-named .pdf is attached automatically)."""
     if move:
-        from .db.session import init_db, session_scope
-        from .pipeline.ingest import ingest_path
+        from .db.session import init_db
+        from .pipeline.ingest import ingest_file
 
         init_db()
         for f in files:
-            with session_scope() as s:
-                _print_ingest(f.name, ingest_path(s, f).to_dict())
+            _print_ingest(f.name, ingest_file(f).to_dict())
         return
+    from .pipeline.ingest import read_inbox_file
+
     c = _client()
     results = []
     for f in files:
-        r = c.ingest(f.read_text(encoding="utf-8-sig"), f.name)
+        text, pdf = read_inbox_file(f)
+        r = c.ingest(text, f.name, pdf)
         results.append(r)
         if not _state["json"]:
             _print_ingest(f.name, r)

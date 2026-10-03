@@ -68,8 +68,16 @@ def resolve(s: Session, item_id: int, action: str, note: str | None = None) -> d
     if action not in ACTIONS.get(it.kind, ()):
         raise ValueError(f"action {action} not valid for {it.kind}")
     g = Graph(s)
-    p = it.payload
+    p = dict(it.payload)
     made = None
+    # keys in the payload may have been merged since the item was queued: follow redirects, and
+    # drop the item if both sides already ended up as one entity
+    for k in ("a", "b", "key", "topic", "claim", "work"):
+        if isinstance(p.get(k), str):
+            p[k] = g.resolve_key(p[k])
+    if it.kind in ("merge", "topic_relation") and p["a"] == p["b"]:
+        it.status, it.resolved_at = "obsolete", utcnow()
+        return {"id": it.id, "status": it.status, "decision_id": None}
     if action == "skip":
         it.status = "skipped"
     elif it.kind == "merge":

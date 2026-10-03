@@ -36,8 +36,10 @@ export function setLanguage(lng: "en" | "zh-CN"): void {
 /** Backend language code for a UI language. */
 export const backendLang = (lng: string) => (lng.startsWith("zh") ? "zh_CN" : "en");
 
+/** The backend emits naive UTC timestamps (no offset); treat them as UTC, not local time. */
+export const parseUtc = (iso: string): Date => (/(Z|[+-]\d\d:?\d\d)$/.test(iso) ? new Date(iso) : new Date(iso + "Z"));
 export const fmtDate = (iso: string | null | undefined, lng: string) =>
-  iso ? new Intl.DateTimeFormat(lng, { dateStyle: "medium" }).format(new Date(iso)) : "";
+  iso ? new Intl.DateTimeFormat(lng, { dateStyle: "medium" }).format(parseUtc(iso)) : "";
 export const fmtNum = (n: number, lng: string) => new Intl.NumberFormat(lng).format(n);
 
 export default i18n;

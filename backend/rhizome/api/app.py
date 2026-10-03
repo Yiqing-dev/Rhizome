@@ -16,6 +16,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -182,7 +183,8 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         else:
             body = IngestBody.model_validate(await request.json())
             text, filename, pdf = body.text, body.filename, None
-        res = ingest_text(s, text, filename, pdf)
+        # network lookups and model inference are blocking: keep them off the event loop
+        res = await run_in_threadpool(ingest_text, s, text, filename, pdf)
         if not res.ok:
             raise HTTPException(422, res.to_dict())
         return res.to_dict()
