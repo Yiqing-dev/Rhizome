@@ -2,7 +2,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, type ReviewItem } from "../api";
-import { Loading } from "../components/common";
+import { EmptyState, Loading, TypeBadge } from "../components/common";
+import { CheckIcon } from "../components/icons";
 import { useKeys, useLoad } from "../hooks";
 import { href } from "../router";
 
@@ -13,17 +14,19 @@ function Side({ label, side }: { label: string; side?: ReviewItem["context"][str
   if (!side) return null;
   return (
     <div className="side">
-      <div className="muted small">{label}</div>
-      <a href={href(`${side.type === "topic" ? "topic" : "entity"}/${side.id}`)}><strong>{side.name}</strong></a>
-      {side.definition && <p className="small">{side.definition}</p>}
+      <div className="lbl">{label}</div>
+      <div className="name"><TypeBadge type={side.type} /> <a href={href(`${side.type === "topic" ? "topic" : "entity"}/${side.id}`)}>{side.name}</a></div>
+      {side.definition && <p className="small muted">{side.definition}</p>}
       {side.aliases.length > 1 && <div className="small muted">{t("asset.aliases")}: {side.aliases.join(" · ")}</div>}
-      <ul className="small">{side.connections.map((c, i) => (
-        <li key={i}>{c.direction === "out" ? "→" : "←"} {t(`edge.${c.type}`)}: {c.name}</li>))}</ul>
+      {side.connections.length > 0 && (
+        <ul>{side.connections.map((c, i) => (
+          <li key={i}>{c.direction === "out" ? "→" : "←"} <span className="muted">{t(`edge.${c.type}`)}</span> {c.name}</li>))}</ul>
+      )}
     </div>
   );
 }
 
-/** Batch, keyboard-only: j/k move, 1-5 pick an action, s skip. */
+/** Batch, keyboard-only: j/k move, 1–5 pick an action, s skip. */
 export default function ReviewPage() {
   const { t } = useTranslation();
   const [kind, setKind] = useState("");
@@ -50,48 +53,57 @@ export default function ReviewPage() {
     }
   }, [items, item, note]);
 
+  const label = (it: ReviewItem) => (it.payload.a_name ?? it.payload.name ?? it.payload.new_text ?? "") as string;
   return (
     <div className="stack">
-      <div className="row">
-        <h1>{t("review.title")}</h1>
-        <select value={kind} onChange={(e) => { setKind(e.target.value); setCur(0); }}>
-          {KINDS.map((k) => <option key={k} value={k}>{k ? t(`review.kind.${k}`) : t("review.all")}</option>)}
-        </select>
-        <span className="muted">{t("review.total", { n: q.data?.total ?? 0 })}</span>
+      <div className="page-head">
+        <div>
+          <h1>{t("review.title")}</h1>
+          <p className="sub">{t("review.keys")}</p>
+        </div>
+        <div className="row">
+          <select value={kind} onChange={(e) => { setKind(e.target.value); setCur(0); }}>
+            {KINDS.map((k) => <option key={k} value={k}>{k ? t(`review.kind.${k}`) : t("review.all")}</option>)}
+          </select>
+          <span className="muted small">{t("review.total", { n: q.data?.total ?? 0 })}</span>
+        </div>
       </div>
-      <p className="muted small">{t("review.keys")}</p>
       <Loading error={q.error} loading={q.loading && !q.data} />
-      {q.data && !items.length && <p>{t("review.empty")}</p>}
-      <div className="review-layout">
-        <ol className="queue">
-          {items.map((it, i) => (
-            <li key={it.id} className={it === item ? "current" : ""} onClick={() => setCur(i)}>
-              <span className="pill">{t(`review.kind.${it.kind}`)}</span>{" "}
-              {(it.payload.a_name ?? it.payload.name ?? it.payload.new_text ?? "").slice(0, 60)}
-            </li>
-          ))}
-        </ol>
-        {item && (
-          <div className="panel">
-            <h2>{String(t(`review.question.${item.kind}`, { ...item.payload }))}</h2>
-            <div className="sides">
-              <Side label="A" side={item.context.a ?? item.context.key ?? item.context.new_claim} />
-              <Side label="B" side={item.context.b ?? item.context.claim ?? item.context.topic} />
+      {q.data && !items.length && <EmptyState icon={<CheckIcon />} title={t("review.empty")} hint={t("review.empty_hint")} />}
+      {items.length > 0 && (
+        <div className="review-layout">
+          <ol className="queue">
+            {items.map((it, i) => (
+              <li key={it.id} className={it === item ? "current" : ""} onClick={() => setCur(i)}>
+                <span className="kind">{t(`review.kind.${it.kind}`)}</span>
+                <span>{label(it).slice(0, 80)}</span>
+              </li>
+            ))}
+          </ol>
+          {item && (
+            <div className="panel">
+              <span className="eyebrow">{t(`review.kind.${item.kind}`)}</span>
+              <div className="question">{String(t(`review.question.${item.kind}`, { ...item.payload }))}</div>
+              <div className="sides">
+                <Side label={t("review.side_a")} side={item.context.a ?? item.context.key ?? item.context.new_claim} />
+                <Side label={t("review.side_b")} side={item.context.b ?? item.context.claim ?? item.context.topic} />
+              </div>
+              {item.kind === "contradiction" && (
+                <p className="small"><span className="muted">{t("review.new_claim")}:</span> {item.payload.new_text}
+                  {item.payload.evidence ? <> · <span className="evidence">{item.payload.evidence}</span></> : null}</p>
+              )}
+              {item.kind === "synthesis" && (
+                <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("review.synthesis_note")} />
+              )}
+              <div className="actions">
+                {item.actions.map((a, i) => (
+                  <button key={a} className={i === 0 ? "primary" : ""} onClick={() => act(a)}><kbd>{i + 1}</kbd> {t(`review.action.${a}`)}</button>
+                ))}
+              </div>
             </div>
-            {item.kind === "contradiction" && (
-              <p className="small">{t("review.new_claim")}: {item.payload.new_text} <span className="evidence">· {item.payload.evidence}</span></p>
-            )}
-            {item.kind === "synthesis" && (
-              <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("review.synthesis_note")} />
-            )}
-            <div className="row wrap">
-              {item.actions.map((a, i) => (
-                <button key={a} onClick={() => act(a)}><kbd>{i + 1}</kbd> {t(`review.action.${a}`)}</button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

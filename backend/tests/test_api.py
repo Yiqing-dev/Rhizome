@@ -85,3 +85,10 @@ def test_snapshot_is_read_only(settings, tmp_path, library, session):
     assert c.get("/search", params={"q": "RootNet"}).json()["results"]
     assert c.post("/ingest", json={"text": "x"}).status_code == 403
     assert c.get("/entity/1").status_code == 200
+
+
+def test_browse_by_type_without_query(api):
+    api.post("/ingest", json={"text": example("deep-grn-atlas.yaml")})
+    r = api.get("/search", params={"types": "dataset"}).json()["results"]
+    assert [h["name"] for h in r] == ["GSE999001"] and r[0]["sources"]
+    assert api.get("/search").json()["results"]  # no filters at all: newest entities of the default types

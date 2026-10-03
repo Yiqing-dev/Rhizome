@@ -61,7 +61,9 @@
     "modality": "模态",
     "year_min": "起始年份",
     "year_max": "截止年份",
-    "any_role": "任意角色"
+    "any_role": "任意角色",
+    "results_count": "{{n}} 条结果",
+    "empty_hint": "试试减少筛选条件，或直接输入 accession、方法名。"
   },
   "home": {
     "ingested": "已摄入 {{work}}",
@@ -73,7 +75,17 @@
     "related": "与你读过的这些论文相关：",
     "recall_title": "召回",
     "recall_placeholder": "粘贴分析方案、段落或代码…",
-    "recall_go": "我读过的哪些东西用得上？"
+    "recall_go": "我读过的哪些东西用得上？",
+    "tagline": "你读过的哪些东西，现在用得上？",
+    "tagline_sub": "把讨论过的论文拆成数据、方法、思路和论断：可检索、可连接，并在用得上的时候主动回来。",
+    "step1_t": "讨论一篇论文",
+    "step1": "在 Claude 或 ChatGPT 里讨论，Project 指令里放好 Rhizome 导出指令。",
+    "step2_t": "说一句“导出 RXF”",
+    "step2": "把 YAML 存进收件箱目录或拖到这里。校验失败的文件会带一份报告，贴回聊天即可修正。",
+    "step3_t": "再次找回",
+    "step3": "按资产检索、打开主题页，让主动召回把忘掉的东西带回来。",
+    "recall_hint": "粘贴你正在做的事，Rhizome 按“相关度 × 距上次查看的时长”排出你自己的资产。",
+    "recall_empty_hint": "没有超过相关度阈值的结果，试试更具体的描述。"
   },
   "action": {
     "confirm": "确认",
@@ -91,7 +103,9 @@
     "logic": "逻辑链",
     "logic_jump": "逻辑跳跃",
     "issues": "问题",
-    "raw": "查看导出文档原文"
+    "raw": "查看导出文档原文",
+    "raw_hide": "收起导出文档原文",
+    "doi": "DOI"
   },
   "depth": {
     "light": "轻量版导出",
@@ -110,7 +124,8 @@
   "asset": {
     "external_id": "外部 ID",
     "transfer": "迁移",
-    "aliases": "别名"
+    "aliases": "别名",
+    "verified": "已核实"
   },
   "transfer": {
     "cross-species": "跨物种",
@@ -123,12 +138,15 @@
     "truncated": "仅显示 {{n}} 个节点中的一部分。"
   },
   "entity": {
-    "related": "相关"
+    "related": "相关",
+    "no_related": "暂无相关资产。"
   },
   "topic": {
     "confirm": "确认为正式主题",
     "contested": "有争议",
-    "n_works": "{{n}} 篇论文"
+    "n_works": "{{n}} 篇论文",
+    "subtree": "{{n}} 个子主题",
+    "no_items": "暂无"
   },
   "column": {
     "dataset": "数据",
@@ -149,7 +167,13 @@
     "counter": "反例，每行一个",
     "parent": "父主题（可选）",
     "create": "新建并回溯标注",
-    "created": "主题已创建，回溯标注在后台运行。"
+    "created": "主题已创建，回溯标注在后台运行。",
+    "sub": "只画主题层；节点大小为关联资产数，颜色为社区。",
+    "graph_title": "{{n}} 个主题",
+    "communities": "{{n}} 个社区",
+    "legend": "浅色 = 候选主题 · 点击节点打开主题页 · 悬停高亮相邻主题",
+    "list_title": "按规模排序的主题",
+    "empty_hint": "主题随 RXF 导出文档出现；确认或新建后成为正式主题。"
   },
   "review": {
     "title": "审核队列",
@@ -186,7 +210,10 @@
       "none": "无关",
       "useful": "有用",
       "useless": "无用"
-    }
+    },
+    "side_a": "A",
+    "side_b": "B",
+    "empty_hint": "摄入论文和新建主题时会产生新的待审项。"
   },
   "cards": {
     "title": "复习",
@@ -198,6 +225,14 @@
       "2": "困难",
       "3": "良好",
       "4": "简单"
+    },
+    "sub": "空格显示答案，1–4 评分。",
+    "progress": "今天 {{done}} / {{total}}",
+    "done_hint": "卡片来自深度版导出；每天新卡数量在设置里限制。",
+    "origin": {
+      "rxf": "来自导出",
+      "template": "模板生成",
+      "local_llm": "本地模型生成"
     }
   },
   "digest": {
@@ -207,7 +242,9 @@
     "pairs": "未连接的资产对",
     "no_pairs": "本周没有候选。",
     "contested": "争议清单",
-    "no_contested": "没有新的矛盾。"
+    "no_contested": "没有新的矛盾。",
+    "similarity": "相似度",
+    "no_pairs_hint": "运行批任务，或等待每周综合。"
   },
   "settings": {
     "title": "设置",
@@ -240,6 +277,34 @@
     "save": "保存",
     "vocab": "词表同步",
     "vocab_hint": "主题变化后，把 rhizome-vocab.yaml 放进 Claude / ChatGPT 的 Project 知识。",
-    "vocab_download": "下载 rhizome-vocab.yaml"
+    "vocab_download": "下载 rhizome-vocab.yaml",
+    "remotes_invalid": "不是有效的 JSON。"
+  },
+  "lang": {
+    "short_en": "EN",
+    "short_zh": "中"
+  },
+  "attr": {
+    "accession": "Accession",
+    "database": "数据库",
+    "organism": "物种",
+    "tissue": "组织",
+    "modality": "模态",
+    "scale": "规模",
+    "public": "公开",
+    "name": "名称",
+    "repo": "代码仓库",
+    "io": "输入 → 输出",
+    "maintained": "维护状态",
+    "biotools": "bio.tools",
+    "evidence_type": "证据类型",
+    "boundary": "适用边界",
+    "definition": "定义",
+    "venue": "发表于",
+    "depth": "档位",
+    "abstract": "摘要",
+    "url": "URL",
+    "oa_url": "开放获取",
+    "openalex_type": "OpenAlex 类型"
   }
 }

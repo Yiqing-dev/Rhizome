@@ -61,7 +61,9 @@
     "modality": "Modality",
     "year_min": "From year",
     "year_max": "To year",
-    "any_role": "Any role"
+    "any_role": "Any role",
+    "results_count": "{{n}} results",
+    "empty_hint": "Try fewer filters, an accession, or a method name."
   },
   "home": {
     "ingested": "Ingested {{work}}",
@@ -73,7 +75,17 @@
     "related": "Related papers you have read:",
     "recall_title": "Recall",
     "recall_placeholder": "Paste an analysis plan, a paragraph or code…",
-    "recall_go": "What have I read that helps?"
+    "recall_go": "What have I read that helps?",
+    "tagline": "What have you already read that helps right now?",
+    "tagline_sub": "Papers you discussed, split into datasets, methods, ideas and claims — searchable, linked, and brought back when they matter.",
+    "step1_t": "Discuss a paper",
+    "step1": "In Claude or ChatGPT, with the Rhizome export instructions in the Project.",
+    "step2_t": "Say “export RXF”",
+    "step2": "Save the YAML into the inbox folder or drop it here. Invalid files come back with a report to paste into the chat.",
+    "step3_t": "Find it again",
+    "step3": "Search by asset, open topic pages, and let recall surface what you forgot.",
+    "recall_hint": "Paste what you are working on; Rhizome ranks your own assets by relevance × how long since you last saw them.",
+    "recall_empty_hint": "Nothing above the relevance threshold. Try a more specific description."
   },
   "action": {
     "confirm": "confirm",
@@ -91,7 +103,9 @@
     "logic": "Logic chain",
     "logic_jump": "logical leap",
     "issues": "Issues",
-    "raw": "Show export document"
+    "raw": "Show export document",
+    "raw_hide": "Hide export document",
+    "doi": "DOI"
   },
   "depth": {
     "light": "Light export",
@@ -110,7 +124,8 @@
   "asset": {
     "external_id": "External ID",
     "transfer": "Transfer",
-    "aliases": "Aliases"
+    "aliases": "Aliases",
+    "verified": "verified"
   },
   "transfer": {
     "cross-species": "cross-species",
@@ -123,12 +138,15 @@
     "truncated": "Showing part of {{n}} nodes."
   },
   "entity": {
-    "related": "Related"
+    "related": "Related",
+    "no_related": "No related assets yet."
   },
   "topic": {
     "confirm": "Confirm topic",
     "contested": "contested",
-    "n_works": "{{n}} papers"
+    "n_works": "{{n}} papers",
+    "subtree": "{{n}} sub-topics",
+    "no_items": "Nothing here yet"
   },
   "column": {
     "dataset": "Data",
@@ -149,7 +167,13 @@
     "counter": "Counter-examples, one per line",
     "parent": "Parent topic (optional)",
     "create": "Create and retro-tag",
-    "created": "Topic created; retro-tagging runs in the background."
+    "created": "Topic created; retro-tagging runs in the background.",
+    "sub": "Only the topic layer is drawn; node size is the number of linked assets, colour is the community.",
+    "graph_title": "{{n}} topics",
+    "communities": "{{n}} communities",
+    "legend": "Pale = candidate topic · click a node to open its page · hover to highlight neighbours",
+    "list_title": "Topics by size",
+    "empty_hint": "Topics appear as RXF exports mention them; confirm or create them to make them official."
   },
   "review": {
     "title": "Review queue",
@@ -186,7 +210,10 @@
       "none": "Unrelated",
       "useful": "Useful",
       "useless": "Not useful"
-    }
+    },
+    "side_a": "A",
+    "side_b": "B",
+    "empty_hint": "New items arrive as papers are ingested and when topics are created."
   },
   "cards": {
     "title": "Review cards",
@@ -198,6 +225,14 @@
       "2": "Hard",
       "3": "Good",
       "4": "Easy"
+    },
+    "sub": "Space shows the answer; 1–4 grades it.",
+    "progress": "{{done}} / {{total}} today",
+    "done_hint": "Cards come from deep exports; new ones are limited per day in Settings.",
+    "origin": {
+      "rxf": "from export",
+      "template": "template",
+      "local_llm": "local model"
     }
   },
   "digest": {
@@ -207,7 +242,9 @@
     "pairs": "Unlinked pairs",
     "no_pairs": "No candidates this week.",
     "contested": "Contested claims",
-    "no_contested": "No new contradictions."
+    "no_contested": "No new contradictions.",
+    "similarity": "similarity",
+    "no_pairs_hint": "Run the batch, or wait for the weekly synthesis."
   },
   "settings": {
     "title": "Settings",
@@ -240,6 +277,34 @@
     "save": "Save",
     "vocab": "Vocabulary sync",
     "vocab_hint": "Put rhizome-vocab.yaml into the Claude / ChatGPT Project knowledge after topics change.",
-    "vocab_download": "Download rhizome-vocab.yaml"
+    "vocab_download": "Download rhizome-vocab.yaml",
+    "remotes_invalid": "Not valid JSON."
+  },
+  "lang": {
+    "short_en": "EN",
+    "short_zh": "中"
+  },
+  "attr": {
+    "accession": "Accession",
+    "database": "Database",
+    "organism": "Organism",
+    "tissue": "Tissue",
+    "modality": "Modality",
+    "scale": "Scale",
+    "public": "Public",
+    "name": "Name",
+    "repo": "Repository",
+    "io": "Input → output",
+    "maintained": "Maintained",
+    "biotools": "bio.tools",
+    "evidence_type": "Evidence type",
+    "boundary": "Boundary",
+    "definition": "Definition",
+    "venue": "Venue",
+    "depth": "Depth",
+    "abstract": "Abstract",
+    "url": "URL",
+    "oa_url": "Open access",
+    "openalex_type": "OpenAlex type"
   }
 }

@@ -152,7 +152,7 @@ def search(s: Session, q: str, f: Filters | None = None, limit: int = 20, offset
     f = f or Filters()
     q = q.strip()
     if not q:
-        return []
+        return browse(s, f, limit, offset)
     qvec = embed_texts(s, [q])[0]
     vec_hits = [i for i, _ in knn(s, qvec, types=f.types, k=200)]
     kw_hits = keyword_ids(s, q, f.types, k=200)
@@ -178,6 +178,18 @@ def search(s: Session, q: str, f: Filters | None = None, limit: int = 20, offset
     src = source_works(s, page)
     return [dict(summarize(ents[i], scores[i], src.get(i, [])), relevance=round(relevance[i], 4) if i in relevance else None)
             for i in page]
+
+
+def browse(s: Session, f: Filters, limit: int = 20, offset: int = 0) -> list[dict[str, Any]]:
+    """No query: newest entities of the requested types (home-page tiles), same filters and shape."""
+    q = select(Entity.id).where(Entity.type.in_(f.types))
+    if not f.include_candidates:
+        q = q.where(Entity.status != "candidate")
+    ids = list(s.execute(q.order_by(Entity.id.desc()).limit(500)).scalars())
+    ids = apply_filters(s, ids, f)[offset:offset + limit]
+    ents = {e.id: e for e in s.execute(select(Entity).where(Entity.id.in_(ids))).scalars()}
+    src = source_works(s, ids)
+    return [summarize(ents[i], None, src.get(i, [])) for i in ids if i in ents]
 
 
 def summarize(e: Entity, score: float | None = None, sources: list[dict[str, Any]] | None = None) -> dict[str, Any]:

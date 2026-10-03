@@ -2,10 +2,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ApiError, type Hit } from "../api";
-import { HitRow, Loading } from "../components/common";
+import { EmptyState, HitRow, Loading } from "../components/common";
+import { SparkIcon, UploadIcon } from "../components/icons";
 import { useLoad } from "../hooks";
 import { fmtNum } from "../i18n";
 import { go, href } from "../router";
+
+const TILE_TYPES = ["work", "dataset", "method", "idea", "claim", "topic"] as const;
 
 export default function Home() {
   const { t, i18n } = useTranslation();
@@ -13,6 +16,7 @@ export default function Home() {
   const [q, setQ] = useState("");
   const [ctx, setCtx] = useState("");
   const [recalled, setRecalled] = useState<Hit[] | null>(null);
+  const [over, setOver] = useState(false);
   const [ingestMsg, setIngestMsg] = useState<{ ok: boolean; text: string; related?: any[] } | null>(null);
 
   async function onFile(f: File) {
@@ -27,64 +31,88 @@ export default function Home() {
   }
 
   const s = stats.data;
+  const total = s ? Object.values(s.entities).reduce((a, b) => a + b, 0) : 0;
   return (
     <div className="stack">
-      <form className="searchbar" onSubmit={(e) => { e.preventDefault(); go("search", { q }); }}>
-        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("search.placeholder")} />
-        <button type="submit">{t("search.go")}</button>
-      </form>
+      <section className="hero">
+        <h1>{t("home.tagline")}</h1>
+        <p>{t("home.tagline_sub")}</p>
+        <form className="searchbar" onSubmit={(e) => { e.preventDefault(); if (q.trim()) go("search", { q }); }}>
+          <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("search.placeholder")} />
+          <button type="submit" className="primary">{t("search.go")}</button>
+        </form>
+      </section>
+
       <Loading error={stats.error} loading={stats.loading && !s} />
-      {s && (
+      {s && total === 0 && (
+        <section className="steps">
+          <div className="step"><strong>{t("home.step1_t")}</strong>{t("home.step1")}</div>
+          <div className="step"><strong>{t("home.step2_t")}</strong>{t("home.step2")}</div>
+          <div className="step"><strong>{t("home.step3_t")}</strong>{t("home.step3")}</div>
+        </section>
+      )}
+      {s && total > 0 && (
         <section className="tiles">
-          {(["work", "dataset", "method", "idea", "claim", "topic"] as const).map((k) => (
-            <div className="tile" key={k}>
+          {TILE_TYPES.map((k) => (
+            <a className={`tile t-${k}`} key={k} href={href(`search?types=${k}`)}>
               <div className="num">{fmtNum(s.entities[k] ?? 0, i18n.language)}</div>
-              <div className="muted">{t(`type.${k}`)}</div>
-            </div>
+              <div className="lbl">{t(`type.${k}`)}</div>
+            </a>
           ))}
           <a className={`tile ${s.review_queue > 0 ? "attention" : ""}`} href={href("review")}>
             <div className="num">{fmtNum(s.review_queue, i18n.language)}</div>
-            <div className="muted">{t("home.queue")}</div>
+            <div className="lbl">{t("home.queue")}</div>
           </a>
           <a className="tile" href={href("cards")}>
             <div className="num">{fmtNum(s.cards_due, i18n.language)}</div>
-            <div className="muted">{t("home.cards_due")}</div>
+            <div className="lbl">{t("home.cards_due")}</div>
           </a>
         </section>
       )}
-      <section className="panel">
-        <h2>{t("home.ingest_title")}</h2>
-        <p className="muted">{t("home.ingest_hint")}</p>
-        <label className="drop"
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) onFile(f); }}>
-          <input type="file" accept=".yaml,.yml" hidden onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
-          {t("home.drop")}
-        </label>
-        {ingestMsg && (
-          <div className={ingestMsg.ok ? "ok" : "error"}>
-            <pre>{ingestMsg.text}</pre>
-            {ingestMsg.related?.length ? (
-              <>
-                <div className="muted">{t("home.related")}</div>
-                <ul>{ingestMsg.related.map((r) => (
-                  <li key={r.work_id}><a href={href(`entity/${r.work_id}`)}>{r.title}</a>{" "}
-                    <span className="muted">· {Array.from(new Set(r.via.map((v: any) => t(`type.${v.dimension}`)))).join(" / ")}</span></li>
-                ))}</ul>
-              </>
-            ) : null}
+
+      <div className="grid-2">
+        <section className="panel">
+          <h2><UploadIcon />{t("home.ingest_title")}</h2>
+          <p className="hint">{t("home.ingest_hint")}</p>
+          <label className={`drop ${over ? "over" : ""}`}
+            onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+            onDragLeave={() => setOver(false)}
+            onDrop={(e) => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files[0]; if (f) onFile(f); }}>
+            <input type="file" accept=".yaml,.yml" hidden onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+            <UploadIcon />
+            <span>{t("home.drop")}</span>
+          </label>
+          {ingestMsg && (
+            <div className={`notice ${ingestMsg.ok ? "ok" : "error"}`}>
+              <pre>{ingestMsg.text}</pre>
+              {ingestMsg.related?.length ? (
+                <div className="stack-sm" style={{ marginTop: "0.5rem" }}>
+                  <div className="eyebrow">{t("home.related")}</div>
+                  <ul className="plain related">{ingestMsg.related.map((r) => (
+                    <li key={r.work_id}>
+                      <a href={href(`entity/${r.work_id}`)}>{r.title}</a>
+                      <div className="via">{Array.from(new Set<string>(r.via.map((v: any) => t(`type.${v.dimension}`)))).map((d) => <span key={d}>{d}</span>)}</div>
+                    </li>
+                  ))}</ul>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </section>
+        <section className="panel">
+          <h2><SparkIcon />{t("home.recall_title")}</h2>
+          <p className="hint">{t("home.recall_hint")}</p>
+          <textarea rows={5} value={ctx} onChange={(e) => setCtx(e.target.value)} placeholder={t("home.recall_placeholder")} />
+          <div className="row">
+            <button className="primary" onClick={async () => setRecalled((await api.recall(ctx)).results)} disabled={!ctx.trim()}>
+              {t("home.recall_go")}
+            </button>
           </div>
-        )}
-      </section>
-      <section className="panel">
-        <h2>{t("home.recall_title")}</h2>
-        <textarea rows={4} value={ctx} onChange={(e) => setCtx(e.target.value)} placeholder={t("home.recall_placeholder")} />
-        <button onClick={async () => setRecalled((await api.recall(ctx)).results)} disabled={!ctx.trim()}>
-          {t("home.recall_go")}
-        </button>
-        {recalled && (recalled.length ? <ul className="hits">{recalled.map((h) => <HitRow key={h.id} h={h} />)}</ul>
-          : <p className="muted">{t("common.no_results")}</p>)}
-      </section>
+          {recalled && (recalled.length
+            ? <ul className="hits">{recalled.map((h) => <HitRow key={h.id} h={h} score={h.score} />)}</ul>
+            : <EmptyState title={t("common.no_results")} hint={t("home.recall_empty_hint")} />)}
+        </section>
+      </div>
     </div>
   );
 }

@@ -58,8 +58,8 @@ if fe.exists():
     zh = flatten(json.loads((fe / "zh-CN.json").read_text("utf-8")))
     compare("frontend", en, zh)
     used = set()
-    jsx_text = re.compile(r"(?<![=\-])>\s*([A-Za-z\u4e00-\u9fff][^<>{}\n]*?)\s*<")
-    allow = {"bge-m3", "bge-reranker-v2-m3", "mDeBERTa-v3-base-xnli"}  # proper names, never translated
+    jsx_text = re.compile(r"(?<![=\-\s])>\s*([A-Za-z\u4e00-\u9fff][^<>{}\n]*?)\s*<")
+    allow = {"bge-m3", "bge-reranker-v2-m3", "mDeBERTa-v3-base-xnli", "PDF"}  # proper names, never translated
     for f in (ROOT / "frontend" / "src").rglob("*.tsx"):
         src = f.read_text("utf-8")
         used |= set(re.findall(r"""\bt\(\s*['"]([\w.-]+)['"]""", src))

@@ -2,7 +2,8 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
-import { HitRow, Loading } from "../components/common";
+import { EmptyState, HitRow, Loading } from "../components/common";
+import { SearchIcon } from "../components/icons";
 import { useLoad } from "../hooks";
 import { go } from "../router";
 
@@ -12,21 +13,28 @@ const ROLES = ["", "proposes", "uses", "produces", "evaluates", "supports", "con
 export default function SearchPage({ query }: { query: URLSearchParams }) {
   const { t } = useTranslation();
   const [form, setForm] = useState(() => Object.fromEntries(query.entries()) as Record<string, string>);
-  const q = query.get("q") ?? "";
+  const q = (query.get("q") ?? "").trim();
   const params = Object.fromEntries(query.entries());
-  const res = useLoad(() => (q ? api.search(q, params) : Promise.resolve({ results: [] })), [query.toString()]);
+  const browsing = !q && !!params.types;  // tiles on the home page: list everything of a type
+  const res = useLoad(() => (q || browsing ? api.search(q, params) : Promise.resolve({ results: [] })), [query.toString()]);
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const types = (form.types ?? "").split(",").filter(Boolean);
+  const toggleType = (ty: string) => set("types", (types.includes(ty) ? types.filter((x) => x !== ty) : [...types, ty]).join(","));
+  const n = res.data?.results.length ?? 0;
 
   return (
     <div className="stack">
       <form className="filters" onSubmit={(e) => { e.preventDefault(); go("search", form); }}>
-        <input value={form.q ?? ""} onChange={(e) => set("q", e.target.value)} placeholder={t("search.placeholder")} />
+        <div className="row">
+          <div className="searchbar grow" style={{ boxShadow: "none" }}>
+            <input value={form.q ?? ""} onChange={(e) => set("q", e.target.value)} placeholder={t("search.placeholder")} autoFocus />
+            <button type="submit" className="primary"><SearchIcon />{t("search.go")}</button>
+          </div>
+        </div>
         <div className="row wrap">
           {TYPES.map((ty) => (
-            <label key={ty} className="check">
-              <input type="checkbox" checked={types.includes(ty)} onChange={(e) =>
-                set("types", (e.target.checked ? [...types, ty] : types.filter((x) => x !== ty)).join(","))} />
+            <label key={ty} className={`chip t-${ty} ${types.includes(ty) ? "on" : ""}`}>
+              <input type="checkbox" checked={types.includes(ty)} onChange={() => toggleType(ty)} />
               {t(`type.${ty}`)}
             </label>
           ))}
@@ -39,13 +47,17 @@ export default function SearchPage({ query }: { query: URLSearchParams }) {
           <select value={form.edge_type ?? ""} onChange={(e) => set("edge_type", e.target.value)}>
             {ROLES.map((r) => <option key={r} value={r}>{r ? t(`edge.${r}`) : t("search.any_role")}</option>)}
           </select>
-          <button type="submit">{t("search.go")}</button>
         </div>
       </form>
       <Loading error={res.error} loading={res.loading} />
-      {res.data && (res.data.results.length
+      {res.data && (q || browsing) && (
+        <div className="row between">
+          <span className="muted small">{t("search.results_count", { n })}</span>
+        </div>
+      )}
+      {res.data && (n
         ? <ul className="hits">{res.data.results.map((h) => <HitRow key={h.id} h={h} />)}</ul>
-        : q ? <p className="muted">{t("common.no_results")}</p> : null)}
+        : q || browsing ? <EmptyState title={t("common.no_results")} hint={t("search.empty_hint")} /> : null)}
     </div>
   );
 }

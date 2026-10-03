@@ -2,15 +2,17 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
-import { Loading } from "../components/common";
+import { EmptyState, Loading } from "../components/common";
+import { CardIcon } from "../components/icons";
 import { useKeys, useLoad } from "../hooks";
 
-/** FSRS review: space reveals, 1-4 grades. */
+/** FSRS review: space reveals, 1–4 grades. */
 export default function CardsPage() {
   const { t } = useTranslation();
   const due = useLoad(() => api.cardsDue(), []);
   const [i, setI] = useState(0);
   const [shown, setShown] = useState(false);
+  const [done, setDone] = useState(0);
   const cards = due.data?.cards ?? [];
   const card = cards[i];
 
@@ -18,6 +20,7 @@ export default function CardsPage() {
     if (!card || !shown) return;
     await api.grade(card.id, r);
     setShown(false);
+    setDone((d) => d + 1);
     if (i + 1 < cards.length) setI(i + 1);
     else { setI(0); due.reload(); }
   }
@@ -28,21 +31,35 @@ export default function CardsPage() {
   }, [card, shown, i, cards.length]);
 
   return (
-    <div className="stack narrow">
-      <h1>{t("cards.title")}</h1>
-      <Loading error={due.error} loading={due.loading && !due.data} />
-      {due.data && !card && <p>{t("cards.done")}</p>}
-      {card && (
-        <div className="flashcard">
-          <div className="muted small">{card.entity_name} · {i + 1}/{cards.length}{card.new ? ` · ${t("cards.new")}` : ""}</div>
-          <p className="q">{card.q}</p>
-          {shown ? <p className="a">{card.a}</p> : <button onClick={() => setShown(true)}><kbd>␣</kbd> {t("cards.show")}</button>}
-          {shown && (
-            <div className="row">
-              {[1, 2, 3, 4].map((r) => <button key={r} onClick={() => grade(r)}><kbd>{r}</kbd> {t(`cards.rating.${r}`)}</button>)}
-            </div>
-          )}
+    <div className="stack narrow" style={{ margin: "0 auto" }}>
+      <div className="page-head">
+        <div>
+          <h1>{t("cards.title")}</h1>
+          <p className="sub">{t("cards.sub")}</p>
         </div>
+        {cards.length > 0 && <span className="muted small">{t("cards.progress", { done, total: done + cards.length - i })}</span>}
+      </div>
+      <Loading error={due.error} loading={due.loading && !due.data} />
+      {due.data && !card && <EmptyState icon={<CardIcon />} title={t("cards.done")} hint={t("cards.done_hint")} />}
+      {card && (
+        <>
+          <div className="progress"><i style={{ "--w": `${(100 * i) / cards.length}%` } as React.CSSProperties} /></div>
+          <div className="flashcard">
+            <div className="meta">
+              <span>{card.entity_name}</span>
+              <span>{card.new ? t("cards.new") : t(`cards.origin.${card.origin}`, { defaultValue: "" })}</span>
+            </div>
+            <p className="q">{card.q}</p>
+            {shown ? <p className="a">{card.a}</p> : (
+              <div className="row"><button className="primary" onClick={() => setShown(true)}><kbd>␣</kbd> {t("cards.show")}</button></div>
+            )}
+            {shown && (
+              <div className="ratings">
+                {[1, 2, 3, 4].map((r) => <button key={r} className={`r${r}`} onClick={() => grade(r)}><kbd>{r}</kbd> {t(`cards.rating.${r}`)}</button>)}
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

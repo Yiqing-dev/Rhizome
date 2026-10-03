@@ -189,7 +189,7 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
 
     # ---- search / entities ----
     @app.get("/search", dependencies=A)
-    def search(q: str, types: str | None = None, edge_type: str | None = None, organism: str | None = None,
+    def search(q: str = "", types: str | None = None, edge_type: str | None = None, organism: str | None = None,
                modality: str | None = None, year_min: int | None = None, year_max: int | None = None,
                tier: int | None = None, topic: int | None = None, limit: int = Query(20, le=100),
                offset: int = 0, s: Session = Depends(db)) -> dict[str, Any]:
