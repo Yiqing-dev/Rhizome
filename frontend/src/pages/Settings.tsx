@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api } from "../api";
+import { api, ApiError } from "../api";
 import { Loading } from "../components/common";
 import { SettingsIcon } from "../components/icons";
 import { useLoad } from "../hooks";
@@ -10,6 +10,10 @@ import { backendLang, setLanguage } from "../i18n";
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
   const st = useLoad(() => api.settings(), []);
+  const sys = useLoad(() => api.system(), []);
+  const [newDir, setNewDir] = useState("");
+  const [dirMsg, setDirMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [claudeMsg, setClaudeMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [saved, setSaved] = useState(false);
   const [remotes, setRemotes] = useState<string | null>(null);
   const [remotesErr, setRemotesErr] = useState(false);
@@ -47,7 +51,26 @@ export default function SettingsPage() {
     }
   }
 
+  async function moveDir(path: string | null) {
+    try {
+      const r = await api.moveDataDir(path);
+      setDirMsg({ ok: true, text: r.restart_required ? t("settings.dir_moved", { dir: r.data_dir }) : t("settings.dir_same") });
+    } catch (e) {
+      setDirMsg({ ok: false, text: String((e as ApiError).detail ?? e) });
+    }
+  }
+
+  async function connectClaude() {
+    try {
+      const r = await api.connectClaude();
+      setClaudeMsg({ ok: true, text: t("settings.claude_done", { files: r.written.join("\n") }) });
+    } catch (e) {
+      setClaudeMsg({ ok: false, text: String((e as ApiError).detail ?? e) });
+    }
+  }
+
   const s = st.data;
+  const si = sys.data;
   const cur = i18n.language.startsWith("zh") ? "zh-CN" : "en";
   return (
     <div className="stack narrow">
@@ -69,32 +92,65 @@ export default function SettingsPage() {
           <section className="panel">
             <h2>{t("settings.paths")}</h2>
             <dl className="attrs">
-              <dt>{t("settings.data_dir")}</dt><dd><code className="mono">{s.data_dir}</code></dd>
-              <dt>{t("settings.inbox")}</dt><dd><code className="mono">{s.inbox_dir ?? `${s.data_dir}/inbox`}</code></dd>
+              <dt>{t("settings.data_dir")}</dt>
+              <dd className="row wrap"><code className="mono">{si?.data_dir ?? s.data_dir}</code>
+                <button className="link" onClick={() => api.openFolder("data")}>{t("settings.open")}</button></dd>
+              <dt>{t("settings.inbox")}</dt>
+              <dd className="row wrap"><code className="mono">{si?.inbox ?? s.inbox_dir}</code>
+                <button className="link" onClick={() => api.openFolder("inbox")}>{t("settings.open")}</button></dd>
+              <dt>{t("settings.logs")}</dt>
+              <dd className="row wrap"><code className="mono">{si?.logs}</code>
+                <button className="link" onClick={() => api.openFolder("logs")}>{t("settings.open")}</button>
+                <button className="link" onClick={() => api.openFolder("backups")}>{t("settings.open_backups")}</button></dd>
+              {si?.app_dir && (<><dt>{t("settings.app_dir")}</dt><dd><code className="mono">{si.app_dir}</code></dd></>)}
             </dl>
+            {si?.portable ? <p className="hint">{t("settings.portable_hint")}</p> : (
+              <div className="stack-sm">
+                <p className="hint">{t("settings.move_hint")}</p>
+                <div className="row wrap">
+                  <input className="grow" value={newDir} onChange={(e) => setNewDir(e.target.value)} placeholder={t("settings.move_placeholder")} />
+                  <button onClick={() => moveDir(newDir.trim())} disabled={!newDir.trim()}>{t("settings.move")}</button>
+                  {si && si.data_dir !== si.default_data_dir && <button className="ghost" onClick={() => moveDir(null)}>{t("settings.move_default")}</button>}
+                </div>
+              </div>
+            )}
+            {dirMsg && <div className={`notice ${dirMsg.ok ? "ok" : "error"}`}><pre>{dirMsg.text}</pre></div>}
             <label className="check"><input type="checkbox" checked={s.offline} onChange={(e) => patch({ offline: e.target.checked })} />
               {t("settings.offline")}</label>
           </section>
           <section className="panel">
+            <h2>{t("settings.claude")}</h2>
+            <p className="hint">{t("settings.claude_hint")}</p>
+            <div className="row"><button className="primary" onClick={connectClaude}>{t("settings.claude_connect")}</button></div>
+            {claudeMsg && <div className={`notice ${claudeMsg.ok ? "ok" : "error"}`}><pre>{claudeMsg.text}</pre></div>}
+            {si && (
+              <details>
+                <summary className="small muted">{t("settings.claude_manual")}</summary>
+                <pre className="raw">{JSON.stringify(si.claude_desktop, null, 2)}</pre>
+              </details>
+            )}
+          </section>
+          <section className="panel">
             <h2><SettingsIcon />{t("settings.models")}</h2>
             <p className="hint">{t("settings.models_hint")}</p>
+            {si && !si.models_available && <div className="notice warn">{t("settings.models_not_installed")}</div>}
             <div className="form-grid">
               <label>{t("settings.embedder")}
                 <select value={s.embedder} onChange={(e) => patch({ embedder: e.target.value })}>
-                  <option value="hashing">{t("settings.builtin")}</option><option value="bge-m3">bge-m3</option>
+                  <option value="hashing">{t("settings.builtin")}</option><option value="bge-m3" disabled={si ? !si.models_available : false}>bge-m3</option>
                 </select></label>
               <label>{t("settings.reranker")}
                 <select value={s.reranker} onChange={(e) => patch({ reranker: e.target.value })}>
-                  <option value="lexical">{t("settings.builtin")}</option><option value="bge-reranker-v2-m3">bge-reranker-v2-m3</option>
+                  <option value="lexical">{t("settings.builtin")}</option><option value="bge-reranker-v2-m3" disabled={si ? !si.models_available : false}>bge-reranker-v2-m3</option>
                 </select></label>
               <label>{t("settings.nli")}
                 <select value={s.nli} onChange={(e) => patch({ nli: e.target.value })}>
-                  <option value="none">{t("settings.off")}</option><option value="mdeberta">mDeBERTa-v3-base-xnli</option>
+                  <option value="none">{t("settings.off")}</option><option value="mdeberta" disabled={si ? !si.models_available : false}>mDeBERTa-v3-base-xnli</option>
                 </select></label>
               <label>{t("settings.inference")}
                 <select value={s.inference_backend} onChange={(e) => patch({ inference_backend: e.target.value })}>
                   <option value="queue">{t("settings.inference_queue")}</option>
-                  <option value="local">{t("settings.inference_local")}</option>
+                  <option value="local" disabled={si ? !si.local_llm_available : false}>{t("settings.inference_local")}</option>
                 </select></label>
             </div>
             <div className="row wrap">

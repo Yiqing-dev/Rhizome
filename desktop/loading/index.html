@@ -1,4 +1,12 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>Rhizome</title>
-<style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;color:#6b6b66;background:#fafaf8}</style>
-</head><body><p>Starting Rhizome… / 正在启动 Rhizome…</p></body></html>
+<style>
+  :root{color-scheme:light dark}
+  body{font-family:"Segoe UI",system-ui,"Microsoft YaHei UI",sans-serif;display:flex;flex-direction:column;gap:18px;align-items:center;justify-content:center;height:100vh;margin:0;color:#6b6f66;background:#f5f3ec}
+  @media (prefers-color-scheme:dark){body{background:#15170f;color:#9a9e91}}
+  .dot{width:10px;height:10px;border-radius:50%;background:#5e9a1b;display:inline-block;margin:0 4px;animation:p 1.2s infinite ease-in-out}
+  .dot:nth-child(2){animation-delay:.15s;background:#4a68e6}.dot:nth-child(3){animation-delay:.3s;background:#d2650b}
+  @keyframes p{0%,80%,100%{transform:scale(.6);opacity:.5}40%{transform:scale(1);opacity:1}}
+</style></head>
+<body><div><span class="dot"></span><span class="dot"></span><span class="dot"></span></div>
+<p>正在启动 Rhizome… · Starting Rhizome…</p></body></html>

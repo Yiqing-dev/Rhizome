@@ -37,11 +37,14 @@ def token_path(settings: Settings) -> Path:
 
 
 def get_or_create_token(settings: Settings) -> str:
+    """The desktop shell generates the token and passes it in RHIZOME_API_TOKEN; it is written to the
+    data dir as well so the CLI and the MCP server (other processes) can reach the running app."""
     p = token_path(settings)
-    if p.exists():
+    env = os.environ.get("RHIZOME_API_TOKEN")
+    if not env and p.exists():
         return p.read_text("utf-8").strip()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
-    tok = secrets.token_urlsafe(32)
+    tok = env or secrets.token_urlsafe(32)
     p.write_text(tok, "utf-8")
     try:
         os.chmod(p, 0o600)
@@ -423,6 +426,31 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         reset_models()
         reset_backend()
         return get_settings_ep()
+
+    # ---- desktop integration ----
+    from .. import system as sysint
+
+    @app.get("/system", dependencies=A)
+    def system_info() -> dict[str, Any]:
+        return sysint.info()
+
+    @app.post("/system/open/{target}", dependencies=W)
+    def system_open(target: str) -> dict[str, Any]:
+        try:
+            return {"opened": str(sysint.open_folder(target))}
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
+
+    @app.post("/system/claude-desktop", dependencies=W)
+    def system_claude() -> dict[str, Any]:
+        return sysint.install_claude_desktop()
+
+    @app.post("/system/data-dir", dependencies=W)
+    def system_data_dir(body: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return sysint.move_data_dir(body.get("path"), copy=bool(body.get("copy", True)))
+        except ValueError as e:
+            raise HTTPException(422, str(e)) from e
 
     # ---- static frontend ----
     dist = Path(os.environ.get("RHIZOME_FRONTEND_DIST", Path(__file__).resolve().parent.parent / "web"))

@@ -85,7 +85,8 @@
     "step3_t": "再次找回",
     "step3": "按资产检索、打开主题页，让主动召回把忘掉的东西带回来。",
     "recall_hint": "粘贴你正在做的事，Rhizome 按“相关度 × 距上次查看的时长”排出你自己的资产。",
-    "recall_empty_hint": "没有超过相关度阈值的结果，试试更具体的描述。"
+    "recall_empty_hint": "没有超过相关度阈值的结果，试试更具体的描述。",
+    "open_inbox": "打开收件箱目录"
   },
   "action": {
     "confirm": "确认",
@@ -278,7 +279,24 @@
     "vocab": "词表同步",
     "vocab_hint": "主题变化后，把 rhizome-vocab.yaml 放进 Claude / ChatGPT 的 Project 知识。",
     "vocab_download": "下载 rhizome-vocab.yaml",
-    "remotes_invalid": "不是有效的 JSON。"
+    "remotes_invalid": "不是有效的 JSON。",
+    "open": "打开",
+    "open_backups": "备份",
+    "logs": "日志",
+    "app_dir": "安装目录",
+    "portable_hint": "便携安装：所有数据都保存在程序旁边的 data 目录里。",
+    "move_hint": "把资料库迁移到其他目录（例如其他磁盘或同步盘）。现有数据会被复制，旧目录保持不动。迁移后请重启应用。",
+    "move_placeholder": "D:\\Research\\Rhizome",
+    "move": "迁移到这里",
+    "move_default": "恢复默认位置",
+    "dir_moved": "资料库现在位于 {{dir}}。请重启 Rhizome 生效。",
+    "dir_same": "这已经是当前目录。",
+    "claude": "Claude Desktop",
+    "claude_hint": "把 Rhizome 作为 MCP 服务器加入 Claude Desktop，Claude 就能存入论文、召回资产、处理审核队列。配置里其他服务器保持不变。",
+    "claude_connect": "接入 Claude Desktop",
+    "claude_done": "已写入：\n{{files}}\n重启 Claude Desktop 后生效。",
+    "claude_manual": "手动配置",
+    "models_not_installed": "此版本只内置轻量模型。bge-m3、重排模型和 NLI 依赖体积很大的 Python 模型包，未随安装包分发。"
   },
   "lang": {
     "short_en": "EN",

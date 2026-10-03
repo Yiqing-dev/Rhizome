@@ -34,6 +34,12 @@ human_decision  merges / rejections / confirmations — applied last on every re
 - **Internalise**: weekly synthesis of close-but-unlinked asset pairs across communities, a contested
   claims list, and FSRS spaced repetition with daily caps.
 
+## Install (Windows)
+
+Download `Rhizome_x.y.z_x64-setup.exe` (or the `.msi`) from the GitHub Actions run
+*Windows app* / a release, run it, and start Rhizome from the Start menu. Everything is bundled.
+See [desktop/README.md](desktop/README.md) for what goes where, portable mode and Claude Desktop setup.
+
 ## Install & run (development)
 
 Requires Python ≥ 3.11 and Node ≥ 20.

@@ -19,13 +19,68 @@ from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 
-def default_data_dir() -> Path:
+def platform_data_dir() -> Path:
+    """The OS-conventional location (also where the data-directory pointer file lives)."""
     if sys.platform == "win32":
         base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
         return base / "Rhizome"
     if sys.platform == "darwin":
         return Path.home() / "Library" / "Application Support" / "Rhizome"
     return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "rhizome"
+
+
+POINTER_FILE = "location.json"
+
+
+def app_dir() -> Path | None:
+    """Directory of the installed desktop app (frozen build), else None."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return None
+
+
+def portable_dir() -> Path | None:
+    """Portable mode: a file named `portable` next to the app (or one level up, beside Rhizome.exe)
+    keeps all data in a `data` folder inside the installation directory."""
+    base = app_dir()
+    if base is None:
+        return None
+    for d in (base, base.parent, base.parent.parent):
+        if (d / "portable").exists():
+            return d / "data"
+    return None
+
+
+def default_data_dir() -> Path:
+    """Resolution order: RHIZOME_DATA_DIR > portable install > pointer file > OS default."""
+    env = os.environ.get("RHIZOME_DATA_DIR")
+    if env:
+        return Path(env)
+    port = portable_dir()
+    if port is not None:
+        return port
+    pointer = platform_data_dir() / POINTER_FILE
+    if pointer.exists():
+        try:
+            target = json.loads(pointer.read_text("utf-8")).get("data_dir")
+            if target:
+                return Path(target)
+        except (OSError, ValueError):
+            pass
+    return platform_data_dir()
+
+
+def set_data_dir_pointer(target: Path | None) -> Path:
+    """Remember a custom data directory (None = back to the default). Takes effect on next start."""
+    base = platform_data_dir()
+    base.mkdir(parents=True, exist_ok=True)
+    pointer = base / POINTER_FILE
+    if target is None or Path(target).resolve() == base.resolve():
+        if pointer.exists():
+            pointer.unlink()
+    else:
+        pointer.write_text(json.dumps({"data_dir": str(Path(target).resolve())}, ensure_ascii=False), "utf-8")
+    return pointer
 
 
 class RemoteTarget(BaseModel):
@@ -132,7 +187,7 @@ def _settings_path(data_dir: Path) -> Path:
 
 
 def load_settings(data_dir: Path | None = None) -> Settings:
-    data_dir = data_dir or Path(os.environ.get("RHIZOME_DATA_DIR", default_data_dir()))
+    data_dir = data_dir or default_data_dir()
     file_values: dict[str, Any] = {}
     p = _settings_path(data_dir)
     if p.exists():

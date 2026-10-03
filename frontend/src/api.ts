@@ -93,6 +93,12 @@ export interface ReviewItem {
 export interface DueCard { id: string; q: string; a: string; entity_key: string; entity_name: string | null; origin: string; new: boolean }
 export interface Stats { entities: Record<string, number>; edges: number; review_queue: number; review_queue_by_kind: Record<string, number>; cards_due: number }
 
+export interface SystemInfo {
+  frozen: boolean; platform: string; app_dir: string | null; portable: boolean; data_dir: string; default_data_dir: string;
+  inbox: string; logs: string; models_dir: string; models_available: boolean; local_llm_available: boolean;
+  cli: string[]; claude_desktop: Record<string, unknown>; claude_config_paths: string[];
+}
+
 export const api = {
   health: () => req<{ ok: boolean; version: string; read_only: boolean; language: string }>("GET", "/health"),
   stats: () => req<Stats>("GET", "/stats"),
@@ -115,5 +121,10 @@ export const api = {
   settings: () => req<Record<string, any>>("GET", "/settings"),
   patchSettings: (b: Record<string, unknown>) => req<Record<string, any>>("PATCH", "/settings", b),
   vocab: () => req<string>("GET", "/vocab"),
+  system: () => req<SystemInfo>("GET", "/system"),
+  openFolder: (target: "data" | "inbox" | "logs" | "models" | "backups") => req<{ opened: string }>("POST", `/system/open/${target}`),
+  connectClaude: () => req<{ written: string[]; entry: Record<string, unknown> }>("POST", "/system/claude-desktop"),
+  moveDataDir: (path: string | null, copy = true) =>
+    req<{ data_dir: string; copied: boolean; restart_required: boolean }>("POST", "/system/data-dir", { path, copy }),
   runJob: (kind: string) => req<{ id: number }>("POST", "/jobs", { kind, payload: {} }),
 };

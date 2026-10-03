@@ -73,7 +73,10 @@ export default function Home() {
       <div className="grid-2">
         <section className="panel">
           <h2><UploadIcon />{t("home.ingest_title")}</h2>
-          <p className="hint">{t("home.ingest_hint")}</p>
+          <div className="row between wrap">
+            <p className="hint grow">{t("home.ingest_hint")}</p>
+            <button onClick={() => api.openFolder("inbox")}>{t("home.open_inbox")}</button>
+          </div>
           <label className={`drop ${over ? "over" : ""}`}
             onDragOver={(e) => { e.preventDefault(); setOver(true); }}
             onDragLeave={() => setOver(false)}

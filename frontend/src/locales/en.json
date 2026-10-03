@@ -85,7 +85,8 @@
     "step3_t": "Find it again",
     "step3": "Search by asset, open topic pages, and let recall surface what you forgot.",
     "recall_hint": "Paste what you are working on; Rhizome ranks your own assets by relevance × how long since you last saw them.",
-    "recall_empty_hint": "Nothing above the relevance threshold. Try a more specific description."
+    "recall_empty_hint": "Nothing above the relevance threshold. Try a more specific description.",
+    "open_inbox": "Open inbox folder"
   },
   "action": {
     "confirm": "confirm",
@@ -278,7 +279,24 @@
     "vocab": "Vocabulary sync",
     "vocab_hint": "Put rhizome-vocab.yaml into the Claude / ChatGPT Project knowledge after topics change.",
     "vocab_download": "Download rhizome-vocab.yaml",
-    "remotes_invalid": "Not valid JSON."
+    "remotes_invalid": "Not valid JSON.",
+    "open": "open",
+    "open_backups": "backups",
+    "logs": "Logs",
+    "app_dir": "Installed in",
+    "portable_hint": "Portable installation: all data is kept in the data folder next to the app.",
+    "move_hint": "Move the library to another folder (e.g. another drive or a synced folder). Existing data is copied; the old folder is left untouched. Restart the app afterwards.",
+    "move_placeholder": "D:\\Research\\Rhizome",
+    "move": "Move library here",
+    "move_default": "Back to default location",
+    "dir_moved": "Library is now at {{dir}}. Restart Rhizome to use it.",
+    "dir_same": "That is already the current folder.",
+    "claude": "Claude Desktop",
+    "claude_hint": "Adds Rhizome as an MCP server to Claude Desktop, so Claude can save papers, recall assets and work through the review queue. Other servers in the config are kept.",
+    "claude_connect": "Connect to Claude Desktop",
+    "claude_done": "Written to:\n{{files}}\nRestart Claude Desktop to load it.",
+    "claude_manual": "Manual configuration",
+    "models_not_installed": "This build ships with the built-in lightweight models only. bge-m3, the reranker and NLI need the Python model packages, which are too large to bundle."
   },
   "lang": {
     "short_en": "EN",

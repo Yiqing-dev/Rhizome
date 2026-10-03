@@ -79,11 +79,31 @@ def serve(host: Optional[str] = None, port: Optional[int] = None,
     if host or port:
         st = st.model_copy(update={k: v for k, v in (("host", host), ("port", port)) if v})
         set_settings(st)
+    import os
+
+    from .system import clear_server_marker, watch_parent, write_server_marker
+
+    parent = os.environ.get("RHIZOME_PARENT_PID")
+    if parent and parent.isdigit():
+        watch_parent(int(parent))
+
     application = create_app(watch_inbox=watch_inbox)
     url = f"http://{st.host}:{st.port}"
     typer.echo(_("cli.serving", url=url))
     typer.echo(_("cli.open_ui", url=f"{url}/#token={application.state.token}"))
-    uvicorn.run(application, host=st.host, port=st.port, log_level="warning")
+    write_server_marker(url)  # lets the CLI / MCP server find this instance on a non-default port
+    try:
+        uvicorn.run(application, host=st.host, port=st.port, log_level="warning")
+    finally:
+        clear_server_marker()
+
+
+@app.command()
+def mcp() -> None:
+    """Run the MCP server on stdio (configured in Claude Desktop)."""
+    from .mcp_server import main as mcp_main
+
+    mcp_main()
 
 
 @app.command()

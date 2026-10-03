@@ -27,3 +27,6 @@ inbox/
 .env
 backend/rhizome/web/
 *.tsbuildinfo
+desktop/build/
+desktop/node_modules/
+desktop/src-tauri/gen/

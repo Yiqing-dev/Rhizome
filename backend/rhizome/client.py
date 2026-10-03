@@ -276,12 +276,15 @@ def connect(settings: Settings | None = None, snapshot: Path | None = None, pref
     if prefer_http:
         from .api.app import token_path
 
+        from .system import running_server_url
+
         tp = token_path(st)
         if tp.exists():
-            try:
-                r = httpx.get(st.base_url + "/health", timeout=1.0)
-                if r.status_code == 200 and not r.json().get("read_only"):
-                    return HttpClient(st.base_url, tp.read_text("utf-8").strip())
-            except httpx.HTTPError:
-                pass
+            for base in dict.fromkeys(filter(None, [running_server_url(), st.base_url])):
+                try:
+                    r = httpx.get(base + "/health", timeout=2.0)
+                    if r.status_code == 200 and not r.json().get("read_only"):
+                        return HttpClient(base, tp.read_text("utf-8").strip())
+                except httpx.HTTPError:
+                    continue
     return LocalClient(st)

@@ -1,6 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Rhizome",
+  "mainBinaryName": "Rhizome",
   "version": "0.1.0",
   "identifier": "dev.rhizome.desktop",
   "build": {
@@ -8,24 +9,48 @@
   },
   "app": {
     "windows": [
-      { "label": "main", "title": "Rhizome", "width": 1280, "height": 860, "url": "index.html" }
+      {
+        "label": "main",
+        "title": "Rhizome",
+        "width": 1320,
+        "height": 880,
+        "minWidth": 900,
+        "minHeight": 600,
+        "url": "index.html",
+        "center": true
+      }
     ],
     "security": {
-      "csp": "default-src 'self' http://127.0.0.1:8765; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
+      "csp": null
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["msi"],
-    "externalBin": ["binaries/rhizome-server"],
+    "targets": ["nsis", "msi"],
+    "publisher": "Rhizome",
+    "copyright": "Copyright 2026 Yiqing Wang and the Rhizome contributors. Apache-2.0.",
+    "category": "Education",
+    "shortDescription": "Personal literature asset graph",
+    "longDescription": "Rhizome splits papers you have read and discussed into reusable datasets, methods, ideas and claims, links them, and brings them back when they are useful again.",
     "licenseFile": "../../LICENSE",
-    "icon": ["icons/icon.ico", "icons/icon.png"],
-    "windows": { "wix": { "language": ["en-US", "zh-CN"] } }
-  },
-  "plugins": {
-    "updater": {
-      "endpoints": [],
-      "pubkey": ""
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "resources": {
+      "../build/server/": "server/",
+      "windows/rhz.cmd": "rhz.cmd",
+      "../../NOTICE": "NOTICE.txt"
+    },
+    "windows": {
+      "webviewInstallMode": { "type": "offlineInstaller" },
+      "nsis": {
+        "installMode": "both",
+        "languages": ["SimpChinese", "English"],
+        "displayLanguageSelector": true,
+        "installerIcon": "icons/icon.ico",
+        "installerHooks": "windows/hooks.nsh"
+      },
+      "wix": {
+        "language": ["zh-CN", "en-US"]
+      }
     }
   }
 }
