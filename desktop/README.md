@@ -7,7 +7,7 @@ installed next to the app, so nothing else needs to be installed: no Python, no 
 
 | Location | Contents |
 | --- | --- |
-| Install folder (chosen in the installer; default `%LOCALAPPDATA%\Programs\Rhizome` per user, or `Program Files` for all users) | `Rhizome.exe` (window), `server\rhz.exe` + `server\_internal\` (backend, CLI, MCP server), `rhz.cmd` (CLI shim) |
+| Install folder (chosen in the installer, any folder you can write to, Chinese names and spaces included; default `%LOCALAPPDATA%\Rhizome`; per-user, no administrator rights needed) | `Rhizome.exe` (window), `server\rhz.exe` + `server\_internal\` (backend, CLI, MCP server), `rhz.cmd` (CLI shim) |
 | Data folder (default `%APPDATA%\Rhizome`; movable in Settings) | `rhizome.db`, `raw\` (your RXF exports and PDFs), `inbox\`, `backups\`, `logs\`, `models\`, `settings.json` |
 | `%APPDATA%\Rhizome\location.json` | pointer written when you move the library elsewhere |
 | WebView2 | installed by the installer if missing: `*-setup.exe` downloads it, `*-offline-setup.exe` carries it |
