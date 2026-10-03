@@ -64,6 +64,9 @@ jobs:
           & $rhz --lang zh_CN search RootNet; if ($LASTEXITCODE) { exit 1 }
           & $rhz bench backend\tests\fixtures\bench-synthetic.yaml; if ($LASTEXITCODE) { exit 1 }
           & $rhz rebuild --no-backup; if ($LASTEXITCODE) { exit 1 }
+          # read-only snapshot as used on remote machines (exercises the file:///D:/... SQLite URI)
+          & $rhz snapshot "$env:RUNNER_TEMP\snap dir\rhizome.db"; if ($LASTEXITCODE) { exit 1 }
+          & $rhz --snapshot "$env:RUNNER_TEMP\snap dir\rhizome.db" search DomainGAT; if ($LASTEXITCODE) { exit 1 }
           # server mode as the desktop shell starts it: injected token, explicit port
           $env:RHIZOME_API_TOKEN = "smoke"
           $p = Start-Process -FilePath $rhz -ArgumentList "serve","--host","127.0.0.1","--port","51999" -PassThru -WindowStyle Hidden

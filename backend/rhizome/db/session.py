@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import sqlite3
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -27,14 +28,23 @@ def is_sqlite(engine: Engine) -> bool:
     return engine.dialect.name == "sqlite"
 
 
+def sqlite_ro_uri(path: Path) -> str:
+    """file: URI for a read-only connection. Absolute Windows paths need file:///C:/..., and
+    '%', '?', '#' and spaces in folder names must be percent-encoded."""
+    from urllib.parse import quote
+
+    p = path.as_posix()
+    if not p.startswith("/"):
+        p = "/" + p  # C:/x -> /C:/x
+    return f"file://{quote(p, safe='/:')}?mode=ro"
+
+
 def make_engine(url: str, read_only: bool = False) -> Engine:
     if url.startswith("sqlite"):
         if read_only:
-            path = url.split("sqlite:///", 1)[1]
-            engine = create_engine(
-                f"sqlite:///file:{Path(path).as_posix()}?mode=ro&uri=true",
-                connect_args={"check_same_thread": False},
-            )
+            path = Path(url.split("sqlite:///", 1)[1]).resolve()
+            uri = sqlite_ro_uri(path)
+            engine = create_engine("sqlite://", creator=lambda: sqlite3.connect(uri, uri=True, check_same_thread=False))
         else:
             engine = create_engine(url, connect_args={"check_same_thread": False, "timeout": 30})
 
@@ -94,8 +104,11 @@ def _alembic_config(engine: Engine):
     from alembic.config import Config
 
     cfg = Config()
-    cfg.set_main_option("script_location", str(MIGRATIONS_DIR))
-    cfg.set_main_option("sqlalchemy.url", engine.url.render_as_string(hide_password=False))
+    cfg.set_main_option("script_location", str(MIGRATIONS_DIR).replace("%", "%%"))
+    # Migrations always run on a live connection (cfg.attributes["connection"]); the URL is only a
+    # fallback for offline SQL generation. configparser treats '%' as interpolation and the rendered
+    # URL percent-encodes Windows drive colons ("D%3A"), so escape it.
+    cfg.set_main_option("sqlalchemy.url", engine.url.render_as_string(hide_password=False).replace("%", "%%"))
     return cfg
 
 

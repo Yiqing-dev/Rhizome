@@ -148,3 +148,27 @@ def test_backend_exits_when_parent_dies(settings, tmp_path):
         for p in (parent, srv):
             if p.poll() is None:
                 p.kill()
+
+
+@pytest.mark.parametrize("dirname", ["D:drive-like", "100% library", "中文 资料库"])
+def test_data_dir_with_windows_like_characters(tmp_path, dirname, monkeypatch):
+    """Windows paths contain ':' (and users pick folders with '%' or spaces); migrations,
+    normal use and read-only snapshot mode must all cope."""
+    from rhizome.config import Settings, set_settings
+    from rhizome.db.session import dispose_all, init_db, session_scope
+    from rhizome.pipeline.ingest import ingest_text
+
+    from conftest import example
+
+    st = Settings(data_dir=tmp_path / dirname, offline=True)
+    set_settings(st)
+    st.ensure_dirs()
+    dispose_all()
+    init_db(st)
+    with session_scope() as s:
+        assert ingest_text(s, example("light-spatial-domains.yaml"), "x.yaml").ok
+    with session_scope(read_only=True) as s:
+        from rhizome.services.search import search
+
+        assert search(s, "DomainGAT")
+    dispose_all()
