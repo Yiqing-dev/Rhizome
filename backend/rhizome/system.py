@@ -34,7 +34,7 @@ def write_server_marker(url: str) -> None:
 def clear_server_marker() -> None:
     p = get_settings().data_dir / SERVER_FILE
     try:
-        if p.exists() and json.loads(p.read_text("utf-8")).get("pid") == os.getpid():
+        if p.exists() and json.loads(p.read_text("utf-8-sig")).get("pid") == os.getpid():
             p.unlink()
     except (OSError, ValueError):
         pass
@@ -43,7 +43,7 @@ def clear_server_marker() -> None:
 def running_server_url() -> str | None:
     p = get_settings().data_dir / SERVER_FILE
     try:
-        return json.loads(p.read_text("utf-8")).get("url") if p.exists() else None
+        return json.loads(p.read_text("utf-8-sig")).get("url") if p.exists() else None
     except (OSError, ValueError):
         return None
 
@@ -158,7 +158,7 @@ def install_claude_desktop() -> dict[str, Any]:
         data: dict[str, Any] = {}
         if p.exists():
             try:
-                data = json.loads(p.read_text("utf-8") or "{}")
+                data = json.loads(p.read_text("utf-8-sig").strip() or "{}")
             except ValueError:
                 raise ValueError(f"{p} is not valid JSON; fix or remove it first") from None
             shutil.copy2(p, p.with_suffix(".json.bak"))

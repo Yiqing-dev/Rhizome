@@ -23,6 +23,11 @@ jobs:
     defaults:
       run:
         shell: pwsh
+    env:
+      # Every runtime test uses Chinese folder names with spaces (install dir, data dir, snapshots,
+      # inbox files), as on a Windows account named in Chinese or a library under D:\研究 资料\.
+      CJK_APP: 软件 工具\Rhizome 程序
+      CJK_DATA: 研究 资料\Rhizome 资料库
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -53,20 +58,35 @@ jobs:
           if ($LASTEXITCODE) { exit 1 }
           if (-not (Test-Path build\server\_internal\rhizome\web\index.html)) { Write-Error "UI missing from bundle"; exit 1 }
 
-      - name: Smoke-test the frozen backend
+      - name: Smoke-test the frozen backend (from a Chinese path)
         env:
-          RHIZOME_DATA_DIR: ${{ runner.temp }}\rhz-smoke
           RHIZOME_OFFLINE: "1"
         run: |
-          $rhz = "desktop\build\server\rhz.exe"
-          & $rhz rxf validate rxf-spec\examples\deep-grn-atlas.yaml; if ($LASTEXITCODE) { exit 1 }
-          & $rhz ingest rxf-spec\examples\deep-grn-atlas.yaml rxf-spec\examples\light-scenic-benchmark.yaml rxf-spec\examples\light-spatial-domains.yaml; if ($LASTEXITCODE) { exit 1 }
+          $appDir = Join-Path $env:RUNNER_TEMP $env:CJK_APP
+          New-Item -ItemType Directory -Force $appDir | Out-Null
+          Copy-Item desktop\build\server -Destination $appDir -Recurse
+          $rhz = Join-Path $appDir "server\rhz.exe"
+          $env:RHIZOME_DATA_DIR = Join-Path $env:RUNNER_TEMP "smoke\$env:CJK_DATA"
+          "RHIZOME_DATA_DIR=$env:RHIZOME_DATA_DIR" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "RHZ_SMOKE=$rhz" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "backend: $rhz"; Write-Host "data: $env:RHIZOME_DATA_DIR"
+          $ex = Join-Path $env:RUNNER_TEMP "示例 论文"
+          New-Item -ItemType Directory -Force $ex | Out-Null
+          Copy-Item rxf-spec\examples\deep-grn-atlas.yaml (Join-Path $ex "深度 导出.yaml")
+          Copy-Item rxf-spec\examples\light-scenic-benchmark.yaml (Join-Path $ex "轻量 导出.yaml")
+          Copy-Item rxf-spec\examples\light-spatial-domains.yaml (Join-Path $ex "空间 转录组.yaml")
+          Set-Content -Path (Join-Path $ex "空间 转录组.pdf") -Value "%PDF synthetic"
+          & $rhz rxf validate (Join-Path $ex "深度 导出.yaml"); if ($LASTEXITCODE) { exit 1 }
+          & $rhz ingest (Join-Path $ex "深度 导出.yaml") (Join-Path $ex "轻量 导出.yaml") (Join-Path $ex "空间 转录组.yaml"); if ($LASTEXITCODE) { exit 1 }
           & $rhz --lang zh_CN search RootNet; if ($LASTEXITCODE) { exit 1 }
           & $rhz bench backend\tests\fixtures\bench-synthetic.yaml; if ($LASTEXITCODE) { exit 1 }
-          & $rhz rebuild --no-backup; if ($LASTEXITCODE) { exit 1 }
-          # read-only snapshot as used on remote machines (exercises the file:///D:/... SQLite URI)
-          & $rhz snapshot "$env:RUNNER_TEMP\snap dir\rhizome.db"; if ($LASTEXITCODE) { exit 1 }
-          & $rhz --snapshot "$env:RUNNER_TEMP\snap dir\rhizome.db" search DomainGAT; if ($LASTEXITCODE) { exit 1 }
+          & $rhz rebuild; if ($LASTEXITCODE) { exit 1 }   # with the pre-rebuild backup into the CJK dir
+          if (-not (Get-ChildItem (Join-Path $env:RHIZOME_DATA_DIR "backups") -Filter *.db)) { Write-Error "no backup written"; exit 1 }
+          # read-only snapshot as used on remote machines (file:///C:/... URI with percent-encoded CJK)
+          $snap = Join-Path $env:RUNNER_TEMP "快照 目录\rhizome.db"
+          & $rhz snapshot $snap; if ($LASTEXITCODE) { exit 1 }
+          & $rhz --snapshot $snap search DomainGAT; if ($LASTEXITCODE) { exit 1 }
+          & $rhz diag -o (Join-Path $env:RUNNER_TEMP "诊断 包.zip"); if ($LASTEXITCODE) { exit 1 }
           # server mode as the desktop shell starts it: injected token, explicit port
           $env:RHIZOME_API_TOKEN = "smoke"
           $p = Start-Process -FilePath $rhz -ArgumentList "serve","--host","127.0.0.1","--port","51999" -PassThru -WindowStyle Hidden
@@ -77,22 +97,25 @@ jobs:
           if (-not $ok) { Stop-Process $p -Force; Write-Error "server did not start"; exit 1 }
           $ui = Invoke-WebRequest http://127.0.0.1:51999/ -UseBasicParsing
           if ($ui.StatusCode -ne 200) { exit 1 }
-          $r = Invoke-RestMethod -Headers @{ Authorization = "Bearer smoke" } "http://127.0.0.1:51999/search?q=RootNet"
+          $auth = @{ Authorization = "Bearer smoke" }
+          $r = Invoke-RestMethod -Headers $auth "http://127.0.0.1:51999/search?q=RootNet"
           if ($r.results[0].name -ne "RootNet") { Write-Error "search via API failed"; exit 1 }
-          $sys = Invoke-RestMethod -Headers @{ Authorization = "Bearer smoke" } http://127.0.0.1:51999/system
-          if (-not $sys.frozen) { exit 1 }
+          $sys = Invoke-RestMethod -Headers $auth http://127.0.0.1:51999/system
+          if (-not $sys.frozen -or $sys.data_dir -ne $env:RHIZOME_DATA_DIR) { Write-Error "unexpected /system: $($sys | ConvertTo-Json)"; exit 1 }
+          # the paper card of the CJK-named export with its PDF
+          $w = Invoke-RestMethod -Headers $auth "http://127.0.0.1:51999/entity/by-key?key=work:doi:10.5555/rhz.example.0003"
+          if (-not $w.exports[0].has_pdf) { Write-Error "PDF next to the CJK-named export was not attached"; exit 1 }
           Stop-Process $p -Force
 
       - name: Smoke-test MCP over stdio
         env:
-          RHIZOME_DATA_DIR: ${{ runner.temp }}\rhz-smoke
           RHIZOME_OFFLINE: "1"
         run: |
           pip install "mcp>=1.2,<2"
           Get-Process rhz -ErrorAction SilentlyContinue | Format-Table Id, StartTime, Path
           Get-Content "$env:RHIZOME_DATA_DIR\server.json" -ErrorAction SilentlyContinue
           $env:RHIZOME_HANG_DUMP = "40"
-          python desktop\ci\mcp_smoke.py desktop\build\server\rhz.exe
+          python desktop\ci\mcp_smoke.py $env:RHZ_SMOKE
 
       - name: Build installers (Tauri)
         working-directory: desktop
@@ -111,40 +134,71 @@ jobs:
           Copy-Item $std.FullName (Join-Path ..\dist $offlineName)
           Get-ChildItem ..\dist | Format-Table Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
 
-      - name: Install, launch and uninstall (end-to-end)
+      - name: Install, launch and uninstall (end-to-end, Chinese paths)
         run: |
+          Remove-Item Env:RHIZOME_DATA_DIR -ErrorAction SilentlyContinue   # the installed app resolves it itself
+          $installDir = Join-Path "C:\" $env:CJK_APP
+          $dataDir = Join-Path "C:\" $env:CJK_DATA
+          # library location chosen earlier in Settings -> pointer file in %APPDATA%\Rhizome
+          New-Item -ItemType Directory -Force "$env:APPDATA\Rhizome" | Out-Null
+          @{ data_dir = $dataDir } | ConvertTo-Json | Out-File "$env:APPDATA\Rhizome\location.json" -Encoding utf8NoBOM
+          # a paper waiting in the inbox under a Chinese file name
+          New-Item -ItemType Directory -Force (Join-Path $dataDir "inbox") | Out-Null
+          Copy-Item rxf-spec\examples\light-spatial-domains.yaml (Join-Path $dataDir "inbox\空间 结构域.yaml")
+
           $setup = Get-ChildItem dist\*_x64-setup.exe | Select-Object -First 1
-          Start-Process $setup.FullName -ArgumentList "/S" -Wait
-          $exe = Get-ChildItem "$env:LOCALAPPDATA\Rhizome\Rhizome.exe", "$env:LOCALAPPDATA\Programs\Rhizome\Rhizome.exe", "$env:ProgramFiles\Rhizome\Rhizome.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $exe) { Write-Error "Rhizome.exe not found after install"; exit 1 }
-          $dir = $exe.DirectoryName
-          Write-Host "installed to $dir"
+          # NSIS: /D= must come last and is not quoted, even with spaces
+          Start-Process $setup.FullName -ArgumentList "/S", "/D=$installDir" -Wait
+          $exe = Join-Path $installDir "Rhizome.exe"
+          if (-not (Test-Path $exe)) { Write-Error "Rhizome.exe not found in $installDir"; Get-ChildItem C:\ ; exit 1 }
+          Write-Host "installed to $installDir"
           foreach ($f in "server\rhz.exe", "server\_internal\rhizome\web\index.html", "rhz.cmd") {
-            if (-not (Test-Path (Join-Path $dir $f))) { Write-Error "missing $f"; exit 1 }
+            if (-not (Test-Path (Join-Path $installDir $f))) { Write-Error "missing $f"; exit 1 }
           }
-          & (Join-Path $dir "rhz.cmd") --help | Out-Null; if ($LASTEXITCODE) { exit 1 }
-          $marker = "$env:APPDATA\Rhizome\server.json"
+          & (Join-Path $installDir "rhz.cmd") rxf validate rxf-spec\examples\deep-grn-atlas.yaml; if ($LASTEXITCODE) { Write-Error "rhz.cmd failed from a Chinese install dir"; exit 1 }
+
+          $marker = Join-Path $dataDir "server.json"
           Remove-Item $marker -ErrorAction SilentlyContinue
-          $app = Start-Process $exe.FullName -PassThru
+          $app = Start-Process $exe -PassThru
           $url = $null
           for ($i = 0; $i -lt 180 -and -not $url; $i++) {
             Start-Sleep -Milliseconds 500
-            if (Test-Path $marker) { $url = (Get-Content $marker | ConvertFrom-Json).url }
+            if (Test-Path $marker) { $url = (Get-Content $marker -Encoding utf8 | ConvertFrom-Json).url }
           }
           if (-not $url) { Write-Error "backend did not start"; Get-ChildItem "$env:APPDATA\dev.rhizome.desktop\logs" -ErrorAction SilentlyContinue | Get-Content; exit 1 }
           $h = Invoke-RestMethod "$url/health"
           Write-Host "backend up at $url, version $($h.version)"
-          if (-not (Get-Process rhz -ErrorAction SilentlyContinue)) { Write-Error "rhz.exe not running"; exit 1 }
+          $auth = @{ Authorization = "Bearer " + (Get-Content (Join-Path $dataDir "token") -Encoding utf8).Trim() }
+          $sys = Invoke-RestMethod -Headers $auth "$url/system"
+          if ($sys.data_dir -ne $dataDir) { Write-Error "data dir is $($sys.data_dir), expected $dataDir"; exit 1 }
+          if (-not $sys.app_dir.StartsWith($installDir)) { Write-Error "app dir is $($sys.app_dir)"; exit 1 }
+          # the inbox watcher picks up the Chinese-named file
+          $done = Join-Path $dataDir "inbox\done\空间 结构域.yaml"
+          for ($i = 0; $i -lt 60 -and -not (Test-Path $done); $i++) { Start-Sleep -Milliseconds 500 }
+          if (-not (Test-Path $done)) { Write-Error "inbox file not ingested"; Get-ChildItem -Recurse (Join-Path $dataDir "inbox"); exit 1 }
+          $r = Invoke-RestMethod -Headers $auth "$url/search?q=DomainGAT"
+          if ($r.results[0].name -ne "DomainGAT") { Write-Error "search after inbox ingest failed"; exit 1 }
+          # one-click Claude Desktop setup writes the Chinese install path into the config
+          $c = Invoke-RestMethod -Method Post -Headers $auth "$url/system/claude-desktop"
+          $cfg = Get-Content $c.written[0] -Raw -Encoding utf8 | ConvertFrom-Json
+          $cmd = $cfg.mcpServers.rhizome.command
+          if ($cmd -ne (Join-Path $installDir "server\rhz.exe")) { Write-Error "Claude config command is $cmd"; exit 1 }
+          # ...and that command really works as an MCP server
+          $env:RHIZOME_DATA_DIR = $dataDir
+          python desktop\ci\mcp_smoke.py $cmd
+          if ($LASTEXITCODE) { exit 1 }
+          Remove-Item Env:RHIZOME_DATA_DIR
+
           Stop-Process $app.Id -Force       # simulate a crash: the backend must notice and exit
           $gone = $false
           for ($i = 0; $i -lt 40 -and -not $gone; $i++) { Start-Sleep -Milliseconds 500; $gone = -not (Get-Process rhz -ErrorAction SilentlyContinue) }
           if (-not $gone) { Write-Error "backend kept running after the app was killed"; exit 1 }
-          $un = Get-ChildItem $dir -Filter "uninstall*.exe" | Select-Object -First 1
+          $un = Get-ChildItem $installDir -Filter "uninstall*.exe" | Select-Object -First 1
           Start-Process $un.FullName -ArgumentList "/S" -Wait
           Start-Sleep -Seconds 3
-          if (Test-Path $exe.FullName) { Write-Error "uninstall left Rhizome.exe behind"; exit 1 }
-          if (-not (Test-Path "$env:APPDATA\Rhizome\rhizome.db")) { Write-Error "uninstall removed the library"; exit 1 }
-          Write-Host "install / launch / crash-recovery / uninstall OK; library kept"
+          if (Test-Path $exe) { Write-Error "uninstall left Rhizome.exe behind"; exit 1 }
+          if (-not (Test-Path (Join-Path $dataDir "rhizome.db"))) { Write-Error "uninstall removed the library"; exit 1 }
+          Write-Host "Chinese paths: install / launch / inbox / Claude Desktop / crash-recovery / uninstall OK; library kept"
 
       - uses: actions/upload-artifact@v4
         with:

@@ -284,7 +284,7 @@ def connect(settings: Settings | None = None, snapshot: Path | None = None, pref
                 try:
                     r = httpx.get(base + "/health", timeout=2.0)
                     if r.status_code == 200 and not r.json().get("read_only"):
-                        return HttpClient(base, tp.read_text("utf-8").strip())
+                        return HttpClient(base, tp.read_text("utf-8-sig").strip())
                 except httpx.HTTPError:
                     continue
     return LocalClient(st)

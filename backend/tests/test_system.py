@@ -191,3 +191,78 @@ def test_copy_sqlite_closes_handles(tmp_path):
         copy_sqlite(src, tmp_path / "out" / "b.db")
         gc.collect()
     assert (tmp_path / "out" / "b.db").exists() and not (tmp_path / "out" / "b.db.tmp").exists()
+
+
+CJK_DIR = "研究 资料/Rhizome 库"  # CJK + spaces, as in "D:\研究 资料\Rhizome 库"
+
+
+def test_cjk_paths_end_to_end(tmp_path, monkeypatch):
+    """Library, raw store, inbox, backups, snapshot and read-only mode under a Chinese path."""
+    from rhizome.config import Settings, set_settings
+    from rhizome.db.session import backup_database, dispose_all, init_db, session_scope
+    from rhizome.pipeline.ingest import ingest_file
+    from rhizome.services.snapshot import make_snapshot
+
+    from conftest import example
+
+    st = Settings(data_dir=tmp_path / CJK_DIR, offline=True)
+    set_settings(st)
+    st.ensure_dirs()
+    dispose_all()
+    init_db(st)
+    f = st.inbox / "论文 一.yaml"
+    f.write_text(example("deep-grn-atlas.yaml"), "utf-8")
+    (st.inbox / "论文 一.pdf").write_bytes(b"%PDF synthetic")
+    assert ingest_file(f).ok
+    assert (st.inbox / "done" / "论文 一.yaml").exists() and (st.inbox / "done" / "论文 一.pdf").exists()
+    assert backup_database(st, tag="测试").exists()
+    snap = make_snapshot(st, tmp_path / "快照 目录" / "rhizome.db")
+    ro = Settings(data_dir=snap.parent, database_url=f"sqlite:///{snap.as_posix()}", offline=True)
+    set_settings(ro)
+    dispose_all()
+    with session_scope(read_only=True) as s:
+        from rhizome.services.search import search
+
+        assert search(s, "RootNet")
+    dispose_all()
+
+
+def test_move_library_and_claude_config_with_cjk_paths(home, settings, library, session, monkeypatch):
+    from rhizome import config, system
+
+    session.commit()
+    target = home / "我的 资料库" / "Rhizome"
+    assert system.move_data_dir(str(target))["copied"]
+    assert config.default_data_dir() == target.resolve()
+    pointer = json.loads((config.platform_data_dir() / config.POINTER_FILE).read_text("utf-8"))
+    assert pointer["data_dir"] == str(target.resolve())
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", "C:\\软件 工具\\Rhizome\\server\\rhz.exe")
+    out = system.install_claude_desktop()
+    written = json.loads(open(out["written"][0], encoding="utf-8").read())
+    assert written["mcpServers"]["rhizome"]["command"] == "C:\\软件 工具\\Rhizome\\server\\rhz.exe"
+
+
+def test_files_saved_with_a_bom_are_read(home, settings, monkeypatch):
+    """Windows Notepad (older versions) saves UTF-8 with a BOM; hand-edited files must still work."""
+    from rhizome import config, system
+
+    base = config.platform_data_dir()
+    base.mkdir(parents=True, exist_ok=True)
+    target = home / "资料 库"
+    (base / config.POINTER_FILE).write_text(json.dumps({"data_dir": str(target)}, ensure_ascii=False),
+                                             encoding="utf-8-sig")
+    assert config.default_data_dir() == target
+    (target).mkdir()
+    (target / "settings.json").write_text(json.dumps({"language": "zh_CN"}), encoding="utf-8-sig")
+    assert config.load_settings(target).language == "zh_CN"
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    cfg = home / "Roaming" / "Claude" / "claude_desktop_config.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(json.dumps({"mcpServers": {"其他": {"command": "x"}}}, ensure_ascii=False), encoding="utf-8-sig")
+    system.install_claude_desktop()
+    data = json.loads(cfg.read_text("utf-8"))
+    assert "其他" in data["mcpServers"] and "rhizome" in data["mcpServers"]

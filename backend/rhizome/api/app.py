@@ -42,7 +42,7 @@ def get_or_create_token(settings: Settings) -> str:
     p = token_path(settings)
     env = os.environ.get("RHIZOME_API_TOKEN")
     if not env and p.exists():
-        return p.read_text("utf-8").strip()
+        return p.read_text("utf-8-sig").strip()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     tok = env or secrets.token_urlsafe(32)
     p.write_text(tok, "utf-8")

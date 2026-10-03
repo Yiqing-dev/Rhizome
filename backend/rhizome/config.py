@@ -62,7 +62,7 @@ def default_data_dir() -> Path:
     pointer = platform_data_dir() / POINTER_FILE
     if pointer.exists():
         try:
-            target = json.loads(pointer.read_text("utf-8")).get("data_dir")
+            target = json.loads(pointer.read_text("utf-8-sig")).get("data_dir")
             if target:
                 return Path(target)
         except (OSError, ValueError):
@@ -191,7 +191,7 @@ def load_settings(data_dir: Path | None = None) -> Settings:
     file_values: dict[str, Any] = {}
     p = _settings_path(data_dir)
     if p.exists():
-        file_values = json.loads(p.read_text(encoding="utf-8"))
+        file_values = json.loads(p.read_text(encoding="utf-8-sig"))
     file_values["data_dir"] = data_dir
     return Settings(**file_values)
 
