@@ -114,3 +114,17 @@ def test_rebuild_is_deterministic(library, session):
     rebuild(session, backup=False)
     after = sorted(session.execute(select(Entity.key)).scalars())
     assert before == after
+
+
+def test_vector_index_follows_renames_in_process(library, session):
+    """A renamed/edited entity must be found by its new text without waiting for a cache miss."""
+    from rhizome.services.search import Filters, search
+
+    from rhizome.pipeline.graph import embed_texts, knn
+
+    g = Graph(session)
+    search(session, "warm up the vector index", Filters(types=("topic",)), rerank=False)
+    topic = g.by_key("topic:benchmarking")
+    decisions.record(g, "rename", {"key": topic.key, "name": "zebrafish regeneration atlases"})
+    qvec = embed_texts(session, ["zebrafish regeneration atlases"])[0]
+    assert knn(session, qvec, types=["topic"], k=1)[0][0] == topic.id  # vector path alone, no FTS

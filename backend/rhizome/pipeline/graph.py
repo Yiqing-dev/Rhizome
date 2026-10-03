@@ -56,23 +56,29 @@ def entity_text(e: Entity) -> str:
 # ---- in-process vector index --------------------------------------------------------
 
 class _VectorCache:
-    """Brute-force cosine index per (database, model), invalidated by a cheap DB signature.
+    """Brute-force cosine index per (database, model).
 
-    At 10^5 assets x 1024 dims this is ~400 MB float32 and a few ms per query on CPU; the
-    sqlite-vec / pgvector indexes can replace it behind the same interface.
+    Loaded lazily from the ``embedding`` table and kept in step with in-process writes through
+    ``upsert`` / ``remove``; a cheap DB signature (row count, id sum) catches rows added by another
+    process (e.g. the CLI while the app is running). At 10^5 assets x 1024 dims this is ~400 MB
+    float32 and a few ms per query on CPU; sqlite-vec / pgvector can replace it behind ``knn``.
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._data: dict[tuple[str, str], tuple[tuple[int, int], np.ndarray, np.ndarray, np.ndarray]] = {}
 
+    @staticmethod
+    def _key(s: Session, model: str) -> tuple[str, str]:
+        return str(s.get_bind().url), model
+
     def get(self, s: Session, model: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        url = str(s.get_bind().url)
+        key = self._key(s, model)
         sig = tuple(s.execute(
             select(func.count(), func.coalesce(func.sum(Embedding.entity_id), 0)).where(Embedding.model == model)
         ).one())
         with self._lock:
-            hit = self._data.get((url, model))
+            hit = self._data.get(key)
             if hit and hit[0] == sig:
                 return hit[1], hit[2], hit[3]
         rows = s.execute(
@@ -84,8 +90,39 @@ class _VectorCache:
         mat = (np.stack([np.frombuffer(r[2], dtype=np.float32) for r in rows])
                if rows else np.zeros((0, 1), dtype=np.float32))
         with self._lock:
-            self._data[(url, model)] = (sig, ids, types, mat)
+            self._data[key] = (sig, ids, types, mat)
         return ids, types, mat
+
+    def upsert(self, s: Session, model: str, entity_id: int, etype: str, vec: np.ndarray) -> None:
+        """Keep a loaded index current after an embedding is written or replaced (rename, edit)."""
+        key = self._key(s, model)
+        with self._lock:
+            hit = self._data.get(key)
+            if hit is None:
+                return
+            _, ids, types, mat = hit
+            where = np.nonzero(ids == entity_id)[0]
+            if len(where):
+                mat[where[0]] = vec
+                types[where[0]] = etype
+            else:
+                if mat.shape[1] != vec.shape[0]:
+                    mat = np.zeros((0, vec.shape[0]), dtype=np.float32)
+                ids = np.append(ids, entity_id)
+                types = np.append(types, etype)
+                mat = np.vstack([mat, vec[None, :].astype(np.float32)])
+            self._data[key] = ((int(len(ids)), int(ids.sum())), ids, types, mat)
+
+    def remove(self, s: Session, model: str, entity_id: int) -> None:
+        key = self._key(s, model)
+        with self._lock:
+            hit = self._data.get(key)
+            if hit is None:
+                return
+            _, ids, types, mat = hit
+            keep = ids != entity_id
+            ids, types, mat = ids[keep], types[keep], mat[keep]
+            self._data[key] = ((int(len(ids)), int(ids.sum())), ids, types, mat)
 
     def clear(self) -> None:
         with self._lock:
@@ -236,6 +273,7 @@ class Graph:
             self.s.merge(Embedding(entity_id=e.id, model=model, dim=int(vec.shape[0]),
                                    vec=vec.astype(np.float32).tobytes()))
             self.s.flush()
+            VECTORS.upsert(self.s, model, e.id, e.type, vec)
 
     def delete_entity(self, e: Entity) -> None:
         if self._fts:
@@ -246,6 +284,7 @@ class Graph:
         self.s.execute(delete(Work).where(Work.entity_id == e.id))
         self.s.delete(e)
         self.s.flush()
+        VECTORS.remove(self.s, get_embedder().name, e.id)
 
     # -- edges --
     def edge(self, src: Entity, dst: Entity, etype: str) -> Edge | None:
