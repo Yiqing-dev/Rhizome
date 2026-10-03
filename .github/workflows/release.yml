@@ -89,6 +89,9 @@ jobs:
           RHIZOME_OFFLINE: "1"
         run: |
           pip install "mcp>=1.2,<2"
+          Get-Process rhz -ErrorAction SilentlyContinue | Format-Table Id, StartTime, Path
+          Get-Content "$env:RHIZOME_DATA_DIR\server.json" -ErrorAction SilentlyContinue
+          $env:RHIZOME_HANG_DUMP = "40"
           python desktop\ci\mcp_smoke.py desktop\build\server\rhz.exe
 
       - name: Build installers (Tauri)
