@@ -1,0 +1,50 @@
+name: Release (Windows MSI)
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  msi:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build UI into the Python package
+        working-directory: frontend
+        run: npm ci && npm run build
+      - name: Build backend sidecar
+        run: |
+          pip install ./backend pyinstaller
+          cd desktop
+          pyinstaller rhizome-server.spec
+          mkdir src-tauri\binaries
+          copy dist\rhizome-server.exe src-tauri\binaries\rhizome-server-x86_64-pc-windows-msvc.exe
+      - name: Smoke-test the sidecar on a clean machine
+        shell: pwsh
+        run: |
+          $env:RHIZOME_DATA_DIR = "$env:RUNNER_TEMP\rhz"
+          $env:RHIZOME_OFFLINE = "1"
+          desktop\dist\rhizome-server.exe rxf validate rxf-spec\examples\deep-grn-atlas.yaml
+          desktop\dist\rhizome-server.exe ingest rxf-spec\examples\deep-grn-atlas.yaml
+          desktop\dist\rhizome-server.exe search RootNet
+      - name: Icons
+        working-directory: desktop
+        run: npx --yes @tauri-apps/cli@2 icon ..\docs\logo.png
+      - name: Tauri build
+        working-directory: desktop
+        run: npx --yes @tauri-apps/cli@2 build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rhizome-msi
+          path: desktop/src-tauri/target/release/bundle/msi/*.msi

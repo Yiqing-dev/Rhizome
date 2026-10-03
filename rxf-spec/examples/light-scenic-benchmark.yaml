@@ -1,0 +1,29 @@
+# SYNTHETIC EXAMPLE - fictional paper.
+rxf_version: 1
+prompt_version: light-review-v1
+depth: light
+paper:
+  doi: 10.5555/rhz.example.0002
+  title: Benchmarking gene regulatory network inference on single-cell data
+  year: 2024
+  type: [benchmark]
+  organisms: [Homo sapiens, Mus musculus]
+  modalities: [scRNA-seq]
+tldr:
+  - Compared 12 GRN inference methods on 9 single-cell datasets with ChIP-seq ground truth.
+  - Most methods barely beat random predictors; SCENIC was among the more stable.
+  - Ground-truth networks are incomplete, so precision is underestimated.
+topics:
+  - {name: gene regulatory network inference, relation: about}
+  - {name: benchmarking, relation: about}
+claims:
+  - text: Chromatin accessibility changes do not precede expression changes along developmental trajectories.
+    evidence_type: correlational
+    evidence: Supplementary Fig. 7
+    boundary: Mouse hematopoiesis only.
+assets:
+  datasets:
+    - {accession: GSE999002, database: GEO, organism: Mus musculus, tissue: bone marrow, modality: scRNA-seq, role: uses}
+  methods:
+    - {name: SCENIC, repo: https://github.com/aertslab/SCENIC, role: evaluates, io: scRNA-seq counts -> regulons}
+    - {name: GENIE3, role: evaluates, io: expression matrix -> ranked TF-target edges}

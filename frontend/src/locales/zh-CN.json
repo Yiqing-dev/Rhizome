@@ -1,0 +1,245 @@
+{
+  "app": {
+    "name": "Rhizome"
+  },
+  "nav": {
+    "home": "首页",
+    "search": "检索",
+    "map": "主题全景",
+    "review": "审核队列",
+    "cards": "复习",
+    "digest": "每周综合",
+    "settings": "设置"
+  },
+  "type": {
+    "work": "论文",
+    "dataset": "数据集",
+    "method": "方法",
+    "idea": "思路",
+    "claim": "论断",
+    "topic": "主题",
+    "organism": "物种",
+    "modality": "模态"
+  },
+  "edge": {
+    "about": "关于",
+    "applicable_to": "可用于",
+    "proposes": "提出",
+    "uses": "使用",
+    "produces": "产出",
+    "evaluates": "评测",
+    "supports": "支持",
+    "contradicts": "反驳",
+    "extends": "继承",
+    "cites": "引用",
+    "is_a": "属于",
+    "of_organism": "物种",
+    "of_modality": "模态"
+  },
+  "status": {
+    "candidate": "候选",
+    "confirmed": "已确认",
+    "rejected": "已拒绝",
+    "auto": "自动",
+    "pending": "待审",
+    "active": "正式"
+  },
+  "origin": {
+    "user": "你的观点"
+  },
+  "common": {
+    "loading": "加载中…",
+    "error": "出错了。",
+    "unauthorized": "未授权：请通过 `rhz serve` 打印的链接或桌面应用打开 Rhizome。",
+    "not_found": "未找到。",
+    "no_results": "没有结果。"
+  },
+  "search": {
+    "placeholder": "检索数据集、方法、思路、论断…",
+    "go": "检索",
+    "organism": "物种",
+    "modality": "模态",
+    "year_min": "起始年份",
+    "year_max": "截止年份",
+    "any_role": "任意角色"
+  },
+  "home": {
+    "ingested": "已摄入 {{work}}",
+    "queue": "条待审",
+    "cards_due": "张待复习",
+    "ingest_title": "存入论文",
+    "ingest_hint": "拖入从 Claude 或 ChatGPT 导出的 RXF 文件，或直接保存到收件箱目录。",
+    "drop": "把 RXF 文件拖到这里，或点击选择",
+    "related": "与你读过的这些论文相关：",
+    "recall_title": "召回",
+    "recall_placeholder": "粘贴分析方案、段落或代码…",
+    "recall_go": "我读过的哪些东西用得上？"
+  },
+  "action": {
+    "confirm": "确认",
+    "reject": "拒绝"
+  },
+  "strength": {
+    "strong": "强",
+    "medium": "中",
+    "weak": "弱"
+  },
+  "paper": {
+    "tier": "档位 T{{tier}}",
+    "suspect": "无法核实、未入库的 ID：{{ids}}",
+    "your_view": "你的观点",
+    "logic": "逻辑链",
+    "logic_jump": "逻辑跳跃",
+    "issues": "问题",
+    "raw": "查看导出文档原文"
+  },
+  "depth": {
+    "light": "轻量版导出",
+    "deep": "深度版导出"
+  },
+  "evidence": {
+    "causal": "因果",
+    "correlational": "相关",
+    "speculative": "推测"
+  },
+  "severity": {
+    "minor": "次要",
+    "major": "重要",
+    "critical": "严重"
+  },
+  "asset": {
+    "external_id": "外部 ID",
+    "transfer": "迁移",
+    "aliases": "别名"
+  },
+  "transfer": {
+    "cross-species": "跨物种",
+    "cross-modality": "跨模态",
+    "cross-problem": "跨问题"
+  },
+  "graph": {
+    "local": "局部图",
+    "hops": "{{n}} 跳",
+    "truncated": "仅显示 {{n}} 个节点中的一部分。"
+  },
+  "entity": {
+    "related": "相关"
+  },
+  "topic": {
+    "confirm": "确认为正式主题",
+    "contested": "有争议",
+    "n_works": "{{n}} 篇论文"
+  },
+  "column": {
+    "dataset": "数据",
+    "method": "方法",
+    "idea": "思路",
+    "claim": "论断",
+    "work": "论文"
+  },
+  "map": {
+    "title": "主题全景",
+    "show_candidates": "显示候选主题",
+    "empty": "还没有主题。先摄入几份 RXF 导出文档。",
+    "new_topic": "新建主题",
+    "new_topic_hint": "新主题会回溯标注全库；不确定的匹配进入审核队列。",
+    "name": "名称（简短的英文名词短语）",
+    "definition": "一句话定义",
+    "examples": "正例，每行一个",
+    "counter": "反例，每行一个",
+    "parent": "父主题（可选）",
+    "create": "新建并回溯标注",
+    "created": "主题已创建，回溯标注在后台运行。"
+  },
+  "review": {
+    "title": "审核队列",
+    "all": "全部类型",
+    "total": "{{n}} 条待审",
+    "keys": "键盘：j / k 上下移动，1–5 选择操作，s 跳过。",
+    "empty": "没有待审项。",
+    "new_claim": "新论断",
+    "synthesis_note": "这是什么联系，可能对哪个问题有用？（会存为一个思路节点）",
+    "kind": {
+      "merge": "重复？",
+      "topic_relation": "主题关系",
+      "contradiction": "矛盾",
+      "retro_tag": "回溯标注",
+      "synthesis": "综合"
+    },
+    "question": {
+      "merge": "“{{a_name}}”和“{{b_name}}”是同一个概念吗？",
+      "topic_relation": "“{{a_name}}”和“{{b_name}}”是什么关系？",
+      "contradiction": "新论文是否反驳了“{{claim_text}}”？",
+      "retro_tag": "“{{name}}”和主题“{{topic_name}}”是什么关系？",
+      "synthesis": "“{{a_name}}”和“{{b_name}}”之间的联系有用吗？"
+    },
+    "action": {
+      "merge": "合并",
+      "distinct": "不同",
+      "skip": "跳过",
+      "a_is_a_b": "A 属于 B",
+      "b_is_a_a": "B 属于 A",
+      "accept": "是，反驳",
+      "reject": "否",
+      "about": "关于",
+      "applicable_to": "可用于",
+      "none": "无关",
+      "useful": "有用",
+      "useless": "无用"
+    }
+  },
+  "cards": {
+    "title": "复习",
+    "done": "今天的复习完成了。",
+    "new": "新卡",
+    "show": "显示答案",
+    "rating": {
+      "1": "重来",
+      "2": "困难",
+      "3": "良好",
+      "4": "简单"
+    }
+  },
+  "digest": {
+    "title": "每周综合",
+    "hint": "向量相近、图上没有路径、分属不同社区的资产对。可以让 Claude 通过 rhz_digest 批量写说明。",
+    "run_now": "立即运行批任务",
+    "pairs": "未连接的资产对",
+    "no_pairs": "本周没有候选。",
+    "contested": "争议清单",
+    "no_contested": "没有新的矛盾。"
+  },
+  "settings": {
+    "title": "设置",
+    "saved": "已保存。",
+    "language": "界面语言",
+    "lang_en": "English",
+    "lang_zh": "中文",
+    "language_hint": "论文内容和你的观点保持原文，不做翻译。",
+    "paths": "存储",
+    "data_dir": "数据目录",
+    "inbox": "收件箱",
+    "offline": "离线（不调用 OpenAlex / NCBI / GitHub）",
+    "models": "本地模型",
+    "models_hint": "模型在首次使用时下载，每个都可以单独关闭。切换后需要重新校准阈值。",
+    "embedder": "向量模型",
+    "reranker": "重排模型",
+    "nli": "论断关系（NLI）",
+    "inference": "生成式判定",
+    "inference_queue": "审核队列 / 通过 MCP 交给 Claude",
+    "inference_local": "本地小模型",
+    "builtin": "内置（轻量）",
+    "off": "关闭",
+    "rebuild_hint": "切换模型后，用已存的导出文档重算整张图。",
+    "rebuild": "立即重算",
+    "review": "复习量",
+    "daily_new": "每天新卡上限",
+    "daily_max": "每天复习上限",
+    "remotes": "远程快照",
+    "remotes_hint": "`rhz sync <name>` 的同步目标：name、host、path，可选 control_path 以复用已认证的 SSH 连接。",
+    "save": "保存",
+    "vocab": "词表同步",
+    "vocab_hint": "主题变化后，把 rhizome-vocab.yaml 放进 Claude / ChatGPT 的 Project 知识。",
+    "vocab_download": "下载 rhizome-vocab.yaml"
+  }
+}

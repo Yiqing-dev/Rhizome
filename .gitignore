@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+# Node
+node_modules/
+frontend/dist/
+# Tauri
+desktop/src-tauri/target/
+desktop/src-tauri/binaries/
+# Personal data must never enter the repository
+*.db
+*.db-wal
+*.db-shm
+rhizome-data/
+inbox/
+*.rxf.yaml
+!rxf-spec/examples/**
+!backend/tests/fixtures/**
+.env
+backend/rhizome/web/
+*.tsbuildinfo

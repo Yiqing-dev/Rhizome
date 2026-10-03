@@ -1,0 +1,339 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Low-level graph store operations on L2/L3 used by materialisation, decisions and rebuilds."""
+
+from __future__ import annotations
+
+import logging
+import threading
+from typing import Any, Iterable
+
+import numpy as np
+from sqlalchemy import delete, func, select, text, update
+from sqlalchemy.orm import Session
+
+from ..db.models import (
+    AccessLog,
+    Edge,
+    Embedding,
+    Entity,
+    EntityAlias,
+    HumanDecision,
+    ReviewCard,
+    ReviewItem,
+    VectorCache,
+    Work,
+)
+from ..db.session import has_fts
+from ..ml import get_embedder
+from ..text import lang_of, norm, sha256
+
+log = logging.getLogger(__name__)
+
+STATUS_RANK = {"auto": 0, "confirmed": 1, "rejected": 2}
+
+
+# ---- embedding text ---------------------------------------------------------------
+
+def entity_text(e: Entity) -> str:
+    a = e.attrs or {}
+    parts: list[str] = [e.canonical_name]
+    if e.type == "work":
+        parts += a.get("tldr", []) + ([a["abstract"][:1500]] if a.get("abstract") else [])
+    elif e.type == "dataset":
+        parts += [str(a[k]) for k in ("accession", "name", "organism", "tissue", "modality", "scale") if a.get(k)]
+    elif e.type == "method":
+        parts += [str(a[k]) for k in ("io", "modality") if a.get(k)]
+    elif e.type == "idea":
+        t = a.get("transfer") or {}
+        parts += [str(t[k]) for k in ("type", "to", "barrier") if t.get(k)]
+    elif e.type == "claim":
+        parts += [a["boundary"]] if a.get("boundary") else []
+    elif e.type == "topic":
+        parts += [a.get("definition") or ""] + list(a.get("examples", []))
+    return "\n".join(p for p in parts if p)
+
+
+# ---- in-process vector index --------------------------------------------------------
+
+class _VectorCache:
+    """Brute-force cosine index per (database, model), invalidated by a cheap DB signature.
+
+    At 10^5 assets x 1024 dims this is ~400 MB float32 and a few ms per query on CPU; the
+    sqlite-vec / pgvector indexes can replace it behind the same interface.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._data: dict[tuple[str, str], tuple[tuple[int, int], np.ndarray, np.ndarray, np.ndarray]] = {}
+
+    def get(self, s: Session, model: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        url = str(s.get_bind().url)
+        sig = tuple(s.execute(
+            select(func.count(), func.coalesce(func.sum(Embedding.entity_id), 0)).where(Embedding.model == model)
+        ).one())
+        with self._lock:
+            hit = self._data.get((url, model))
+            if hit and hit[0] == sig:
+                return hit[1], hit[2], hit[3]
+        rows = s.execute(
+            select(Embedding.entity_id, Entity.type, Embedding.vec).join(Entity, Entity.id == Embedding.entity_id)
+            .where(Embedding.model == model)
+        ).all()
+        ids = np.array([r[0] for r in rows], dtype=np.int64)
+        types = np.array([r[1] for r in rows], dtype=object)
+        mat = (np.stack([np.frombuffer(r[2], dtype=np.float32) for r in rows])
+               if rows else np.zeros((0, 1), dtype=np.float32))
+        with self._lock:
+            self._data[(url, model)] = (sig, ids, types, mat)
+        return ids, types, mat
+
+    def clear(self) -> None:
+        with self._lock:
+            self._data.clear()
+
+
+VECTORS = _VectorCache()
+
+
+def knn(s: Session, query_vec: np.ndarray, types: Iterable[str] | None = None, k: int = 10,
+        exclude: set[int] | None = None) -> list[tuple[int, float]]:
+    model = get_embedder().name
+    ids, etypes, mat = VECTORS.get(s, model)
+    if len(ids) == 0 or mat.shape[1] != query_vec.shape[0]:
+        return []
+    sims = mat @ query_vec
+    mask = np.ones(len(ids), dtype=bool)
+    if types is not None:
+        mask &= np.isin(etypes, list(types))
+    if exclude:
+        mask &= ~np.isin(ids, list(exclude))
+    sims = np.where(mask, sims, -np.inf)
+    k = min(k, int(mask.sum()))
+    if k <= 0:
+        return []
+    top = np.argpartition(-sims, k - 1)[:k]
+    top = top[np.argsort(-sims[top])]
+    return [(int(ids[i]), float(sims[i])) for i in top]
+
+
+def embed_texts(s: Session, texts: list[str]) -> np.ndarray:
+    """Embed with the configured model, using the text-hash cache."""
+    emb = get_embedder()
+    shas = [sha256(t) for t in texts]
+    cached = {
+        r.text_sha: np.frombuffer(r.vec, dtype=np.float32)
+        for r in s.execute(select(VectorCache).where(VectorCache.model == emb.name,
+                                                     VectorCache.text_sha.in_(set(shas)))).scalars()
+    } if shas else {}
+    missing = [i for i, h in enumerate(shas) if h not in cached]
+    if missing:
+        new = emb.embed([texts[i] for i in missing])
+        for j, i in enumerate(missing):
+            if shas[i] not in cached:
+                cached[shas[i]] = new[j]
+                if s.info.get("read_only"):
+                    continue
+                s.merge(VectorCache(text_sha=shas[i], model=emb.name, vec=new[j].astype(np.float32).tobytes()))
+    return np.stack([cached[h] for h in shas]) if shas else np.zeros((0, emb.dim), dtype=np.float32)
+
+
+# ---- graph -----------------------------------------------------------------------------
+
+class Graph:
+    def __init__(self, session: Session):
+        self.s = session
+        self._fts = has_fts(session)
+        self._redirects: dict[str, str] | None = None
+
+    # -- keys / redirects (from human merge decisions) --
+    def redirects(self) -> dict[str, str]:
+        if self._redirects is None:
+            self._redirects = {}
+            for d in self.s.execute(select(HumanDecision).where(HumanDecision.op == "merge",
+                                                                HumanDecision.revoked_at.is_(None))
+                                    .order_by(HumanDecision.id)).scalars():
+                self._redirects[d.payload["from"]] = d.payload["into"]
+        return self._redirects
+
+    def resolve_key(self, key: str) -> str:
+        seen = set()
+        r = self.redirects()
+        while key in r and key not in seen:
+            seen.add(key)
+            key = r[key]
+        return key
+
+    def invalidate_redirects(self) -> None:
+        self._redirects = None
+
+    # -- entities --
+    def by_key(self, key: str) -> Entity | None:
+        return self.s.execute(select(Entity).where(Entity.key == self.resolve_key(key))).scalar_one_or_none()
+
+    def by_id(self, entity_id: int) -> Entity | None:
+        return self.s.get(Entity, entity_id)
+
+    def by_external_id(self, etype: str, external_id: str) -> Entity | None:
+        return self.s.execute(select(Entity).where(Entity.type == etype, Entity.external_id == external_id)
+                              ).scalar_one_or_none()
+
+    def anchor(self, e: Entity, external_id: str) -> None:
+        """Upgrade a free concept to an anchored one once an external ID becomes known."""
+        if e.external_id is None and self.by_external_id(e.type, external_id) is None:
+            e.external_id = external_id
+
+    def by_alias(self, etype: str, name: str) -> Entity | None:
+        n = norm(name)
+        if not n:
+            return None
+        return self.s.execute(
+            select(Entity).join(EntityAlias, EntityAlias.entity_id == Entity.id)
+            .where(Entity.type == etype, EntityAlias.norm == n).limit(1)
+        ).scalar_one_or_none()
+
+    def create(self, etype: str, key: str, name: str, *, external_id: str | None = None,
+               status: str = "active", attrs: dict[str, Any] | None = None,
+               aliases: Iterable[str] = (), embed: bool = True) -> Entity:
+        e = Entity(type=etype, key=key, canonical_name=name, external_id=external_id, status=status,
+                   attrs=attrs or {})
+        self.s.add(e)
+        self.s.flush()
+        for a in [name, *aliases]:
+            self.add_alias(e, a)
+        if etype == "work":
+            self.s.add(Work(entity_id=e.id, dois=[], tier=0))
+        self.reindex(e, embed=embed)
+        return e
+
+    def add_alias(self, e: Entity, alias: str | None, source: str = "extraction", lang: str | None = None) -> None:
+        if not alias:
+            return
+        n = norm(alias)
+        if not n or len(n) > 500:
+            return
+        exists = self.s.execute(select(EntityAlias.id).where(EntityAlias.entity_id == e.id,
+                                                             EntityAlias.norm == n)).first()
+        if not exists:
+            self.s.add(EntityAlias(entity_id=e.id, alias=alias.strip(), norm=n, lang=lang or lang_of(alias),
+                                   source=source))
+            self.s.flush()
+
+    def update_attrs(self, e: Entity, **attrs: Any) -> None:
+        merged = dict(e.attrs or {})
+        merged.update({k: v for k, v in attrs.items() if v not in (None, [], "")})
+        e.attrs = merged
+
+    def reindex(self, e: Entity, embed: bool = True) -> None:
+        """Refresh full-text row and embedding of one entity."""
+        if self._fts:
+            aliases = self.s.execute(select(EntityAlias.alias).where(EntityAlias.entity_id == e.id)).scalars().all()
+            body = entity_text(e) + "\n" + "\n".join(aliases)
+            self.s.execute(text("delete from entity_fts where entity_id = :i"), {"i": e.id})
+            self.s.execute(text("insert into entity_fts(text, entity_id) values (:t, :i)"), {"t": body, "i": e.id})
+        if embed and e.type not in ("organism", "modality"):
+            vec = embed_texts(self.s, [entity_text(e)])[0]
+            model = get_embedder().name
+            self.s.merge(Embedding(entity_id=e.id, model=model, dim=int(vec.shape[0]),
+                                   vec=vec.astype(np.float32).tobytes()))
+            self.s.flush()
+
+    def delete_entity(self, e: Entity) -> None:
+        if self._fts:
+            self.s.execute(text("delete from entity_fts where entity_id = :i"), {"i": e.id})
+        self.s.execute(delete(Edge).where((Edge.src == e.id) | (Edge.dst == e.id)))
+        self.s.execute(delete(EntityAlias).where(EntityAlias.entity_id == e.id))
+        self.s.execute(delete(Embedding).where(Embedding.entity_id == e.id))
+        self.s.execute(delete(Work).where(Work.entity_id == e.id))
+        self.s.delete(e)
+        self.s.flush()
+
+    # -- edges --
+    def edge(self, src: Entity, dst: Entity, etype: str) -> Edge | None:
+        return self.s.execute(select(Edge).where(Edge.src == src.id, Edge.dst == dst.id, Edge.type == etype)
+                              ).scalar_one_or_none()
+
+    def upsert_edge(self, src: Entity, dst: Entity, etype: str, *, confidence: float = 1.0,
+                    extraction_id: int | None = None, evidence: str | None = None,
+                    attrs: dict[str, Any] | None = None, status: str = "auto") -> Edge | None:
+        if src.id == dst.id:
+            return None
+        ed = self.edge(src, dst, etype)
+        if ed is None:
+            ed = Edge(src=src.id, dst=dst.id, type=etype, confidence=confidence, extraction_id=extraction_id,
+                      evidence=evidence, attrs=attrs or {}, status=status)
+            self.s.add(ed)
+            self.s.flush()
+            return ed
+        ed.confidence = max(ed.confidence or 0.0, confidence)
+        if attrs:
+            merged = dict(ed.attrs or {})
+            merged.update(attrs)
+            ed.attrs = merged
+        ed.evidence = ed.evidence or evidence
+        ed.extraction_id = ed.extraction_id or extraction_id
+        if STATUS_RANK[status] > STATUS_RANK[ed.status]:
+            ed.status = status
+        return ed
+
+    # -- merge / split --
+    def merge(self, src: Entity, into: Entity) -> None:
+        if src.id == into.id:
+            return
+        for ed in self.s.execute(select(Edge).where((Edge.src == src.id) | (Edge.dst == src.id))).scalars().all():
+            new_src = into if ed.src == src.id else self.by_id(ed.src)
+            new_dst = into if ed.dst == src.id else self.by_id(ed.dst)
+            if new_src is None or new_dst is None or new_src.id == new_dst.id:
+                self.s.delete(ed)
+                continue
+            existing = self.edge(new_src, new_dst, ed.type)
+            if existing is not None:
+                if STATUS_RANK[ed.status] > STATUS_RANK[existing.status]:
+                    existing.status = ed.status
+                existing.confidence = max(existing.confidence, ed.confidence)
+                self.s.delete(ed)
+            else:
+                ed.src, ed.dst = new_src.id, new_dst.id
+        self.s.flush()
+        for al in self.s.execute(select(EntityAlias).where(EntityAlias.entity_id == src.id)).scalars().all():
+            self.add_alias(into, al.alias, source="merge", lang=al.lang)
+        if src.type == "work" and into.type == "work":
+            w_src, w_into = self.s.get(Work, src.id), self.s.get(Work, into.id)
+            if w_src and w_into:
+                w_into.dois = sorted(set(w_into.dois or []) | set(w_src.dois or []))
+                w_into.tier = max(w_into.tier, w_src.tier)
+                w_into.year = w_into.year or w_src.year
+                if not w_into.openalex_id and w_src.openalex_id:
+                    oid = w_src.openalex_id
+                    w_src.openalex_id = None
+                    self.s.flush()
+                    w_into.openalex_id = oid
+        merged_attrs = dict(src.attrs or {})
+        merged_attrs.update(into.attrs or {})
+        into.attrs = merged_attrs
+        if src.status == "active" and into.status == "candidate":
+            into.status = "active"
+        self.s.execute(update(ReviewCard).where(ReviewCard.entity_key == src.key).values(entity_key=into.key))
+        acc = self.s.get(AccessLog, src.key)
+        if acc is not None:
+            if self.s.get(AccessLog, into.key) is None:
+                self.s.add(AccessLog(entity_key=into.key, last_seen_at=acc.last_seen_at, count=acc.count))
+            self.s.delete(acc)
+        self.delete_entity(src)
+        self.reindex(into)
+
+    # -- review queue --
+    def queue(self, kind: str, payload: dict[str, Any], dedupe: str, score: float = 0.0) -> ReviewItem | None:
+        existing = self.s.execute(select(ReviewItem).where(ReviewItem.dedupe_key == dedupe)).scalar_one_or_none()
+        if existing is not None:
+            return None
+        item = ReviewItem(kind=kind, payload=payload, dedupe_key=dedupe, score=score)
+        self.s.add(item)
+        self.s.flush()
+        return item
+
+    def distinct_pairs(self) -> set[frozenset[str]]:
+        return {
+            frozenset((d.payload["a"], d.payload["b"]))
+            for d in self.s.execute(select(HumanDecision).where(HumanDecision.op == "distinct",
+                                                                HumanDecision.revoked_at.is_(None))).scalars()
+        }

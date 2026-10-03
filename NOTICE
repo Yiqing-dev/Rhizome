@@ -1,0 +1,11 @@
+Rhizome
+Copyright 2026 Yiqing Wang and the Rhizome contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Optional components downloaded at runtime are NOT distributed with Rhizome and
+are governed by their own licenses:
+  - BAAI/bge-m3                      MIT
+  - BAAI/bge-reranker-v2-m3          Apache-2.0
+  - MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7  MIT
+  - Qwen3.5-2B (GGUF)                Apache-2.0

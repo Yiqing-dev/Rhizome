@@ -1,0 +1,131 @@
+# SPDX-License-Identifier: Apache-2.0
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: zh_CN\n"
+
+msgid "rxf.yaml_error"
+msgstr "YAML 无法解析：{detail}"
+
+msgid "rxf.not_mapping"
+msgstr "文档顶层必须是 YAML 映射（键: 值）。"
+
+msgid "rxf.unknown_version"
+msgstr "rxf_version 缺失或不受支持：{version}。当前支持：1。"
+
+msgid "rxf.report_title"
+msgstr "RXF 校验失败：{file}"
+
+msgid "rxf.report_hint"
+msgstr "把这份报告贴回聊天，让 AI 修正上面列出的字段后重新导出 RXF。"
+
+msgid "card.dataset_q"
+msgstr "数据集 {accession} 是什么物种 / 模态 / 组织？"
+
+msgid "card.method_q"
+msgstr "《{title}》里哪个方法做的是：{io}？"
+
+msgid "card.user_idea_q"
+msgstr "讨论《{title}》时你提出了什么想法？"
+
+msgid "card.idea_q"
+msgstr "《{title}》里有什么可迁移的思路？"
+
+msgid "cli.ingested"
+msgstr "已摄入 {file} → {work}"
+
+msgid "cli.duplicate"
+msgstr "已摄入过：{file}"
+
+msgid "cli.failed"
+msgstr "校验失败：{file}（错误报告已写入 error/）"
+
+msgid "cli.suspect"
+msgstr "疑似编造的 ID（未入库）：{ids}"
+
+msgid "cli.related"
+msgstr "与你读过的这些论文相关："
+
+msgid "cli.no_results"
+msgstr "没有结果。"
+
+msgid "cli.serving"
+msgstr "Rhizome 已在 {url} 运行"
+
+msgid "cli.open_ui"
+msgstr "打开界面：{url}"
+
+msgid "cli.watching"
+msgstr "正在监听收件箱 {path}（Ctrl+C 停止）"
+
+msgid "cli.rebuild_done"
+msgstr "重算完成：{summary}"
+
+msgid "cli.snapshot_done"
+msgstr "快照已写入 {path}"
+
+msgid "cli.synced"
+msgstr "快照已同步到 {remote}"
+
+msgid "cli.unknown_remote"
+msgstr "设置中没有名为 {name} 的远程目标。"
+
+msgid "cli.backup_done"
+msgstr "备份已写入 {path}"
+
+msgid "cli.read_only"
+msgstr "快照模式为只读。"
+
+msgid "cli.diag_done"
+msgstr "诊断包已写入 {path}（不含论文内容）"
+
+msgid "cli.vocab_done"
+msgstr "词表已写入 {path}"
+
+msgid "cli.queue_empty"
+msgstr "审核队列为空。"
+
+msgid "cli.no_cards"
+msgstr "现在没有需要复习的卡片。"
+
+msgid "cli.card_prompt"
+msgstr "评分 1=重来 2=困难 3=良好 4=简单，s=跳过，q=退出"
+
+msgid "cli.download_hint"
+msgstr "安装可选模型支持：pip install 'rhizome[models]'"
+
+msgid "cli.job_queued"
+msgstr "任务 {id} 已排队：{kind}"
+
+msgid "cli.dataset_howto"
+msgstr "下载方式"
+
+msgid "cli.used_by"
+msgstr "关联论文"
+
+msgid "api.not_found"
+msgstr "未找到"
+
+msgid "api.unauthorized"
+msgstr "令牌缺失或无效"
+
+msgid "api.read_only"
+msgstr "当前实例为只读"
+
+msgid "dl.GEO"
+msgstr "GEO：https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc={acc}（或用 GEOquery；原始数据用 prefetch 下载 SRA）"
+
+msgid "dl.SRA"
+msgstr "SRA：prefetch {acc} && fasterq-dump {acc}（https://www.ncbi.nlm.nih.gov/sra/{acc}）"
+
+msgid "dl.ENA"
+msgstr "ENA：https://www.ebi.ac.uk/ena/browser/view/{acc}"
+
+msgid "dl.ArrayExpress"
+msgstr "ArrayExpress：https://www.ebi.ac.uk/biostudies/arrayexpress/studies/{acc}"
+
+msgid "dl.CNGB"
+msgstr "CNGB：https://db.cngb.org/search/?q={acc}"
+
+msgid "dl.other"
+msgstr "检索：{acc}"

@@ -1,0 +1,245 @@
+{
+  "app": {
+    "name": "Rhizome"
+  },
+  "nav": {
+    "home": "Home",
+    "search": "Search",
+    "map": "Topic map",
+    "review": "Review queue",
+    "cards": "Review cards",
+    "digest": "Weekly digest",
+    "settings": "Settings"
+  },
+  "type": {
+    "work": "Paper",
+    "dataset": "Dataset",
+    "method": "Method",
+    "idea": "Idea",
+    "claim": "Claim",
+    "topic": "Topic",
+    "organism": "Organism",
+    "modality": "Modality"
+  },
+  "edge": {
+    "about": "about",
+    "applicable_to": "applicable to",
+    "proposes": "proposes",
+    "uses": "uses",
+    "produces": "produces",
+    "evaluates": "evaluates",
+    "supports": "supports",
+    "contradicts": "contradicts",
+    "extends": "extends",
+    "cites": "cites",
+    "is_a": "is a",
+    "of_organism": "organism",
+    "of_modality": "modality"
+  },
+  "status": {
+    "candidate": "candidate",
+    "confirmed": "confirmed",
+    "rejected": "rejected",
+    "auto": "auto",
+    "pending": "pending review",
+    "active": "active"
+  },
+  "origin": {
+    "user": "your idea"
+  },
+  "common": {
+    "loading": "Loading…",
+    "error": "Something went wrong.",
+    "unauthorized": "Not authorised: open Rhizome from the link printed by `rhz serve` or from the desktop app.",
+    "not_found": "Not found.",
+    "no_results": "No results."
+  },
+  "search": {
+    "placeholder": "Search datasets, methods, ideas, claims…",
+    "go": "Search",
+    "organism": "Organism",
+    "modality": "Modality",
+    "year_min": "From year",
+    "year_max": "To year",
+    "any_role": "Any role"
+  },
+  "home": {
+    "ingested": "Ingested {{work}}",
+    "queue": "in review queue",
+    "cards_due": "cards due",
+    "ingest_title": "Add a paper",
+    "ingest_hint": "Drop an RXF file exported from Claude or ChatGPT, or save it into the inbox folder.",
+    "drop": "Drop RXF file here or click to choose",
+    "related": "Related papers you have read:",
+    "recall_title": "Recall",
+    "recall_placeholder": "Paste an analysis plan, a paragraph or code…",
+    "recall_go": "What have I read that helps?"
+  },
+  "action": {
+    "confirm": "confirm",
+    "reject": "reject"
+  },
+  "strength": {
+    "strong": "strong",
+    "medium": "medium",
+    "weak": "weak"
+  },
+  "paper": {
+    "tier": "tier T{{tier}}",
+    "suspect": "IDs that could not be verified and were not stored: {{ids}}",
+    "your_view": "Your view",
+    "logic": "Logic chain",
+    "logic_jump": "logical leap",
+    "issues": "Issues",
+    "raw": "Show export document"
+  },
+  "depth": {
+    "light": "Light export",
+    "deep": "Deep export"
+  },
+  "evidence": {
+    "causal": "causal",
+    "correlational": "correlational",
+    "speculative": "speculative"
+  },
+  "severity": {
+    "minor": "minor",
+    "major": "major",
+    "critical": "critical"
+  },
+  "asset": {
+    "external_id": "External ID",
+    "transfer": "Transfer",
+    "aliases": "Aliases"
+  },
+  "transfer": {
+    "cross-species": "cross-species",
+    "cross-modality": "cross-modality",
+    "cross-problem": "cross-problem"
+  },
+  "graph": {
+    "local": "Local graph",
+    "hops": "{{n}} hop(s)",
+    "truncated": "Showing part of {{n}} nodes."
+  },
+  "entity": {
+    "related": "Related"
+  },
+  "topic": {
+    "confirm": "Confirm topic",
+    "contested": "contested",
+    "n_works": "{{n}} papers"
+  },
+  "column": {
+    "dataset": "Data",
+    "method": "Methods",
+    "idea": "Ideas",
+    "claim": "Claims",
+    "work": "Papers"
+  },
+  "map": {
+    "title": "Topic map",
+    "show_candidates": "Show candidate topics",
+    "empty": "No topics yet. Ingest a few RXF exports first.",
+    "new_topic": "New topic",
+    "new_topic_hint": "The whole library is retro-tagged with the new topic; uncertain matches go to the review queue.",
+    "name": "Name (short English noun phrase)",
+    "definition": "One-sentence definition",
+    "examples": "Examples, one per line",
+    "counter": "Counter-examples, one per line",
+    "parent": "Parent topic (optional)",
+    "create": "Create and retro-tag",
+    "created": "Topic created; retro-tagging runs in the background."
+  },
+  "review": {
+    "title": "Review queue",
+    "all": "All kinds",
+    "total": "{{n}} pending",
+    "keys": "Keyboard: j / k to move, 1–5 to choose an action, s to skip.",
+    "empty": "Nothing to review.",
+    "new_claim": "New claim",
+    "synthesis_note": "What is the connection, and which problem could it help with? (becomes an Idea)",
+    "kind": {
+      "merge": "Duplicate?",
+      "topic_relation": "Topic relation",
+      "contradiction": "Contradiction",
+      "retro_tag": "Retro-tag",
+      "synthesis": "Synthesis"
+    },
+    "question": {
+      "merge": "Are “{{a_name}}” and “{{b_name}}” the same concept?",
+      "topic_relation": "How are “{{a_name}}” and “{{b_name}}” related?",
+      "contradiction": "Does the new paper contradict “{{claim_text}}”?",
+      "retro_tag": "How does “{{name}}” relate to “{{topic_name}}”?",
+      "synthesis": "Is the link between “{{a_name}}” and “{{b_name}}” useful?"
+    },
+    "action": {
+      "merge": "Merge",
+      "distinct": "Different",
+      "skip": "Skip",
+      "a_is_a_b": "A is part of B",
+      "b_is_a_a": "B is part of A",
+      "accept": "Yes, contradicts",
+      "reject": "No",
+      "about": "About",
+      "applicable_to": "Applicable to",
+      "none": "Unrelated",
+      "useful": "Useful",
+      "useless": "Not useful"
+    }
+  },
+  "cards": {
+    "title": "Review cards",
+    "done": "All done for today.",
+    "new": "new",
+    "show": "Show answer",
+    "rating": {
+      "1": "Again",
+      "2": "Hard",
+      "3": "Good",
+      "4": "Easy"
+    }
+  },
+  "digest": {
+    "title": "Weekly digest",
+    "hint": "Close assets with no path between them, from different communities. Ask Claude (rhz_digest) to explain the promising ones.",
+    "run_now": "Run batch now",
+    "pairs": "Unlinked pairs",
+    "no_pairs": "No candidates this week.",
+    "contested": "Contested claims",
+    "no_contested": "No new contradictions."
+  },
+  "settings": {
+    "title": "Settings",
+    "saved": "Saved.",
+    "language": "Interface language",
+    "lang_en": "English",
+    "lang_zh": "中文",
+    "language_hint": "Paper content and your notes are never translated.",
+    "paths": "Storage",
+    "data_dir": "Data directory",
+    "inbox": "Inbox",
+    "offline": "Offline (no OpenAlex / NCBI / GitHub lookups)",
+    "models": "Local models",
+    "models_hint": "Models are downloaded on first use and can be switched off individually. Thresholds must be re-calibrated after switching.",
+    "embedder": "Embedding",
+    "reranker": "Reranker",
+    "nli": "Claim relations (NLI)",
+    "inference": "Generative judgements",
+    "inference_queue": "Review queue / Claude via MCP",
+    "inference_local": "Local small LLM",
+    "builtin": "Built-in (lightweight)",
+    "off": "Off",
+    "rebuild_hint": "After changing models, recompute the graph from stored exports.",
+    "rebuild": "Recompute now",
+    "review": "Review load",
+    "daily_new": "New cards per day",
+    "daily_max": "Reviews per day",
+    "remotes": "Remote snapshots",
+    "remotes_hint": "Targets for `rhz sync <name>`: name, host, path, optional control_path to reuse an authenticated SSH connection.",
+    "save": "Save",
+    "vocab": "Vocabulary sync",
+    "vocab_hint": "Put rhizome-vocab.yaml into the Claude / ChatGPT Project knowledge after topics change.",
+    "vocab_download": "Download rhizome-vocab.yaml"
+  }
+}

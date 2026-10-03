@@ -1,0 +1,20 @@
+# Retrieval regression set over the synthetic examples (the real M0 set lives outside the repo).
+threshold: {hit_at_5: 0.8}
+questions:
+  - q: which dataset profiled Arabidopsis root nuclei with snRNA-seq?
+    expect: [dataset:GSE999001]
+    types: [dataset]
+  - q: tool that builds cell-type GRNs from paired RNA and ATAC
+    expect: [method:repo:github.com/rhizome-examples/rootnet]
+    types: [method]
+  - q: graph attention model for spatial domains
+    expect: [method:domaingat]
+    types: [method]
+  - q: does chromatin opening come before expression changes?
+    expect: [claim]
+    types: [claim]
+  - q: 空间转录组
+    expect: [topic:空间转录组]
+  - q: mouse bone marrow single-cell data used in a GRN benchmark
+    expect: [dataset:GSE999002]
+    types: [dataset]

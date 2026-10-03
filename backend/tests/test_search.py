@@ -1,0 +1,100 @@
+# SPDX-License-Identifier: Apache-2.0
+from rhizome.pipeline.graph import Graph
+from rhizome.services.recall import context_from_code, recall, related_to_work
+from rhizome.services.search import Filters, search
+from rhizome.services.views import entity_card, neighbors, topic_assets, topic_map
+
+
+def names(hits):
+    return [h["name"] for h in hits]
+
+
+def test_asset_level_hits_carry_sources(library, session):
+    hits = search(session, "RootNet", Filters(types=("method",)))
+    assert hits[0]["name"] == "RootNet"
+    src = hits[0]["sources"][0]
+    assert src["edge"] == "proposes" and "Arabidopsis" in src["title"]
+
+
+def test_accession_and_chinese_keyword(library, session):
+    assert search(session, "GSE999002")[0]["key"] == "dataset:GSE999002"
+    assert "空间转录组" in names(search(session, "空间转录组", Filters(types=("topic",))))
+    # two-character CJK query falls back to alias substring matching
+    assert "空间转录组" in names(search(session, "空间", Filters(types=("topic",))))
+
+
+def test_filters(library, session):
+    mouse = search(session, "single cell", Filters(types=("dataset",), organism="Mus musculus"))
+    assert names(mouse) == ["GSE999002"]
+    by_role = search(session, "method", Filters(types=("method",), edge_type="evaluates"))
+    assert set(names(by_role)) <= {"SCENIC", "GENIE3"} and by_role
+    old = search(session, "GRN", Filters(types=("work",), year_max=2024))
+    assert all("Benchmarking" in n for n in names(old))
+
+
+def test_topic_subtree_filter(library, session):
+    from rhizome.pipeline import decisions
+
+    g = Graph(session)
+    decisions.record(g, "add_edge", {"src": "topic:spatial domain detection", "dst": "topic:空间转录组", "type": "is_a"})
+    parent = g.by_key("topic:空间转录组")
+    hits = search(session, "domain", Filters(types=("method",), topic=parent.id))
+    assert "DomainGAT" in names(hits)
+    page = topic_assets(session, parent.id)
+    assert any(m["name"] == "DomainGAT" for m in page["columns"]["method"])
+    assert any(c["name"] == "spatial domain detection" for c in page["children"])
+
+
+def test_topic_page_groups_by_role(library, session):
+    t = Graph(session).by_key("topic:grn inference")
+    page = topic_assets(session, t.id)
+    cols = page["columns"]
+    assert {m["name"] for m in cols["method"]} >= {"RootNet", "ArchR"}
+    assert cols["dataset"][0]["name"] == "GSE999001"
+    assert cols["work"]
+
+
+def test_cards_and_graph_views(library, session):
+    g = Graph(session)
+    w = g.by_key("work:doi:10.5555/rhz.example.0001")
+    card = entity_card(session, w.id)
+    assert card["exports"][0]["tldr"] and card["exports"][0]["raw"].startswith("# SYNTHETIC")
+    nb = neighbors(session, w.id, hops=2, limit=300)
+    assert len(nb["nodes"]) <= 150 and any(n["type"] == "dataset" for n in nb["nodes"])
+    tm = topic_map(session, include_candidates=True)
+    assert tm["nodes"] and all("counts" in n for n in tm["nodes"])
+
+
+def test_recall_ranks_forgotten_and_user_ideas(library, session):
+    hits = recall(session, "chromatin accessibility priors for sparse spatial spots", min_relevance=0.0)
+    assert hits and hits[0]["origin"] == "user"
+    assert len(hits) <= 5
+
+
+def test_related_on_ingest(library, session):
+    w3 = library["light-spatial-domains.yaml"]
+    assert w3.related and w3.related[0]["title"].startswith("A single-nucleus")
+    rel = related_to_work(session, library["deep-grn-atlas.yaml"].work_id)
+    assert {r["work_id"] for r in rel} >= {w3.work_id}
+
+
+def test_context_from_code():
+    src = "import scanpy as sc\nfrom pyscenic.grn import grnboost2\nimport os\n# infer GRN on root nuclei\n" \
+          "library(ArchR)\n"
+    ctx = context_from_code(src)
+    assert "scanpy" in ctx and "pyscenic" in ctx and "ArchR" in ctx and "infer GRN" in ctx and "os" not in ctx.split()
+
+
+def test_retrieval_regression_set(library, session):
+    """Retrieval regression set (synthetic). Claims have hashed keys, so match any claim on that question."""
+    from pathlib import Path
+
+    from rhizome.services.bench import run
+
+    spec = (Path(__file__).parent / "fixtures" / "bench-synthetic.yaml").read_text("utf-8")
+    g = Graph(session)
+    claim = g.by_alias("claim", "Chromatin accessibility changes precede expression changes along root "
+                                "developmental trajectories.")
+    spec = spec.replace("expect: [claim]", f"expect: ['{claim.key}']")
+    res = run(session, spec)
+    assert res["passed"], res

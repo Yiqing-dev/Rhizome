@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: pip install -e "./backend[dev]"
+      - name: Unit, RXF contract and retrieval tests
+        run: python -m pytest backend/tests -q
+        env:
+          RHIZOME_OFFLINE: "1"
+      - name: Lint
+        run: ruff check backend
+      - name: Dependency licenses (no GPL/AGPL)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: pip-licenses --format=json --ignore-packages pip setuptools wheel | python scripts/check_licenses.py pip
+
+  repo-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: i18n key alignment / no hard-coded UI strings
+        run: python scripts/check_i18n.py
+      - name: SPDX headers
+        run: python scripts/check_spdx.py
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Dependency licenses (no GPL/AGPL)
+        run: npx license-checker --production --json | python3 ../scripts/check_licenses.py npm

@@ -1,0 +1,21 @@
+# SYNTHETIC EXAMPLE - fictional paper.
+rxf_version: 1
+depth: light
+paper:
+  doi: 10.5555/rhz.example.0003
+  title: Graph neural networks for spatial domain detection in Stereo-seq data
+  year: 2025
+  type: [tool]
+  organisms: [Mus musculus]
+  modalities: [Stereo-seq]
+tldr:
+  - Introduces a graph attention model that segments tissue sections into spatial domains.
+topics:
+  - {name: spatial domain detection, relation: about}
+  - {name: 空间转录组, relation: about}
+assets:
+  methods:
+    - {name: DomainGAT, role: proposes, io: spot x gene matrix + coordinates -> domain labels, modality: Stereo-seq}
+  ideas:
+    - text: Borrow message passing over spatial neighbours to denoise sparse spots before clustering.
+      origin: model

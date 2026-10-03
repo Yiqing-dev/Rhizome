@@ -1,0 +1,131 @@
+# SPDX-License-Identifier: Apache-2.0
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"
+
+msgid "rxf.yaml_error"
+msgstr "YAML could not be parsed: {detail}"
+
+msgid "rxf.not_mapping"
+msgstr "The document must be a YAML mapping (key: value) at the top level."
+
+msgid "rxf.unknown_version"
+msgstr "Unknown or missing rxf_version: {version}. Supported: 1."
+
+msgid "rxf.report_title"
+msgstr "RXF validation failed: {file}"
+
+msgid "rxf.report_hint"
+msgstr "Paste this report back into the chat and ask the AI to fix the fields above and export the RXF again."
+
+msgid "card.dataset_q"
+msgstr "Dataset {accession}: which organism / modality / tissue?"
+
+msgid "card.method_q"
+msgstr "Which method from “{title}” does this: {io}?"
+
+msgid "card.user_idea_q"
+msgstr "What idea did you note while discussing “{title}”?"
+
+msgid "card.idea_q"
+msgstr "Which transferable idea came out of “{title}”?"
+
+msgid "cli.ingested"
+msgstr "Ingested {file} → {work}"
+
+msgid "cli.duplicate"
+msgstr "Already ingested: {file}"
+
+msgid "cli.failed"
+msgstr "Validation failed: {file} (report written to error/)"
+
+msgid "cli.suspect"
+msgstr "Suspected hallucinated IDs (not stored): {ids}"
+
+msgid "cli.related"
+msgstr "Related papers you have read:"
+
+msgid "cli.no_results"
+msgstr "No results."
+
+msgid "cli.serving"
+msgstr "Rhizome is running at {url}"
+
+msgid "cli.open_ui"
+msgstr "Open the UI: {url}"
+
+msgid "cli.watching"
+msgstr "Watching inbox {path} (Ctrl+C to stop)"
+
+msgid "cli.rebuild_done"
+msgstr "Rebuild finished: {summary}"
+
+msgid "cli.snapshot_done"
+msgstr "Snapshot written to {path}"
+
+msgid "cli.synced"
+msgstr "Synced snapshot to {remote}"
+
+msgid "cli.unknown_remote"
+msgstr "No remote named {name} in settings."
+
+msgid "cli.backup_done"
+msgstr "Backup written to {path}"
+
+msgid "cli.read_only"
+msgstr "Snapshot mode is read-only."
+
+msgid "cli.diag_done"
+msgstr "Diagnostic bundle written to {path} (contains no paper content)"
+
+msgid "cli.vocab_done"
+msgstr "Vocabulary written to {path}"
+
+msgid "cli.queue_empty"
+msgstr "Review queue is empty."
+
+msgid "cli.no_cards"
+msgstr "Nothing to review right now."
+
+msgid "cli.card_prompt"
+msgstr "Rate 1=again 2=hard 3=good 4=easy, s=skip, q=quit"
+
+msgid "cli.download_hint"
+msgstr "Install optional model support with: pip install 'rhizome[models]'"
+
+msgid "cli.job_queued"
+msgstr "Job {id} queued: {kind}"
+
+msgid "cli.dataset_howto"
+msgstr "How to download"
+
+msgid "cli.used_by"
+msgstr "Linked papers"
+
+msgid "api.not_found"
+msgstr "Not found"
+
+msgid "api.unauthorized"
+msgstr "Missing or invalid token"
+
+msgid "api.read_only"
+msgstr "This instance is read-only"
+
+msgid "dl.GEO"
+msgstr "GEO: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc={acc} (or GEOquery / prefetch for SRA runs)"
+
+msgid "dl.SRA"
+msgstr "SRA: prefetch {acc} && fasterq-dump {acc}  (https://www.ncbi.nlm.nih.gov/sra/{acc})"
+
+msgid "dl.ENA"
+msgstr "ENA: https://www.ebi.ac.uk/ena/browser/view/{acc}"
+
+msgid "dl.ArrayExpress"
+msgstr "ArrayExpress: https://www.ebi.ac.uk/biostudies/arrayexpress/studies/{acc}"
+
+msgid "dl.CNGB"
+msgstr "CNGB: https://db.cngb.org/search/?q={acc}"
+
+msgid "dl.other"
+msgstr "Search: {acc}"

@@ -1,0 +1,60 @@
+# SYNTHETIC EXAMPLE - fictional paper, DOI under the 10.5555 test prefix, accessions are made up.
+rxf_version: 1
+prompt_version: deep-review-v2
+depth: deep
+paper:
+  doi: 10.5555/rhz.example.0001
+  title: A single-nucleus multiome atlas of Arabidopsis root regulatory networks
+  year: 2025
+  type: [research, resource]
+  organisms: [Arabidopsis thaliana]
+  modalities: [snRNA-seq, scATAC-seq]
+tldr:
+  - Profiled 120k root nuclei with paired snRNA-seq and scATAC-seq and inferred cell-type GRNs.
+  - Found that a small set of TCP factors gates the transition from meristem to elongation zone.
+  - Biggest reservation - the TF perturbation validation covers only two regulators.
+topics:
+  - {name: GRN inference, relation: about}
+  - {name: plant root development, relation: about}
+  - {name: spatial domain detection, relation: applicable_to}
+claims:
+  - text: TCP transcription factors gate the meristem-to-elongation transition in Arabidopsis roots.
+    evidence_type: causal
+    evidence: Fig. 4C
+    boundary: Primary root, 5-day-old seedlings, standard MS medium.
+    logic_jump: false
+  - text: Chromatin accessibility changes precede expression changes along root developmental trajectories.
+    evidence_type: correlational
+    evidence: Fig. 3B
+    boundary: Pseudotime ordering; no time-resolved sampling.
+    logic_jump: true
+assets:
+  datasets:
+    - {accession: GSE999001, database: GEO, organism: Arabidopsis thaliana, tissue: root, modality: snRNA-seq, scale: 120000 nuclei, public: true, role: produces, evidence: Data availability}
+  methods:
+    - name: RootNet
+      repo: https://github.com/rhizome-examples/rootnet
+      role: proposes
+      io: paired snRNA + scATAC counts -> cell-type specific GRN
+      maintained: unknown
+      extends: [SCENIC]
+    - {name: ArchR, role: uses, io: scATAC fragments -> peak matrix}
+  ideas:
+    - text: Use chromatin-accessibility priors to constrain GRN edges when expression data are sparse.
+      transfer: {type: cross-species, to: GRN inference, barrier: Requires good motif annotations in the target species.}
+      origin: model
+issues:
+  - {severity: major, location: Fig. 5, text: Only two TFs perturbed for validation., test: Perturb at least five predicted regulators.}
+user_insights:
+  - text: The accessibility-prior trick could transfer to Stereo-seq data where per-spot expression is sparse.
+    links_to: [spatial domain detection, RootNet]
+review_cards:
+  - q: Which TF family gates the meristem-to-elongation transition in the root atlas?
+    a: TCP factors
+    about: RootNet
+  - q: What does RootNet take as input?
+    a: Paired snRNA-seq and scATAC-seq counts
+    about: RootNet
+  - q: What organism and modality is GSE999001?
+    a: Arabidopsis thaliana, snRNA-seq of roots
+    about: GSE999001

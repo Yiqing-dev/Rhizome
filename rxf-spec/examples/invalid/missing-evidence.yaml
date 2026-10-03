@@ -1,0 +1,11 @@
+# Invalid on purpose: claim without evidence, bad relation, unknown top-level field.
+rxf_version: 1
+depth: light
+paper:
+  title: An invalid example
+claims:
+  - text: Something is true.
+    evidence_type: causal
+topics:
+  - {name: GRN inference, relation: related}
+summary: not a field

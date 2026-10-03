@@ -1,0 +1,47 @@
+# Canonical modality names and synonyms. `edam` holds an EDAM ontology ID when one fits;
+# leave it empty rather than guessing (external IDs must be real).
+- name: scRNA-seq
+  aliases: [single-cell RNA-seq, single cell RNA sequencing, scRNAseq, 单细胞转录组]
+  edam:
+- name: snRNA-seq
+  aliases: [single-nucleus RNA-seq, single nucleus RNA sequencing, snRNAseq, 单细胞核转录组]
+  edam:
+- name: scATAC-seq
+  aliases: [single-cell ATAC-seq, snATAC-seq, scATACseq]
+  edam:
+- name: bulk RNA-seq
+  aliases: [RNA-seq, RNAseq, transcriptome sequencing, 转录组测序]
+  edam:
+- name: ATAC-seq
+  aliases: [ATACseq]
+  edam:
+- name: ChIP-seq
+  aliases: [ChIPseq]
+  edam:
+- name: CUT&Tag
+  aliases: [CUT and Tag, CUTandTag]
+  edam:
+- name: Hi-C
+  aliases: [HiC]
+  edam:
+- name: Stereo-seq
+  aliases: [stereoseq]
+  edam:
+- name: Visium
+  aliases: [10x Visium, spatial transcriptomics (Visium)]
+  edam:
+- name: MERFISH
+  aliases: []
+  edam:
+- name: spatial transcriptomics
+  aliases: [空间转录组, ST]
+  edam:
+- name: whole-genome sequencing
+  aliases: [WGS, 全基因组测序]
+  edam:
+- name: proteomics
+  aliases: [mass spectrometry proteomics, 蛋白质组]
+  edam:
+- name: DNA methylation
+  aliases: [bisulfite sequencing, WGBS, 甲基化]
+  edam:

@@ -1,0 +1,17 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: spdx-headers
+        name: SPDX headers
+        entry: python scripts/check_spdx.py
+        language: system
+        pass_filenames: false
+      - id: i18n-keys
+        name: i18n key alignment
+        entry: python scripts/check_i18n.py
+        language: system
+        pass_filenames: false
