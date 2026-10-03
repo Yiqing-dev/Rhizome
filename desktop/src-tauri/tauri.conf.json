@@ -26,30 +26,40 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi"],
+    "targets": [
+      "nsis"
+    ],
     "publisher": "Rhizome",
     "copyright": "Copyright 2026 Yiqing Wang and the Rhizome contributors. Apache-2.0.",
     "category": "Education",
     "shortDescription": "Personal literature asset graph",
     "longDescription": "Rhizome splits papers you have read and discussed into reusable datasets, methods, ideas and claims, links them, and brings them back when they are useful again.",
     "licenseFile": "../../LICENSE",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "resources": {
       "../build/server/": "server/",
       "windows/rhz.cmd": "rhz.cmd",
       "../../NOTICE": "NOTICE.txt"
     },
     "windows": {
-      "webviewInstallMode": { "type": "offlineInstaller" },
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
       "nsis": {
         "installMode": "both",
-        "languages": ["SimpChinese", "English"],
+        "languages": [
+          "SimpChinese",
+          "English"
+        ],
         "displayLanguageSelector": true,
         "installerIcon": "icons/icon.ico",
         "installerHooks": "windows/hooks.nsh"
-      },
-      "wix": {
-        "language": ["zh-CN", "en-US"]
       }
     }
   }

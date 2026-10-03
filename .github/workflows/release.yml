@@ -98,19 +98,58 @@ jobs:
         working-directory: desktop
         run: |
           npm ci
-          npx tauri build
+          New-Item -ItemType Directory -Force ..\dist | Out-Null
+          # standard: small installer, WebView2 bootstrapper embedded (installs the runtime only if missing)
+          npx tauri build --bundles nsis
+          if ($LASTEXITCODE) { exit 1 }
+          $std = Get-ChildItem src-tauri\target\release\bundle\nsis\*-setup.exe | Select-Object -First 1
+          Copy-Item $std.FullName ..\dist\
+          # offline: the full WebView2 runtime embedded, for machines without internet access
+          npx tauri build --bundles nsis --config src-tauri/offline.conf.json
+          if ($LASTEXITCODE) { exit 1 }
+          $offlineName = ($std.BaseName -replace '-setup$', '-offline-setup') + '.exe'
+          Copy-Item $std.FullName (Join-Path ..\dist $offlineName)
+          Get-ChildItem ..\dist | Format-Table Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
 
-      - name: Collect installers
+      - name: Install, launch and uninstall (end-to-end)
         run: |
-          New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item desktop\src-tauri\target\release\bundle\nsis\*.exe dist\
-          Copy-Item desktop\src-tauri\target\release\bundle\msi\*.msi dist\
-          Get-ChildItem dist | Format-Table Name, Length
+          $setup = Get-ChildItem dist\*_x64-setup.exe | Select-Object -First 1
+          Start-Process $setup.FullName -ArgumentList "/S" -Wait
+          $exe = Get-ChildItem "$env:LOCALAPPDATA\Rhizome\Rhizome.exe", "$env:LOCALAPPDATA\Programs\Rhizome\Rhizome.exe", "$env:ProgramFiles\Rhizome\Rhizome.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { Write-Error "Rhizome.exe not found after install"; exit 1 }
+          $dir = $exe.DirectoryName
+          Write-Host "installed to $dir"
+          foreach ($f in "server\rhz.exe", "server\_internal\rhizome\web\index.html", "rhz.cmd") {
+            if (-not (Test-Path (Join-Path $dir $f))) { Write-Error "missing $f"; exit 1 }
+          }
+          & (Join-Path $dir "rhz.cmd") --help | Out-Null; if ($LASTEXITCODE) { exit 1 }
+          $marker = "$env:APPDATA\Rhizome\server.json"
+          Remove-Item $marker -ErrorAction SilentlyContinue
+          $app = Start-Process $exe.FullName -PassThru
+          $url = $null
+          for ($i = 0; $i -lt 180 -and -not $url; $i++) {
+            Start-Sleep -Milliseconds 500
+            if (Test-Path $marker) { $url = (Get-Content $marker | ConvertFrom-Json).url }
+          }
+          if (-not $url) { Write-Error "backend did not start"; Get-ChildItem "$env:APPDATA\dev.rhizome.desktop\logs" -ErrorAction SilentlyContinue | Get-Content; exit 1 }
+          $h = Invoke-RestMethod "$url/health"
+          Write-Host "backend up at $url, version $($h.version)"
+          if (-not (Get-Process rhz -ErrorAction SilentlyContinue)) { Write-Error "rhz.exe not running"; exit 1 }
+          Stop-Process $app.Id -Force       # simulate a crash: the backend must notice and exit
+          $gone = $false
+          for ($i = 0; $i -lt 40 -and -not $gone; $i++) { Start-Sleep -Milliseconds 500; $gone = -not (Get-Process rhz -ErrorAction SilentlyContinue) }
+          if (-not $gone) { Write-Error "backend kept running after the app was killed"; exit 1 }
+          $un = Get-ChildItem $dir -Filter "uninstall*.exe" | Select-Object -First 1
+          Start-Process $un.FullName -ArgumentList "/S" -Wait
+          Start-Sleep -Seconds 3
+          if (Test-Path $exe.FullName) { Write-Error "uninstall left Rhizome.exe behind"; exit 1 }
+          if (-not (Test-Path "$env:APPDATA\Rhizome\rhizome.db")) { Write-Error "uninstall removed the library"; exit 1 }
+          Write-Host "install / launch / crash-recovery / uninstall OK; library kept"
 
       - uses: actions/upload-artifact@v4
         with:
           name: Rhizome-windows-installers
-          path: dist/*
+          path: dist/*.exe
           if-no-files-found: error
 
       - name: Attach to GitHub release (tags only)

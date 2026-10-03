@@ -36,7 +36,7 @@ human_decision  merges / rejections / confirmations — applied last on every re
 
 ## Install (Windows)
 
-Download `Rhizome_x.y.z_x64-setup.exe` (or the `.msi`) from the GitHub Actions run
+Download `Rhizome_x.y.z_x64-setup.exe` (or `…-offline-setup.exe` for machines without internet) from the GitHub Actions run
 *Windows app* / a release, run it, and start Rhizome from the Start menu. Everything is bundled.
 See [desktop/README.md](desktop/README.md) for what goes where, portable mode and Claude Desktop setup.
 

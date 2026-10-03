@@ -10,7 +10,7 @@ installed next to the app, so nothing else needs to be installed: no Python, no 
 | Install folder (chosen in the installer; default `%LOCALAPPDATA%\Programs\Rhizome` per user, or `Program Files` for all users) | `Rhizome.exe` (window), `server\rhz.exe` + `server\_internal\` (backend, CLI, MCP server), `rhz.cmd` (CLI shim) |
 | Data folder (default `%APPDATA%\Rhizome`; movable in Settings) | `rhizome.db`, `raw\` (your RXF exports and PDFs), `inbox\`, `backups\`, `logs\`, `models\`, `settings.json` |
 | `%APPDATA%\Rhizome\location.json` | pointer written when you move the library elsewhere |
-| WebView2 | installed by the installer if missing (offline installer embedded) |
+| WebView2 | installed by the installer if missing: `*-setup.exe` downloads it, `*-offline-setup.exe` carries it |
 
 Uninstalling or upgrading never touches the data folder. **Portable mode:** put an empty file named
 `portable` next to `Rhizome.exe` and the library lives in `data\` inside the install folder.
@@ -40,7 +40,8 @@ pip install ./backend pyinstaller
 cd desktop
 pyinstaller rhz.spec --noconfirm --distpath build --workpath build/pyi   # -> build\server\
 npm ci
-npx tauri build                                              # -> src-tauri\target\release\bundle\{nsis,msi}
+npx tauri build --bundles nsis                               # -> src-tauri\target\release\bundle\nsis
+npx tauri build --bundles nsis --config src-tauri/offline.conf.json   # offline variant
 ```
 
 Icons are generated from `docs/logo.png` with `npm run icons`.
