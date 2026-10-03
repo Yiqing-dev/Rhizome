@@ -99,7 +99,22 @@ def rhz_digest(days: int = 7) -> str:
     return _j(client().digest(days))
 
 
+def warm_up() -> None:
+    """Load native extensions and open the library *before* the stdio transport starts.
+
+    On Windows, lazily importing numpy's C extension inside the first tool call, while the stdio
+    reader thread is blocked reading the stdin pipe, deadlocks the process (seen in CI). Importing
+    everything up front also makes the first tool call fast."""
+    import numpy  # noqa: F401
+
+    from .pipeline import graph  # noqa: F401  (numpy-backed vector index)
+    from .services import recall, search, synthesis, views  # noqa: F401
+
+    client()
+
+
 def main() -> None:
+    warm_up()
     mcp.run()
 
 
