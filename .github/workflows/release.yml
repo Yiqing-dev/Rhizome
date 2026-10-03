@@ -44,10 +44,14 @@ jobs:
 
       - name: Freeze backend (PyInstaller one-folder)
         run: |
+          $ErrorActionPreference = "Stop"
           python -m pip install --upgrade pip
-          pip install ./backend pyinstaller
+          python -m pip install ./backend pyinstaller
+          if ($LASTEXITCODE) { exit 1 }
           cd desktop
-          pyinstaller rhz.spec --noconfirm --distpath build --workpath build/pyi
+          python -m PyInstaller rhz.spec --noconfirm --distpath build --workpath build/pyi
+          if ($LASTEXITCODE) { exit 1 }
+          if (-not (Test-Path build\server\_internal\rhizome\web\index.html)) { Write-Error "UI missing from bundle"; exit 1 }
 
       - name: Smoke-test the frozen backend
         env:

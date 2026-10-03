@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "rhizome"
 version = "0.1.0"
 description = "Personal literature asset graph: papers split into reusable datasets, methods, ideas and claims."
-readme = "../README.md"
+readme = "README.md"
 license = "Apache-2.0"
 requires-python = ">=3.11"
 authors = [{ name = "Yiqing Wang" }]
@@ -46,7 +46,7 @@ rhizome-mcp = "rhizome.mcp_server:main"
 include = ["rhizome*"]
 
 [tool.setuptools.package-data]
-rhizome = ["data/*", "i18n/locales/*/LC_MESSAGES/*.po", "migrations/*", "migrations/versions/*", "rxf/schemas/*.json", "alembic.ini"]
+rhizome = ["web/*", "web/assets/*", "data/*", "i18n/locales/*/LC_MESSAGES/*.po", "migrations/*", "migrations/versions/*", "rxf/schemas/*.json", "alembic.ini"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
