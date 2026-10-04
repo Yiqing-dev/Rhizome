@@ -4,13 +4,13 @@
 export const ENTITY_TYPES = ["work", "dataset", "method", "idea", "claim", "topic", "organism", "modality"] as const;
 export const EDGE_TYPES = [
   "about", "applicable_to", "proposes", "uses", "produces", "evaluates", "supports", "contradicts", "extends",
-  "cites", "is_a", "of_organism", "of_modality",
+  "cites", "is_a", "of_organism", "of_modality", "relates_to",
 ] as const;
 
 const EDGE_TOKEN: Record<string, string> = {
   about: "--c-topic", applicable_to: "--c-topic", proposes: "--c-idea", uses: "--c-dataset", produces: "--c-dataset",
   evaluates: "--c-method", supports: "--ok", contradicts: "--err", extends: "--c-method", cites: "--c-modality",
-  is_a: "--c-work", of_organism: "--c-organism", of_modality: "--c-modality",
+  is_a: "--c-work", of_organism: "--c-organism", of_modality: "--c-modality", relates_to: "--c-idea",
 };
 
 export function cssVar(name: string, fallback = "#888888"): string {

@@ -7,6 +7,9 @@ just say "export RXF". Also add Rhizome's `rhizome-vocab.yaml` to the Project kn
 
 ```yaml
 rxf_version: 1
+id: rxf-2025-0001                     # optional id of this export
+exported_at: 2025-06-01T10:30:00+08:00
+language: zh-CN                       # main language of the text values
 prompt_version: deep-review-v2        # version of the review prompt used in this chat
 depth: deep                           # light | deep
 paper:
@@ -18,32 +21,35 @@ paper:
   modalities: [snRNA-seq, scATAC-seq]
 tldr: [what was done, most important finding, biggest reservation]
 topics:
-  - {name: GRN inference, relation: about}
-  - {name: spatial domain detection, relation: applicable_to}
+  - {id: t1, name: GRN inference, relation: about}
+  - {id: t2, name: spatial domain detection, relation: applicable_to}
 claims:
-  - text: ...
+  - id: c1
+    text: ...
     evidence_type: causal             # causal | correlational | speculative
     evidence: Fig. 3B                 # required
     boundary: ...
     logic_jump: false
 assets:
   datasets:
-    - {accession: GSE000000, database: GEO, organism: ..., tissue: ..., modality: ..., scale: ..., public: true, role: uses}   # role: uses | produces
+    - {id: d1, accession: GSE000000, database: GEO, organism: ..., tissue: ..., modality: ..., scale: ..., public: true, role: uses}   # role: uses | produces
   methods:
-    - {name: ..., repo: https://github.com/..., role: proposes, io: ..., maintained: unknown}   # role: proposes | uses | evaluates
+    - {id: m1, name: ..., repo: https://github.com/..., role: proposes, io: ..., maintained: unknown}   # role: proposes | uses | evaluates
   ideas:
-    - text: ...
-      transfer: {type: cross-species, to: ..., barrier: ...}   # cross-species | cross-modality | cross-problem
+    - id: i1
+      text: ...
+      transfer: {type: cross-species, to: t2, barrier: ...}   # cross-species | cross-modality | cross-problem
       origin: model                   # model | user
 issues:
   - {severity: major, location: ..., text: ..., test: ...}     # minor | major | critical
 user_insights:
-  - text: ...
-    links_to: [...]
+  - id: u1
+    text: ...
+    links_to: [c1, m1]                # ids from this file
 review_cards:
   - q: ...
     a: ...
-    about: ...
+    about: m1                         # an id from this file
 ```
 
 ## Rules
@@ -57,5 +63,6 @@ When exporting RXF:
 - For topics prefer canonical names from rhizome-vocab.yaml in the Project knowledge; otherwise create a short English noun phrase. relation is only about or applicable_to.
 - review_cards: 3–5 questions covering the most memorable assets and claims, answerable without the paper.
 - Set depth to the actual depth of this discussion.
+- Give topics, claims, datasets, methods, ideas and user_insights short ids unique within the file (t1, c1, d1, m1, i1, u1). links_to and about may only contain those ids, never names; transfer is always a nested {type, to, barrier} object; topics have no `new` flag (Rhizome decides that).
 - Field names are fixed English; do not add fields outside the skeleton. Values may be in any language.
 - Write text containing question marks, colons or quotes (especially review_cards questions) in block style (q: / a: on their own lines), never inside {...} flow mappings.

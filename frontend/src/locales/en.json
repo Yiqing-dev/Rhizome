@@ -34,7 +34,8 @@
     "cites": "cites",
     "is_a": "is a",
     "of_organism": "organism",
-    "of_modality": "modality"
+    "of_modality": "modality",
+    "relates_to": "relates to"
   },
   "status": {
     "candidate": "candidate",
@@ -88,7 +89,18 @@
     "recall_empty_hint": "Nothing above the relevance threshold. Try a more specific description.",
     "open_inbox": "Open inbox folder",
     "ingested_dup": "Already in the library: {{work}}",
-    "drop_not_rxf": "Only RXF files (.yaml / .yml) are accepted; a same-named PDF may come along"
+    "drop_not_rxf": "No RXF export found: the content must start with rxf_version: 1 (any file name or extension); a same-named PDF may come along",
+    "repair_import": "Repair and import",
+    "repairable": "This is a known export drift and can be repaired on import: {{fixes}}. The original file is kept and the repair is recorded in L1.",
+    "repaired": "Imported after repair: {{fixes}}",
+    "failed_title": "Inbox files that failed",
+    "failed_hint": "Edit the file and click \"Import again\", or use \"Repair and import\" for known export drift.",
+    "retry": "Import again",
+    "show_report": "Show report",
+    "fix": {
+      "transfer_flattened": "fold the flattened transfer back",
+      "topic_new_flag": "drop new from topics"
+    }
   },
   "action": {
     "confirm": "confirm",

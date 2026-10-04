@@ -1,0 +1,12 @@
+# SYNTHETIC - only known drift (flattened transfer, topics.new): repairable on request.
+rxf_version: 1
+paper: {title: A synthetic paper with repairable drift, year: 2025, doi: 10.5555/rhz.example.0006}
+topics:
+  - {id: t1, name: GRN inference, relation: about, new: true}
+claims:
+  - {id: c1, text: Repairable claim text about regulators., evidence_type: causal, evidence: Fig. 1}
+assets:
+  ideas:
+    - {id: i1, text: Transfer regulators across species., transfer_type: cross-species, transfer_to: t1, origin: model}
+user_insights:
+  - {id: u1, text: The regulator claim deserves a perturbation test., links_to: [c1]}

@@ -79,6 +79,13 @@ jobs:
           & $rhz rxf validate (Join-Path $ex "深度 导出.yaml"); if ($LASTEXITCODE) { exit 1 }
           & $rhz ingest (Join-Path $ex "深度 导出.yaml") (Join-Path $ex "轻量 导出.yaml") (Join-Path $ex "空间 转录组.yaml"); if ($LASTEXITCODE) { exit 1 }
           & $rhz --lang zh_CN search RootNet; if ($LASTEXITCODE) { exit 1 }
+          # RXF with file-local ids; the export-drift fixture must fail; known drift imports only with --repair
+          Copy-Item rxf-spec\examples\deep-with-ids.yaml (Join-Path $ex "带 id 导出.txt")
+          & $rhz ingest (Join-Path $ex "带 id 导出.txt"); if ($LASTEXITCODE) { exit 1 }
+          & $rhz rxf validate rxf-spec\examples\invalid\export-drift.yaml; if (-not $LASTEXITCODE) { Write-Error "export-drift.yaml was accepted"; exit 1 }
+          Copy-Item backend\tests\fixtures\drift-repairable.yaml (Join-Path $ex "rxf_version 1.yaml")
+          & $rhz ingest (Join-Path $ex "rxf_version 1.yaml"); if (-not $LASTEXITCODE) { Write-Error "drift was repaired silently"; exit 1 }
+          & $rhz ingest --repair (Join-Path $ex "rxf_version 1.yaml"); if ($LASTEXITCODE) { exit 1 }
           & $rhz bench backend\tests\fixtures\bench-synthetic.yaml; if ($LASTEXITCODE) { exit 1 }
           & $rhz rebuild; if ($LASTEXITCODE) { exit 1 }   # with the pre-rebuild backup into the CJK dir
           if (-not (Get-ChildItem (Join-Path $env:RHIZOME_DATA_DIR "backups") -Filter *.db)) { Write-Error "no backup written"; exit 1 }

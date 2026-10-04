@@ -19,6 +19,75 @@ msgstr "RXF 校验失败：{file}"
 msgid "rxf.report_hint"
 msgstr "把这份报告贴回聊天，让 AI 修正上面列出的字段后重新导出 RXF。"
 
+msgid "rxf.report_summary"
+msgstr "共 {problems} 处问题，归并为 {causes} 个原因："
+
+msgid "rxf.report_count"
+msgstr "（{n} 处）"
+
+msgid "rxf.report_fix"
+msgstr "修正："
+
+msgid "rxf.report_known_ids"
+msgstr "本文件声明过的 id：{ids}"
+
+msgid "rxf.report_repairable"
+msgstr "以上问题属于已知的导出偏差，可以一键修正后导入（{fixes}）：在应用里点“修正后导入”，或运行 rhz ingest --repair \"{file}\"。原文件原样保留，修正记录写入 L1。"
+
+msgid "rxf.problem.unexpected_field"
+msgstr "不允许的字段 {field}"
+
+msgid "rxf.problem.missing_field"
+msgstr "缺少必填字段 {field}"
+
+msgid "rxf.problem.bad_reference"
+msgstr "引用了本文件中不存在的 id：{values}"
+
+msgid "rxf.problem.not_a_node"
+msgstr "引用的 id 指向 issue 或复习卡，不能作为图上的节点：{values}"
+
+msgid "rxf.problem.duplicate_id"
+msgstr "id 重复：{values}"
+
+msgid "rxf.problem.transfer"
+msgstr "transfer 被摊平到了 idea 上（涉及 {values}）"
+
+msgid "rxf.problem.bad_value"
+msgstr "{field} 的取值不允许，只能是 {values}"
+
+msgid "rxf.problem.bad_type"
+msgstr "{field} 的类型不对，应为 {values}"
+
+msgid "rxf.fix.unexpected_field"
+msgstr "删除 {field}；骨架以外的字段不被接受。"
+
+msgid "rxf.fix.missing_field"
+msgstr "补上 {field}。"
+
+msgid "rxf.fix.bad_reference"
+msgstr "links_to / about 只能写本文件里已声明的 id（topics、claims、datasets、methods、ideas、user_insights 的 id），不要写名称或其他文件的 id。"
+
+msgid "rxf.fix.not_a_node"
+msgstr "改为引用 claim、method、dataset、idea、topic 或另一条 user_insight 的 id。"
+
+msgid "rxf.fix.duplicate_id"
+msgstr "每个 id 在文件内只能出现一次，给重复的条目换一个 id。"
+
+msgid "rxf.fix.topic_new"
+msgstr "删除 new；主题新不新由 Rhizome 入库时按别名判断，导出端不用标记。"
+
+msgid "rxf.fix.transfer"
+msgstr "transfer 要写成嵌套对象：transfer: {{type: cross-species, to: ..., barrier: ...}}，不要把 type / to / barrier 摊平到 idea 上。"
+
+msgid "rxf.fix.claim_evidence"
+msgstr "每条 claim 都要写原文位置，例如 evidence: Fig. 3B。"
+
+msgid "rxf.repair.transfer_flattened"
+msgstr "把摊平的 transfer 收回嵌套对象"
+
+msgid "rxf.repair.topic_new_flag"
+msgstr "删除 topics 里的 new"
+
 msgid "card.dataset_q"
 msgstr "数据集 {accession} 是什么物种 / 模态 / 组织？"
 
@@ -33,6 +102,9 @@ msgstr "《{title}》里有什么可迁移的思路？"
 
 msgid "cli.ingested"
 msgstr "已摄入 {file} → {work}"
+
+msgid "cli.repaired"
+msgstr "已按已知导出偏差修正后导入（{fixes}）；原文件保留在 L0，修正记录在 L1。"
 
 msgid "cli.duplicate"
 msgstr "已摄入过：{file}"

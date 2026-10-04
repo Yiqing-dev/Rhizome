@@ -49,6 +49,7 @@ ASSET_TYPES = ("dataset", "method", "idea", "claim")
 EDGE_TYPES = (
     "about", "applicable_to", "proposes", "uses", "produces", "evaluates", "supports",
     "contradicts", "extends", "cites", "is_a", "of_organism", "of_modality",
+    "relates_to",  # a user insight pointing at the claim / method / ... it is about
 )
 EDGE_STATUS = ("auto", "confirmed", "rejected")
 

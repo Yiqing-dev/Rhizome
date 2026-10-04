@@ -19,6 +19,75 @@ msgstr "RXF validation failed: {file}"
 msgid "rxf.report_hint"
 msgstr "Paste this report back into the chat and ask the AI to fix the fields above and export the RXF again."
 
+msgid "rxf.report_summary"
+msgstr "{problems} problems from {causes} causes:"
+
+msgid "rxf.report_count"
+msgstr " ({n} places)"
+
+msgid "rxf.report_fix"
+msgstr "Fix: "
+
+msgid "rxf.report_known_ids"
+msgstr "Ids declared in this file: {ids}"
+
+msgid "rxf.report_repairable"
+msgstr "These are known export drifts and can be repaired on import ({fixes}): click \"Repair and import\" in the app, or run rhz ingest --repair \"{file}\". The original file is kept unchanged and the repair is recorded in L1."
+
+msgid "rxf.problem.unexpected_field"
+msgstr "field {field} is not allowed"
+
+msgid "rxf.problem.missing_field"
+msgstr "required field {field} is missing"
+
+msgid "rxf.problem.bad_reference"
+msgstr "refers to ids that do not exist in this file: {values}"
+
+msgid "rxf.problem.not_a_node"
+msgstr "refers to an issue or review card, which is not a graph node: {values}"
+
+msgid "rxf.problem.duplicate_id"
+msgstr "duplicate id: {values}"
+
+msgid "rxf.problem.transfer"
+msgstr "transfer is flattened onto the idea (involves {values})"
+
+msgid "rxf.problem.bad_value"
+msgstr "{field} has a value that is not allowed; use one of {values}"
+
+msgid "rxf.problem.bad_type"
+msgstr "{field} has the wrong type; expected {values}"
+
+msgid "rxf.fix.unexpected_field"
+msgstr "remove {field}; fields outside the skeleton are not accepted."
+
+msgid "rxf.fix.missing_field"
+msgstr "add {field}."
+
+msgid "rxf.fix.bad_reference"
+msgstr "links_to / about may only contain ids declared in this file (ids of topics, claims, datasets, methods, ideas, user_insights), not names or ids from other files."
+
+msgid "rxf.fix.not_a_node"
+msgstr "refer to the id of a claim, method, dataset, idea, topic or another user_insight instead."
+
+msgid "rxf.fix.duplicate_id"
+msgstr "each id may appear only once in a file; give the duplicate item another id."
+
+msgid "rxf.fix.topic_new"
+msgstr "remove new; Rhizome decides whether a topic is new by alias matching on import."
+
+msgid "rxf.fix.transfer"
+msgstr "write transfer as a nested object: transfer: {{type: cross-species, to: ..., barrier: ...}}; do not flatten type / to / barrier onto the idea."
+
+msgid "rxf.fix.claim_evidence"
+msgstr "every claim needs its location in the paper, e.g. evidence: Fig. 3B."
+
+msgid "rxf.repair.transfer_flattened"
+msgstr "fold a flattened transfer back into a nested object"
+
+msgid "rxf.repair.topic_new_flag"
+msgstr "drop new from topics"
+
 msgid "card.dataset_q"
 msgstr "Dataset {accession}: which organism / modality / tissue?"
 
@@ -33,6 +102,9 @@ msgstr "Which transferable idea came out of “{title}”?"
 
 msgid "cli.ingested"
 msgstr "Ingested {file} → {work}"
+
+msgid "cli.repaired"
+msgstr "Imported after repairing known export drift ({fixes}); the original is kept in L0, the repair is recorded in L1."
 
 msgid "cli.duplicate"
 msgstr "Already ingested: {file}"

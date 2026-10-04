@@ -93,6 +93,8 @@ export interface ReviewItem {
 export interface DueCard { id: string; q: string; a: string; entity_key: string; entity_name: string | null; origin: string; new: boolean }
 export interface Stats { entities: Record<string, number>; edges: number; review_queue: number; review_queue_by_kind: Record<string, number>; cards_due: number }
 
+export interface FailedFile { name: string; report: string | null; repairable: string[]; has_pdf: boolean; modified: string }
+
 export interface SystemInfo {
   frozen: boolean; platform: string; app_dir: string | null; portable: boolean; data_dir: string; default_data_dir: string;
   inbox: string; logs: string; models_dir: string; models_available: boolean; local_llm_available: boolean;
@@ -114,10 +116,11 @@ export const api = {
   resolve: (id: number, action: string, note?: string) => req<{ status: string }>("POST", `/review/${id}`, { action, note }),
   decide: (op: string, payload: Record<string, unknown>) => req<{ id: number }>("POST", "/decision", { op, payload }),
   ingest: (text: string, filename: string) => req<any>("POST", "/ingest", { text, filename }),
-  ingestFile: async (file: File, pdf?: File) => {
+  ingestFile: async (file: File, pdf?: File, repair = false) => {
     const form = new FormData();
     form.append("file", file, file.name);
     if (pdf) form.append("pdf", pdf, pdf.name);
+    form.append("repair", String(repair));
     const res = await fetch(new URL(BASE + "/ingest", window.location.origin), {
       method: "POST", headers: { Authorization: `Bearer ${token()}` }, body: form,
     });
@@ -125,6 +128,8 @@ export const api = {
     if (!res.ok) throw new ApiError(res.status, (data as { detail?: unknown })?.detail ?? data);
     return data;
   },
+  inboxFailed: () => req<{ files: FailedFile[] }>("GET", "/inbox/failed"),
+  inboxRetry: (name: string, repair: boolean) => req<any>("POST", `/inbox/failed/${encodeURIComponent(name)}`, { repair }),
   recall: (text: string) => req<{ results: Hit[] }>("POST", "/recall", { text }),
   cardsDue: () => req<{ cards: DueCard[] }>("GET", "/cards/due"),
   grade: (id: string, rating: number) => req<{ interval_days: number }>("POST", `/cards/${id}/grade`, { rating }),

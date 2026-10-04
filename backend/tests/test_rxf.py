@@ -24,12 +24,17 @@ def test_invalid_examples_rejected(name):
     assert not r.ok and r.problems
 
 
-def test_schema_files_match_models():
+def test_published_schema_matches_models():
     generated = json_schema(1)
     spec = json.loads((ROOT / "rxf-spec" / "schema" / "rxf-v1.schema.json").read_text("utf-8"))
-    packaged = json.loads((ROOT / "backend" / "rhizome" / "rxf" / "schemas" / "rxf-v1.schema.json").read_text("utf-8"))
     assert spec == generated, "run: rhz rxf schema -o rxf-spec/schema/rxf-v1.schema.json"
-    assert packaged == generated
+
+
+def test_validator_uses_the_models_not_a_copy():
+    from rhizome.rxf.loader import schema_for
+
+    assert schema_for(1) == json_schema(1)
+    assert not (ROOT / "backend" / "rhizome" / "rxf" / "schemas").exists()
 
 
 @pytest.mark.parametrize("name", ["export-instructions.zh.md", "export-instructions.en.md"])

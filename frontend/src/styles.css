@@ -188,6 +188,10 @@ main { flex: 1; width: 100%; max-width: 1240px; margin: 0 auto; padding: 1.4rem 
 .notice.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 40%, transparent); color: var(--ink); }
 .notice.error { background: var(--err-soft); border-color: color-mix(in srgb, var(--err) 40%, transparent); color: var(--ink); }
 .notice pre { white-space: pre-wrap; }
+.failed-inbox { margin-top: 1rem; padding-top: 0.8rem; border-top: 1px solid var(--line); }
+.failed-inbox li { padding: 0.45rem 0; border-bottom: 1px dashed var(--line); }
+.failed-inbox strong { word-break: break-all; font-weight: 600; }
+.failed-inbox pre { white-space: pre-wrap; font-size: 0.8rem; max-height: 18rem; overflow: auto; background: var(--surface-2, transparent); padding: 0.5rem; border-radius: var(--radius-sm); }
 
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 .page-head .sub { color: var(--muted); margin-top: 0.25rem; max-width: 70ch; }

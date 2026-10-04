@@ -10,7 +10,7 @@ import { fmtDate } from "../i18n";
 import { href } from "../router";
 
 const EDGE_ORDER = ["about", "applicable_to", "proposes", "uses", "produces", "evaluates", "supports", "contradicts",
-  "extends", "cites", "is_a", "of_organism", "of_modality"];
+  "extends", "relates_to", "cites", "is_a", "of_organism", "of_modality"];
 
 function EdgeActions({ card, e }: { card: Card; e: EdgeView }) {
   const { t } = useTranslation();

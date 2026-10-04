@@ -19,7 +19,7 @@ from ..db.models import Entity, Extraction, RawObject
 from ..external import openalex
 from ..external.ids import accession_format_ok, guess_database, normalize_doi, normalize_repo
 from ..external.verify import check_accession, check_repo
-from ..rxf.loader import ValidationProblem, error_report, load_rxf
+from ..rxf.loader import ValidationProblem, load_rxf, report_for
 from ..rxf.schema import RxfDocument
 from .graph import Graph
 from .materialize import link_citations, materialize_openalex, materialize_rxf, promote_topics, work_key
@@ -38,12 +38,15 @@ class IngestResult:
     suspect: list[str] = field(default_factory=list)
     new_entities: list[str] = field(default_factory=list)
     related: list[dict[str, Any]] = field(default_factory=list)
+    repairs: list[str] = field(default_factory=list)  # known-drift fixes applied on request
+    repairable: list[str] = field(default_factory=list)  # fixes that would make a failed file valid
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "ok": self.ok, "work_key": self.work_key, "work_id": self.work_id, "duplicate": self.duplicate,
             "problems": [p.__dict__ for p in self.problems], "report": self.report, "suspect": self.suspect,
             "new_entities": self.new_entities, "related": self.related,
+            "repairs": self.repairs, "repairable": self.repairable,
         }
 
 
@@ -67,10 +70,13 @@ def _check_ids(doc: RxfDocument) -> tuple[dict[str, str], list[str]]:
 
 
 def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes | None = None,
-                recall: bool = True) -> IngestResult:
-    res = load_rxf(text)
+                recall: bool = True, repair: bool = False) -> IngestResult:
+    """``repair`` applies the known-drift fixes (rxf/repair.py): L0 keeps the original bytes, the L1
+    row holds the repaired document and records the fixes in ``meta.repairs``."""
+    res = load_rxf(text, repair=repair)
     if not res.ok:
-        return IngestResult(ok=False, problems=res.problems, report=error_report(filename, res.problems))
+        return IngestResult(ok=False, problems=res.problems, report=report_for(filename, res),
+                            repairable=res.repairable)
     doc = res.doc
     assert doc is not None
     data = text.encode("utf-8")
@@ -89,6 +95,8 @@ def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes
     checks, suspect = _check_ids(doc)
     meta = {"openalex_id": oa["id"] if oa else None, "checks": checks, "suspect": suspect,
             "filename": filename}
+    if res.repairs:
+        meta["repairs"] = res.repairs
     wkey = work_key(meta["openalex_id"], doc.paper.doi, doc.paper.title)
 
     hashes = [rawstore.put(s, data, "rxf", filename, wkey)]
@@ -137,7 +145,8 @@ def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes
     s.flush()
     out.work = g.by_key(out.work.key) or out.work
     new = [e.key for e in s.execute(select(Entity).where(Entity.id > max_before)).scalars()]
-    result = IngestResult(ok=True, work_key=out.work.key, work_id=out.work.id, suspect=suspect, new_entities=new)
+    result = IngestResult(ok=True, work_key=out.work.key, work_id=out.work.id, suspect=suspect, new_entities=new,
+                          repairs=res.repairs)
     if recall:
         from ..services.recall import related_to_work
 
@@ -151,10 +160,10 @@ def read_inbox_file(path: Path) -> tuple[str, bytes | None]:
     return path.read_text(encoding="utf-8-sig"), (pdf_path.read_bytes() if pdf_path.exists() else None)
 
 
-def ingest_path(s: Session, path: Path) -> IngestResult:
+def ingest_path(s: Session, path: Path, repair: bool = False) -> IngestResult:
     """Ingest an inbox file (and a same-named PDF). Does not move anything: the caller commits first."""
     text, pdf = read_inbox_file(path)
-    return ingest_text(s, text, path.name, pdf)
+    return ingest_text(s, text, path.name, pdf, repair=repair)
 
 
 def file_done(path: Path, result: IngestResult | None, error: str | None = None) -> Path:
@@ -163,18 +172,24 @@ def file_done(path: Path, result: IngestResult | None, error: str | None = None)
     ok = result is not None and result.ok and error is None
     target = inbox / ("done" if ok else "error")
     target.mkdir(parents=True, exist_ok=True)
-    dest = _unique(target / path.name)
-    shutil.move(str(path), str(dest))
     pdf_path = path.with_suffix(".pdf")
-    if pdf_path.exists():
-        shutil.move(str(pdf_path), str(_unique(target / pdf_path.name)))
+    if path.parent.resolve() == target.resolve():  # retried from error/ and failed again: stays put
+        dest = path
+    else:
+        dest = _unique(target / path.name)
+        shutil.move(str(path), str(dest))
+        if pdf_path.exists():
+            shutil.move(str(pdf_path), str(_unique(target / pdf_path.name)))
     report = error if error else (result.report if result is not None and not result.ok else None)
+    stale = path.with_name(path.name + ".error.txt")  # retried from error/: the old report is obsolete
+    if stale.exists() and stale != target / (dest.name + ".error.txt"):
+        stale.unlink()
     if report:
         (target / (dest.name + ".error.txt")).write_text(report, encoding="utf-8")
     return dest
 
 
-def ingest_file(path: Path) -> IngestResult:
+def ingest_file(path: Path, repair: bool = False) -> IngestResult:
     """Own transaction per file; the move happens only after the commit succeeded."""
     import traceback
 
@@ -182,7 +197,7 @@ def ingest_file(path: Path) -> IngestResult:
 
     try:
         with session_scope() as s:
-            result = ingest_path(s, path)
+            result = ingest_path(s, path, repair=repair)
     except Exception as e:  # keep the inbox flowing; the report tells the user what happened
         log.exception("ingest failed for %s", path)
         file_done(path, None, error=f"{type(e).__name__}: {e}\n\n{traceback.format_exc(limit=8)}")

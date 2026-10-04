@@ -1,0 +1,32 @@
+# SYNTHETIC NEGATIVE FIXTURE - mirrors a real failed export: transfer flattened onto the idea,
+# topics marked `new`, and references to ids that do not exist in the file.
+rxf_version: 1
+id: rxf-2025-0005
+exported_at: "2025-06-02T09:00:00+08:00"
+language: zh-CN
+paper:
+  title: A synthetic paper used to test export drift
+  year: 2025
+topics:
+  - {id: t1, name: GRN inference, relation: about, new: false}
+  - {id: t2, name: plant stress response, relation: about, new: true}
+claims:
+  - {id: c1, text: Claim one., evidence_type: causal, evidence: Fig. 1}
+  - {id: c2, text: Claim two., evidence_type: correlational, evidence: Fig. 2}
+assets:
+  methods:
+    - {id: m1, name: SynthNet, role: proposes}
+  ideas:
+    - id: i1
+      text: Idea with a flattened transfer.
+      transfer: cross-species
+      to: t1
+      barrier: needs orthologs
+issues:
+  - {id: x1, severity: minor, text: An issue.}
+user_insights:
+  - id: u1
+    text: My view on the paper.
+    links_to: [c1, c9, x1]
+review_cards:
+  - {q: A question, a: An answer, about: m7}

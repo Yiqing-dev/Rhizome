@@ -34,7 +34,8 @@
     "cites": "引用",
     "is_a": "属于",
     "of_organism": "物种",
-    "of_modality": "模态"
+    "of_modality": "模态",
+    "relates_to": "关联"
   },
   "status": {
     "candidate": "候选",
@@ -88,7 +89,18 @@
     "recall_empty_hint": "没有超过相关度阈值的结果，试试更具体的描述。",
     "open_inbox": "打开收件箱目录",
     "ingested_dup": "已存在（重复文件）：{{work}}",
-    "drop_not_rxf": "只接受 RXF 文件（.yaml / .yml），可同时拖入同名 PDF"
+    "drop_not_rxf": "没有找到 RXF 导出：文件内容要以 rxf_version: 1 开头（文件名和扩展名不限），可同时拖入同名 PDF",
+    "repair_import": "修正后导入",
+    "repairable": "这是已知的导出偏差，可以修正后导入：{{fixes}}。原文件保留，修正记录写入 L1。",
+    "repaired": "已修正后导入：{{fixes}}",
+    "failed_title": "收件箱中未通过的文件",
+    "failed_hint": "修改原文件后点“重新导入”；属于已知导出偏差的可以直接“修正后导入”。",
+    "retry": "重新导入",
+    "show_report": "查看报告",
+    "fix": {
+      "transfer_flattened": "收回摊平的 transfer",
+      "topic_new_flag": "删除 topics 里的 new"
+    }
   },
   "action": {
     "confirm": "确认",

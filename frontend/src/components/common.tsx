@@ -113,7 +113,7 @@ function edgeToken(e: string): string {
     about: "var(--c-topic)", applicable_to: "var(--c-topic)", proposes: "var(--c-idea)", uses: "var(--c-dataset)",
     produces: "var(--c-dataset)", evaluates: "var(--c-method)", supports: "var(--ok)", contradicts: "var(--err)",
     extends: "var(--c-method)", cites: "var(--c-modality)", is_a: "var(--c-work)", of_organism: "var(--c-organism)",
-    of_modality: "var(--c-modality)",
+    of_modality: "var(--c-modality)", relates_to: "var(--c-idea)",
   };
   return map[e] ?? "var(--line-strong)";
 }

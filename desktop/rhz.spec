@@ -11,7 +11,7 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 ROOT = Path(SPECPATH).resolve().parent  # noqa: F821  (SPECPATH is provided by PyInstaller)
 
 datas = []
-datas += collect_data_files("rhizome", includes=["web/**", "i18n/**/*.po", "data/*", "rxf/schemas/*"])
+datas += collect_data_files("rhizome", includes=["web/**", "i18n/**/*.po", "data/*"])
 # Alembic loads env.py and version scripts from disk, so they ship as files, not bytecode
 datas += collect_data_files("rhizome", include_py_files=True, includes=["migrations/**"])
 # CLDR locale data: only what the two UI languages resolve to (full set is ~30 MB)

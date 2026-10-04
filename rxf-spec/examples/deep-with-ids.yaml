@@ -1,0 +1,58 @@
+# SYNTHETIC EXAMPLE - fictional paper, DOI under the 10.5555 test prefix, accessions are made up.
+# Items carry file-local ids; user_insights.links_to and review_cards.about refer to them.
+rxf_version: 1
+id: rxf-2025-0004
+exported_at: "2025-06-01T10:30:00+08:00"
+language: zh-CN
+prompt_version: deep-review-v3
+depth: deep
+paper:
+  doi: 10.5555/rhz.example.0004
+  title: 一种用于拟南芥叶片空间转录组的细胞分割校正方法
+  year: 2025
+  type: [research, tool]
+  organisms: [Arabidopsis thaliana]
+  modalities: [Stereo-seq]
+tldr:
+  - 提出 LeafSeg，用核染色先验校正 Stereo-seq 的细胞分割。
+  - 校正后表皮与叶肉细胞的标记基因混杂率下降一半。
+  - 最大的保留意见：只在一个发育阶段验证。
+topics:
+  - {id: t1, name: cell segmentation, relation: about}
+  - {id: t2, name: spatial domain detection, relation: applicable_to}
+claims:
+  - id: c1
+    text: 核染色先验能把 Stereo-seq 中跨细胞的转录本误分配降低约一半。
+    evidence_type: causal
+    evidence: Fig. 2D
+    boundary: 叶片，第 14 天，单一批次。
+  - id: c2
+    text: 分割误差主要集中在表皮与叶肉的交界处。
+    evidence_type: correlational
+    evidence: Fig. 3A
+assets:
+  datasets:
+    - {id: d1, accession: CNP9990004, database: CNGB, organism: Arabidopsis thaliana, tissue: leaf, modality: Stereo-seq, public: true, role: produces, evidence: Data availability}
+  methods:
+    - {id: m1, name: LeafSeg, role: proposes, io: Stereo-seq bins + ssDNA image -> cell masks, maintained: unknown}
+  ideas:
+    - id: i1
+      text: 用核染色先验约束其他基于 bin 的空间平台的细胞分配。
+      transfer: {type: cross-modality, to: t2, barrier: 需要配套的核染色图像。}
+      origin: model
+issues:
+  - {id: x1, severity: major, location: Fig. 4, text: 只验证了一个发育阶段。, test: 补充第 7 天与第 21 天样本。}
+user_insights:
+  - id: u1
+    text: 交界处的误差可能才是之前空间域划分边界模糊的主因。
+    links_to: [c2, t2]
+  - id: u2
+    text: LeafSeg 的先验思路可以和 u1 的判断一起检验：先校正分割，再看边界是否变清晰。
+    links_to: [m1, u1, d1]
+review_cards:
+  - q: LeafSeg 用什么先验校正细胞分割？
+    a: 核染色（ssDNA）图像
+    about: m1
+  - q: 分割误差主要集中在哪里？
+    a: 表皮与叶肉的交界处
+    about: c2

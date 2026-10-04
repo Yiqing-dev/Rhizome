@@ -14,7 +14,7 @@ from ..db.models import Edge, Entity, Extraction, ReviewCard, Work
 from ..external.ids import normalize_doi, normalize_repo
 from ..i18n import _
 from ..inference import get_backend
-from ..rxf.schema import RxfDocument
+from ..rxf.schema import RxfDocument, uses_ids
 from ..text import norm, sha256
 from .canonicalize import resolve_claim, resolve_free, resolve_modality, resolve_organism
 from ..ml import get_reranker
@@ -116,6 +116,19 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
                    rxf_extraction=ex.id)
     out = Materialized(work=work)
     eid = ex.id
+    # file-local id -> library entity (None when the item was not stored, e.g. a fabricated accession)
+    ids: dict[str, Entity | None] = {}
+    by_id = uses_ids(doc)
+
+    def remember(item, ent: Entity | None) -> None:
+        if item.id and item.id not in ids:
+            ids[item.id] = ent
+
+    def lookup(ref: str, types: tuple[str, ...]) -> Entity | None:
+        """A reference: an id of this file, or (older exports without ids) a name in the library."""
+        if by_id:
+            return ids.get(ref)
+        return next((x for x in (g.by_alias(t, ref) for t in types) if x), None)
 
     def edge(src, dst, etype, **kw):
         return g.upsert_edge(src, dst, etype, extraction_id=eid, **kw)
@@ -130,6 +143,7 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
         if r.created:
             _topic_relation_candidates(g, r.entity)
         edge(work, r.entity, t.relation)
+        remember(t, r.entity)
         out.topics.append(r.entity)
 
     for c in doc.claims:
@@ -146,10 +160,12 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
                                       "new_claim": cr.entity.key, "new_text": c.text, "evidence": c.evidence,
                                       "score": round(p_contra, 4)},
                     dedupe=f"contradiction:{work.key}|{other.key}", score=p_contra)
+        remember(c, cr.entity)
         out.assets.append(cr.entity)
 
     for d in doc.assets.datasets:
         ent = _dataset(g, d, checks)
+        remember(d, ent)
         if ent is None:
             continue
         edge(work, ent, d.role, evidence=d.evidence)
@@ -161,6 +177,7 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
 
     for m in doc.assets.methods:
         ent = _method(g, m, checks)
+        remember(m, ent)
         if ent is None:
             continue
         edge(work, ent, m.role, evidence=m.evidence)
@@ -177,31 +194,39 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
         if idea.origin == "user":
             g.update_attrs(r.entity, origin="user")
         edge(work, r.entity, "proposes", attrs={"origin": idea.origin})
+        remember(idea, r.entity)
         if idea.transfer and idea.transfer.to:
-            topic = g.by_alias("topic", idea.transfer.to)
-            if topic is not None:
+            topic = ids.get(idea.transfer.to) or g.by_alias("topic", idea.transfer.to)
+            if topic is not None and topic.type == "topic":
                 edge(r.entity, topic, "applicable_to", attrs={"transfer_type": idea.transfer.type,
                                                               "barrier": idea.transfer.barrier})
         out.assets.append(r.entity)
 
+    # user insights: create all first, so an insight may link to another insight of the same file
+    insights = []
     for ins in doc.user_insights:
         r = resolve_free(g, "idea", ins.text, attrs={"origin": "user", "weight": 2.0})
         g.update_attrs(r.entity, origin="user", weight=2.0)
-        links: list[str] = []
-        for target in ins.links_to:
-            hit = next((x for x in (g.by_alias(t, target) for t in
-                                    ("topic", "method", "dataset", "idea", "claim", "work")) if x), None)
-            if hit is not None:
-                links.append(hit.key)
-                if hit.type == "topic":
-                    edge(r.entity, hit, "applicable_to", attrs={"origin": "user"})
-        g.update_attrs(r.entity, links=sorted(set((r.entity.attrs or {}).get("links", [])) | set(links)),
-                       links_unresolved=[t for t in ins.links_to if t])
         edge(work, r.entity, "proposes", attrs={"origin": "user"}, confidence=1.0)
+        remember(ins, r.entity)
+        insights.append((ins, r.entity))
         out.assets.append(r.entity)
+    for ins, me in insights:
+        links: list[str] = []
+        unresolved: list[str] = []
+        for target in ins.links_to:
+            hit = lookup(target, ("topic", "method", "dataset", "idea", "claim", "work"))
+            if hit is None or hit.id == me.id:
+                unresolved.append(target)
+                continue
+            links.append(hit.key)
+            # the user's own view joins the graph: to a topic as applicability, otherwise as a link
+            edge(me, hit, "applicable_to" if hit.type == "topic" else "relates_to", attrs={"origin": "user"})
+        g.update_attrs(me, links=sorted(set((me.attrs or {}).get("links", [])) | set(links)),
+                       links_unresolved=unresolved)
 
     if doc.depth == "deep":
-        _make_cards(g, doc, work, out.assets)
+        _make_cards(g, doc, work, out.assets, lookup)
     g.reindex(work)  # attrs (tldr, depth) were attached after create(); index the final text
     return out
 
@@ -293,15 +318,10 @@ def upsert_card(g: Graph, entity_key: str, q: str, a: str, origin: str, priority
         card.priority = max(card.priority, priority)
 
 
-def _make_cards(g: Graph, doc: RxfDocument, work: Entity, assets: list[Entity]) -> None:
+def _make_cards(g: Graph, doc: RxfDocument, work: Entity, assets: list[Entity], lookup) -> None:
     covered: set[str] = set()
     for rc in doc.review_cards:
-        target = None
-        if rc.about:
-            for t in ("method", "dataset", "idea", "claim", "topic"):
-                target = g.by_alias(t, rc.about)
-                if target:
-                    break
+        target = lookup(rc.about, ("method", "dataset", "idea", "claim", "topic")) if rc.about else None
         target = target or work
         covered.add(target.key)
         upsert_card(g, target.key, rc.q, rc.a, "rxf", priority=10 if target.attrs.get("origin") == "user" else 0)

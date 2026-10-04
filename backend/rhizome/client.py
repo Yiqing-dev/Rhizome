@@ -17,7 +17,8 @@ from .config import Settings, get_settings
 
 
 class Client(Protocol):
-    def ingest(self, text: str, filename: str = "inline.yaml", pdf: bytes | None = None) -> dict[str, Any]: ...
+    def ingest(self, text: str, filename: str = "inline.yaml", pdf: bytes | None = None,
+               repair: bool = False) -> dict[str, Any]: ...
     def search(self, q: str, **filters: Any) -> list[dict[str, Any]]: ...
     def get(self, entity_id: int) -> dict[str, Any] | None: ...
     def get_by_key(self, key: str) -> dict[str, Any] | None: ...
@@ -53,13 +54,13 @@ class HttpClient:
         r.raise_for_status()
         return r.json()
 
-    def ingest(self, text, filename="inline.yaml", pdf=None):
+    def ingest(self, text, filename="inline.yaml", pdf=None, repair=False):
         if pdf is not None:
             files = {"file": (filename, text.encode("utf-8"), "application/yaml"),
                      "pdf": (Path(filename).with_suffix(".pdf").name, pdf, "application/pdf")}
-            r = self._c.post("/ingest", files=files)
+            r = self._c.post("/ingest", files=files, data={"repair": "true" if repair else "false"})
         else:
-            r = self._c.post("/ingest", json={"text": text, "filename": filename})
+            r = self._c.post("/ingest", json={"text": text, "filename": filename, "repair": repair})
         if r.status_code == 422:
             return r.json()["detail"]
         r.raise_for_status()
@@ -135,12 +136,12 @@ class LocalClient:
 
             raise PermissionError(_("cli.read_only"))
 
-    def ingest(self, text, filename="inline.yaml", pdf=None):
+    def ingest(self, text, filename="inline.yaml", pdf=None, repair=False):
         self._rw()
         from .pipeline.ingest import ingest_text
 
         with self._s() as s:
-            return ingest_text(s, text, filename, pdf).to_dict()
+            return ingest_text(s, text, filename, pdf, repair=repair).to_dict()
 
     def search(self, q, **filters):
         from .services.search import DEFAULT_TYPES, Filters, search

@@ -100,6 +100,21 @@
 - 用户手动编辑的 JSON（设置、资料库位置指向文件、Claude Desktop 配置、token）改为兼容 BOM 读取：旧版记事本保存的 UTF-8 文件带 BOM，原来会被静默忽略。
 - 本地测试覆盖中文+空格的资料库、收件箱文件名、备份、快照、只读模式、迁移资料库和 Claude 配置路径。
 
+## RXF 导入：一次真实失败后的修正（2026-10-04）
+
+一份导出报了 36 行错，实际只有 5 个原因。导出端的问题（`transfer` 被摊平、`topics` 多了 `new`）已由新的导出 prompt 约束；软件这边做了以下修改：
+
+| 项 | 修改 |
+| --- | --- |
+| schema 单一来源 | 删除包内的 JSON Schema 副本，校验器在运行时由 Pydantic 模型生成；`rxf-spec/schema/` 下的文件只是发布用的导出物，契约测试保证它与模型一致 |
+| 新字段 | 顶层 `id`、`exported_at`、`language`；topics / claims / datasets / methods / ideas / issues / user_insights / review_cards 可带文件内 `id`。都可选，旧文件继续有效 |
+| 引用校验 | 文件里只要声明了 id，`links_to` 和 `about` 就必须是本文件里的 id，指向 issue 或复习卡也会报错（它们不是图上的节点）；重复 id 报错。与 schema 错误一起报告 |
+| 引用变成边 | 入库时建立“文件内 id → 库内实体”映射：用户观点 → claim / method / dataset / idea 为 `relates_to`（新增的第 14 种边），→ topic 为 `applicable_to`；`review_cards.about` 和 `transfer.to` 也按 id 解析。rebuild 后不变 |
+| 报告按原因归并 | 按“路径模式 + 字段”合并，例如 `claims.*: 不允许的字段 score（10 处）`，每个原因附一句修正提示；摊平的 transfer 产生的三条错误合并为一个原因 |
+| 不静默修复 | 已知漂移只在用户要求时修正：`rhz ingest --repair`，或首页“收件箱中未通过的文件”里的“修正后导入”。L0 保留原始字节，L1 的 `meta.repairs` 记录修了什么 |
+| 收件箱 | 按内容识别 RXF（顶层有 `rxf_version:`），不看文件名和扩展名；`.pdf`、下载中的临时文件、隐藏文件不处理；文件名含空格和中文已测试 |
+| 测试 | 正例 `rxf-spec/examples/deep-with-ids.yaml`，负例 `rxf-spec/examples/invalid/export-drift.yaml`（摊平的 transfer、`new`、指向不存在 id 的引用），可修复样例 `backend/tests/fixtures/drift-repairable.yaml`；`backend/tests/test_rxf_ids.py` |
+
 ## 还需要你来做的（M0）
 
 - 定稿导出指令：`rxf-spec/instructions/` 里是按设计文档整理的版本，加了一条“含问号的文本不要写进花括号”——

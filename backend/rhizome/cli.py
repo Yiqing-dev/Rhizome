@@ -136,6 +136,8 @@ def _print_ingest(name: str, r: dict[str, Any]) -> None:
         typer.echo(_("cli.duplicate", file=name))
         return
     typer.secho(_("cli.ingested", file=name, work=r.get("work_key")), fg="green")
+    if r.get("repairs"):
+        typer.secho(_("cli.repaired", fixes="; ".join(_(f"rxf.repair.{c}") for c in r["repairs"])), fg="yellow")
     if r.get("suspect"):
         typer.secho(_("cli.suspect", ids=", ".join(r["suspect"])), fg="yellow")
     if r.get("related"):
@@ -146,7 +148,9 @@ def _print_ingest(name: str, r: dict[str, Any]) -> None:
 
 
 @app.command()
-def ingest(files: list[Path], move: bool = typer.Option(False, help="Move files to done/ or error/")) -> None:
+def ingest(files: list[Path], move: bool = typer.Option(False, help="Move files to done/ or error/"),
+           repair: bool = typer.Option(False, help="Fix known export drift first (the original stays in L0, "
+                                                    "the fix is recorded in L1)")) -> None:
     """Ingest RXF files (a same-named .pdf is attached automatically)."""
     if move:
         from .db.session import init_db
@@ -154,7 +158,7 @@ def ingest(files: list[Path], move: bool = typer.Option(False, help="Move files 
 
         init_db()
         for f in files:
-            _print_ingest(f.name, ingest_file(f).to_dict())
+            _print_ingest(f.name, ingest_file(f, repair=repair).to_dict())
         return
     from .pipeline.ingest import read_inbox_file
 
@@ -162,7 +166,7 @@ def ingest(files: list[Path], move: bool = typer.Option(False, help="Move files 
     results = []
     for f in files:
         text, pdf = read_inbox_file(f)
-        r = c.ingest(text, f.name, pdf)
+        r = c.ingest(text, f.name, pdf, repair=repair)
         results.append(r)
         if not _state["json"]:
             _print_ingest(f.name, r)
@@ -455,7 +459,7 @@ def rxf_schema(output: Optional[Path] = typer.Option(None, "-o")) -> None:
 @rxf_app.command("validate")
 def rxf_validate(files: list[Path]) -> None:
     """Validate RXF files without ingesting them."""
-    from .rxf.loader import error_report, load_rxf
+    from .rxf.loader import load_rxf, report_for
 
     bad = 0
     for f in files:
@@ -464,7 +468,7 @@ def rxf_validate(files: list[Path]) -> None:
             typer.secho(f"OK  {f}", fg="green")
         else:
             bad += 1
-            typer.echo(error_report(f.name, r.problems))
+            typer.echo(report_for(f.name, r))
     raise typer.Exit(1 if bad else 0)
 
 

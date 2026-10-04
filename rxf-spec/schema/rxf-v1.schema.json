@@ -31,6 +31,19 @@
     "Claim": {
       "additionalProperties": false,
       "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Local id, unique within this file (e.g. c1, m2); user_insights.links_to and review_cards.about refer to it",
+          "title": "Id"
+        },
         "text": {
           "title": "Text",
           "type": "string"
@@ -87,6 +100,19 @@
     "Dataset": {
       "additionalProperties": false,
       "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Local id, unique within this file (e.g. c1, m2); user_insights.links_to and review_cards.about refer to it",
+          "title": "Id"
+        },
         "accession": {
           "anyOf": [
             {
@@ -223,6 +249,19 @@
     "Idea": {
       "additionalProperties": false,
       "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Local id, unique within this file (e.g. c1, m2); user_insights.links_to and review_cards.about refer to it",
+          "title": "Id"
+        },
         "text": {
           "title": "Text",
           "type": "string"
@@ -257,6 +296,19 @@
     "Issue": {
       "additionalProperties": false,
       "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Local id, unique within this file (e.g. c1, m2); user_insights.links_to and review_cards.about refer to it",
+          "title": "Id"
+        },
         "severity": {
           "enum": [
             "minor",
@@ -305,6 +357,19 @@
     "Method": {
       "additionalProperties": false,
       "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Local id, unique within this file (e.g. c1, m2); user_insights.links_to and review_cards.about refer to it",
+          "title": "Id"
+        },
         "name": {
           "title": "Name",
           "type": "string"
@@ -517,6 +582,19 @@
     "ReviewCard": {
       "additionalProperties": false,
       "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Local id, unique within this file (e.g. c1, m2); user_insights.links_to and review_cards.about refer to it",
+          "title": "Id"
+        },
         "q": {
           "title": "Q",
           "type": "string"
@@ -535,6 +613,7 @@
             }
           ],
           "default": null,
+          "description": "id of the item in this file the card is about",
           "title": "About"
         }
       },
@@ -548,6 +627,19 @@
     "TopicRef": {
       "additionalProperties": false,
       "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Local id, unique within this file (e.g. c1, m2); user_insights.links_to and review_cards.about refer to it",
+          "title": "Id"
+        },
         "name": {
           "title": "Name",
           "type": "string"
@@ -614,11 +706,25 @@
     "UserInsight": {
       "additionalProperties": false,
       "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Local id, unique within this file (e.g. c1, m2); user_insights.links_to and review_cards.about refer to it",
+          "title": "Id"
+        },
         "text": {
           "title": "Text",
           "type": "string"
         },
         "links_to": {
+          "description": "ids of items in this file",
           "items": {
             "type": "string"
           },
@@ -639,6 +745,45 @@
       "const": 1,
       "title": "Rxf Version",
       "type": "integer"
+    },
+    "id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Id of this export, assigned by the exporting chat",
+      "title": "Id"
+    },
+    "exported_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "When the export was written (ISO 8601)",
+      "title": "Exported At"
+    },
+    "language": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Main language of the free-text values, e.g. zh-CN, en",
+      "title": "Language"
     },
     "prompt_version": {
       "anyOf": [

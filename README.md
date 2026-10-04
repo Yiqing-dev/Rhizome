@@ -111,8 +111,9 @@ rhz --snapshot ~/.rhizome/rhizome.db search "spatial domain detection"
   database before every upgrade.
 - No personal data in the repository: fixtures are synthetic (DOIs under the `10.5555` test prefix).
   `pre-commit` runs gitleaks. Dependencies must be Apache-2.0 compatible; CI rejects GPL / AGPL.
-- After changing `rhizome/rxf/schema.py`: `rhz rxf schema -o rxf-spec/schema/rxf-v1.schema.json` and
-  copy it to `backend/rhizome/rxf/schemas/` (a contract test checks they match).
+- The RXF schema has one source: the Pydantic models in `rhizome/rxf/schema.py` (the validator builds its
+  JSON Schema from them). After changing them run `rhz rxf schema -o rxf-spec/schema/rxf-v1.schema.json`
+  to refresh the published copy (a contract test checks it matches).
 
 ## License
 

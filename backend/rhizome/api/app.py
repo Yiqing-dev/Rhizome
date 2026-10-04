@@ -8,7 +8,7 @@ import os
 import secrets
 import threading
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -58,6 +58,11 @@ def get_or_create_token(settings: Settings) -> str:
 class IngestBody(BaseModel):
     text: str
     filename: str = "inline.yaml"
+    repair: bool = False  # apply the known-drift fixes (recorded in L1), never done silently
+
+
+class InboxRetryBody(BaseModel):
+    repair: bool = False
 
 
 class RecallBody(BaseModel):
@@ -183,11 +188,50 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
             pdf_part = form.get("pdf")
             pdf = await pdf_part.read() if pdf_part is not None and not isinstance(pdf_part, str) else None
             filename = f.filename or "upload.yaml"
+            repair = str(form.get("repair", "")).lower() in ("1", "true", "yes")
         else:
             body = IngestBody.model_validate(await request.json())
-            text, filename, pdf = body.text, body.filename, None
+            text, filename, pdf, repair = body.text, body.filename, None, body.repair
         # network lookups and model inference are blocking: keep them off the event loop
-        res = await run_in_threadpool(ingest_text, s, text, filename, pdf)
+        res = await run_in_threadpool(lambda: ingest_text(s, text, filename, pdf, repair=repair))
+        if not res.ok:
+            raise HTTPException(422, res.to_dict())
+        return res.to_dict()
+
+    # ---- inbox files that failed (error/) ----
+    def _failed_file(name: str) -> Path:
+        err = get_settings().inbox / "error"
+        p = err / name
+        if Path(name).name != name or not p.is_file() or name.endswith(".error.txt"):
+            raise HTTPException(404, "no such file")
+        return p
+
+    @app.get("/inbox/failed", dependencies=A)
+    def inbox_failed() -> dict[str, Any]:
+        from ..pipeline.ingest import read_inbox_file
+        from ..rxf.loader import load_rxf
+
+        err = get_settings().inbox / "error"
+        files = []
+        for p in sorted(err.iterdir(), key=lambda q: q.stat().st_mtime, reverse=True) if err.is_dir() else []:
+            if not p.is_file() or p.name.endswith(".error.txt") or p.suffix.lower() == ".pdf":
+                continue
+            rep = p.with_name(p.name + ".error.txt")
+            try:
+                repairable = load_rxf(read_inbox_file(p)[0]).repairable
+            except (OSError, UnicodeDecodeError):
+                repairable = []
+            files.append({"name": p.name, "report": rep.read_text("utf-8") if rep.exists() else None,
+                          "repairable": repairable, "has_pdf": p.with_suffix(".pdf").exists(),
+                          "modified": datetime.fromtimestamp(p.stat().st_mtime, timezone.utc).isoformat()})
+        return {"files": files}
+
+    @app.post("/inbox/failed/{name}", dependencies=W)
+    async def inbox_retry(name: str, body: InboxRetryBody) -> dict[str, Any]:
+        """Import a failed file again (after editing it, or with repair=true); it moves to done/ on success."""
+        from ..pipeline.ingest import ingest_file
+
+        res = await run_in_threadpool(ingest_file, _failed_file(name), body.repair)
         if not res.ok:
             raise HTTPException(422, res.to_dict())
         return res.to_dict()

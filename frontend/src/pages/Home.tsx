@@ -8,6 +8,7 @@ import { useLoad } from "../hooks";
 import { fmtNum } from "../i18n";
 import { go, href } from "../router";
 
+const RXF_HEAD = /^\s*(?:```[\w-]*\s*$\s*)?rxf_version\s*:/m;
 const TILE_TYPES = ["work", "dataset", "method", "idea", "claim", "topic"] as const;
 
 export default function Home() {
@@ -17,33 +18,63 @@ export default function Home() {
   const [ctx, setCtx] = useState("");
   const [recalled, setRecalled] = useState<Hit[] | null>(null);
   const [over, setOver] = useState(false);
-  const [ingestMsg, setIngestMsg] = useState<{ ok: boolean; text: string; related?: any[] } | null>(null);
+  const [ingestMsg, setIngestMsg] = useState<{ ok: boolean; text: string; related?: any[]; retry?: File[]; repairable?: string[] } | null>(null);
 
-  async function onFiles(list: FileList | null) {
+  const failed = useLoad(() => api.inboxFailed(), []);
+  const fixes = (codes: string[]) => codes.map((c) => t(`home.fix.${c}`)).join("; ");
+
+  async function onFiles(list: FileList | File[] | null, repair = false) {
     const files = Array.from(list ?? []);
     const stem = (n: string) => n.replace(/\.[^.]+$/, "").toLowerCase();
-    const rxf = files.filter((f) => /\.ya?ml$/i.test(f.name));
+    const pdfs = new Map(files.filter((f) => /\.pdf$/i.test(f.name)).map((f) => [stem(f.name), f]));
+    // RXF is recognised by content, not by name or extension (chat clients name files oddly)
+    const rxf: File[] = [];
+    for (const f of files) {
+      if (/\.pdf$/i.test(f.name)) continue;
+      if (/\.(ya?ml|rxf)$/i.test(f.name) || RXF_HEAD.test(await f.slice(0, 65536).text())) rxf.push(f);
+    }
     if (!rxf.length) {
       setIngestMsg({ ok: false, text: t("home.drop_not_rxf") });
       return;
     }
-    const pdfs = new Map(files.filter((f) => /\.pdf$/i.test(f.name)).map((f) => [stem(f.name), f]));
     const lines: string[] = [];
     let ok = true;
     let related: any[] = [];
+    const retry: File[] = [];
+    const repairable = new Set<string>();
     for (const f of rxf) {
       try {
-        const r = await api.ingestFile(f, pdfs.get(stem(f.name)));
+        const r = await api.ingestFile(f, pdfs.get(stem(f.name)), repair);
         lines.push(t(r.duplicate ? "home.ingested_dup" : "home.ingested", { work: r.work_key }));
+        if (r.repairs?.length) lines.push(t("home.repaired", { fixes: fixes(r.repairs) }));
         related = related.concat(r.related ?? []);
       } catch (e) {
         ok = false;
-        const d = (e as ApiError).detail as { report?: string } | string | undefined;
+        const d = (e as ApiError).detail as { report?: string; repairable?: string[] } | string | undefined;
         lines.push(`${f.name}: ${(typeof d === "string" ? d : d?.report) ?? t("common.error")}`);
+        if (typeof d === "object" && d?.repairable?.length) {
+          retry.push(f, ...(pdfs.has(stem(f.name)) ? [pdfs.get(stem(f.name))!] : []));
+          d.repairable.forEach((c) => repairable.add(c));
+        }
       }
     }
-    setIngestMsg({ ok, text: lines.join("\n\n"), related: [...new Map(related.map((r) => [r.work_id, r])).values()] });
+    setIngestMsg({ ok, text: lines.join("\n\n"), related: [...new Map(related.map((r) => [r.work_id, r])).values()],
+                   retry: retry.length ? retry : undefined, repairable: [...repairable] });
     stats.reload();
+  }
+
+  async function retryFailed(name: string, repair: boolean) {
+    try {
+      const r = await api.inboxRetry(name, repair);
+      const lines = [t("home.ingested", { work: r.work_key })];
+      if (r.repairs?.length) lines.push(t("home.repaired", { fixes: fixes(r.repairs) }));
+      setIngestMsg({ ok: true, text: lines.join("\n"), related: r.related });
+      stats.reload();
+    } catch (e) {
+      const d = (e as ApiError).detail as { report?: string } | undefined;
+      setIngestMsg({ ok: false, text: d?.report ?? t("common.error") });
+    }
+    failed.reload();
   }
 
   const s = stats.data;
@@ -97,13 +128,20 @@ export default function Home() {
             onDragOver={(e) => { e.preventDefault(); setOver(true); }}
             onDragLeave={() => setOver(false)}
             onDrop={(e) => { e.preventDefault(); setOver(false); onFiles(e.dataTransfer.files); }}>
-            <input type="file" accept=".yaml,.yml,.pdf" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }} />
+            <input type="file" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }} />
             <UploadIcon />
             <span>{t("home.drop")}</span>
           </label>
           {ingestMsg && (
             <div className={`notice ${ingestMsg.ok ? "ok" : "error"}`}>
               <pre>{ingestMsg.text}</pre>
+              {ingestMsg.retry && (
+                <div className="row wrap" style={{ marginTop: "0.5rem" }}>
+                  <span className="grow" />
+                  <button className="primary" title={t("home.repairable", { fixes: fixes(ingestMsg.repairable ?? []) })}
+                    onClick={() => onFiles(ingestMsg.retry!, true)}>{t("home.repair_import")}</button>
+                </div>
+              )}
               {ingestMsg.related?.length ? (
                 <div className="stack-sm" style={{ marginTop: "0.5rem" }}>
                   <div className="eyebrow">{t("home.related")}</div>
@@ -117,6 +155,23 @@ export default function Home() {
               ) : null}
             </div>
           )}
+          {failed.data?.files.length ? (
+            <div className="stack-sm failed-inbox">
+              <div className="eyebrow">{t("home.failed_title")}</div>
+              <p className="hint">{t("home.failed_hint")}</p>
+              <ul className="plain">{failed.data.files.map((f) => (
+                <li key={f.name}>
+                  <div className="row between wrap">
+                    <strong className="grow">{f.name}</strong>
+                    <button onClick={() => retryFailed(f.name, false)}>{t("home.retry")}</button>
+                    {f.repairable.length ? <button className="primary" title={fixes(f.repairable)}
+                      onClick={() => retryFailed(f.name, true)}>{t("home.repair_import")}</button> : null}
+                  </div>
+                  {f.report && <details><summary>{t("home.show_report")}</summary><pre>{f.report}</pre></details>}
+                </li>
+              ))}</ul>
+            </div>
+          ) : null}
         </section>
         <section className="panel">
           <h2><SparkIcon />{t("home.recall_title")}</h2>
