@@ -36,10 +36,23 @@ class Filters:
     extra: dict[str, Any] = field(default_factory=dict)
 
 
+_STOP = frozenset("""the and for with from that this these those into onto over under than then there their
+they them were was are been being have has had not but can could would should will may might also such
+which while where when what who whom whose how why all any each few more most other some only own same
+very just about above after again against before below between both during further here once out off
+our ours your yours its itself his her hers him she himself herself use used using via per data based
+import def return self none true false print""".split())
+MAX_FTS_TERMS = 12
+
+
 def _fts_query(q: str) -> str | None:
-    terms = [t for t in norm(q).split() if len(t) >= 3]
+    """OR of the most specific words: deduplicated, no stopwords, at most MAX_FTS_TERMS (longest
+    first). A pasted analysis plan or script would otherwise become an OR of hundreds of terms and
+    take tens of seconds on a large library; the vector and rerank steps cover the rest."""
+    terms = [t for t in dict.fromkeys(norm(q).split()) if len(t) >= 3 and t not in _STOP]
     if not terms:
         return None
+    terms = sorted(terms, key=len, reverse=True)[:MAX_FTS_TERMS]
     return " OR ".join('"' + t.replace('"', '""') + '"' for t in terms)
 
 

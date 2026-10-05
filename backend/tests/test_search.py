@@ -98,3 +98,37 @@ def test_retrieval_regression_set(library, session):
     spec = spec.replace("expect: [claim]", f"expect: ['{claim.key}']")
     res = run(session, spec)
     assert res["passed"], res
+
+
+def test_recall_handles_empty_and_import_free_contexts(library, session):
+    from rhizome.services.recall import context_from_code, recall
+
+    assert recall(session, "") == [] and recall(session, "   \n ") == []
+    ctx = context_from_code("x <- read.csv(f)\nfit <- lm(y ~ x)\n")  # no imports, no comments
+    assert ctx.strip()
+    recall(session, ctx)  # must not raise
+    for blank in ("", "\n\n"):
+        assert context_from_code(blank) == ""
+
+
+def test_notebooks_and_scheduler_directives(library, session):
+    import json
+
+    from rhizome.services.recall import context_from_code
+
+    nb = json.dumps({"cells": [
+        {"cell_type": "markdown", "source": ["## spatial domain detection on Stereo-seq"]},
+        {"cell_type": "code", "source": ["import scanpy as sc\n", "adata = sc.read_h5ad(p)\n"]}]})
+    ctx = context_from_code(nb)
+    assert "scanpy" in ctx and "spatial domain detection" in ctx and "cells" not in ctx
+    ctx = context_from_code("#!/bin/bash\n#SBATCH --mem=64G\n#SBATCH -p gpu\n# run GRN inference\npython x.py\n")
+    assert "SBATCH" not in ctx and "GRN inference" in ctx
+
+
+def test_keyword_query_is_bounded():
+    from rhizome.services.search import MAX_FTS_TERMS, _fts_query
+
+    words = " ".join(f"term{i:04d}" for i in range(800)) + " the and with the term0001"
+    q = _fts_query(words * 3)
+    assert q.count(" OR ") + 1 == MAX_FTS_TERMS
+    assert '"the"' not in q and q.count('"term0001"') <= 1

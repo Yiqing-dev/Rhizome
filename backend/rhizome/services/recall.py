@@ -54,6 +54,8 @@ def recall(s: Session, context: str, limit: int | None = None, types: tuple[str,
     th = get_settings().thresholds
     limit = limit or th.recall_limit
     min_rel = th.recall_min if min_relevance is None else min_relevance
+    if not context or not context.strip():
+        return []  # an empty context is not a query (search would fall back to browsing)
     hits = search(s, context[:4000], Filters(types=types, include_candidates=False), limit=50)
     if not hits:
         return []
@@ -61,7 +63,7 @@ def recall(s: Session, context: str, limit: int | None = None, types: tuple[str,
     forget = forgetting(s, list(ents.values()))
     out = []
     for h in hits:
-        rel = h["relevance"] if h["relevance"] is not None else 0.0
+        rel = h.get("relevance") or 0.0
         if rel < min_rel:
             continue
         weight = 2.0 if h.get("origin") == "user" else 1.0
@@ -79,7 +81,34 @@ _R_LIB = re.compile(r"(?:library|require)\(\s*['\"]?([\w.]+)['\"]?\s*\)")
 _COMMENT = re.compile(r"(?:^|\s)(?:#|//|%)\s?(.+)$", re.M)
 
 
+_SCHEDULER = re.compile(r"^\s*#\s*(?:SBATCH|PBS|\$|BSUB)\b.*$", re.M | re.I)
+
+
+def _notebook_text(source: str) -> str | None:
+    """A Jupyter notebook (.ipynb JSON): its code and markdown cells as plain text."""
+    import json
+
+    try:
+        nb = json.loads(source)
+    except ValueError:
+        return None
+    if not isinstance(nb, dict) or not isinstance(nb.get("cells"), list):
+        return None
+    parts = []
+    for c in nb["cells"]:
+        src = c.get("source", "") if isinstance(c, dict) else ""
+        text = "".join(src) if isinstance(src, list) else str(src)
+        if c.get("cell_type") == "markdown":
+            text = "\n".join("# " + ln for ln in text.splitlines())  # prose counts like comments
+        parts.append(text)
+    return "\n".join(parts)
+
+
 def context_from_code(source: str) -> str:
+    nb = _notebook_text(source) if source.lstrip().startswith("{") else None
+    if nb is not None:
+        source = nb
+    source = _SCHEDULER.sub("", source)  # #SBATCH / #PBS directives are not about the analysis
     libs: list[str] = []
     for a, b in _PY_IMPORT.findall(source):
         libs += [x.strip().split(" as ")[0].split(".")[0] for x in (a or b).split(",") if x.strip()]
@@ -88,7 +117,10 @@ def context_from_code(source: str) -> str:
     std = {"os", "sys", "re", "json", "math", "time", "typing", "pathlib", "collections", "itertools",
            "functools", "subprocess", "argparse", "logging", "datetime", "random", "glob", "shutil"}
     libs = [lib for lib in dict.fromkeys(libs) if lib not in std]
-    return " ".join(libs) + "\n" + "\n".join(comments[:80])
+    out = (" ".join(libs) + "\n" + "\n".join(comments[:80])).strip()
+    if not out:  # no imports or comments: the code itself is the best context we have
+        out = source.strip()[:4000]
+    return out
 
 
 # ---- recall on ingest: which papers you read relate to the new one, and along which dimension
