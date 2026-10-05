@@ -117,9 +117,14 @@ jobs:
           $p = Start-Process -FilePath $rhz -ArgumentList "serve","--host","127.0.0.1","--port","51999" -PassThru -WindowStyle Hidden
           $ok = $false
           for ($i = 0; $i -lt 120; $i++) {
-            try { $h = Invoke-RestMethod http://127.0.0.1:51999/health; $ok = $true; break } catch { Start-Sleep -Milliseconds 500 }
+            try { $h = Invoke-RestMethod http://127.0.0.1:51999/health; $ok = $true; break } catch { $err = $_; Start-Sleep -Milliseconds 500 }
           }
-          if (-not $ok) { Stop-Process $p -Force; Write-Error "server did not start"; exit 1 }
+          if (-not $ok) {
+            Stop-Process $p -Force
+            Write-Host "last /health error: $err"
+            Get-Content (Join-Path $env:RHIZOME_DATA_DIR "logs\rhizome-serve.log") -Tail 60 -ErrorAction SilentlyContinue
+            Write-Error "server did not answer /health"; exit 1
+          }
           $ui = Invoke-WebRequest http://127.0.0.1:51999/ -UseBasicParsing
           if ($ui.StatusCode -ne 200) { exit 1 }
           $auth = @{ Authorization = "Bearer smoke" }

@@ -155,7 +155,7 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         if not read_only:  # the first search should not pay for loading the vector index
             from ..pipeline.graph import VECTORS
 
-            threading.Thread(target=VECTORS.preload, args=(settings,), daemon=True, name="rhizome-preload").start()
+            threading.Thread(target=VECTORS.preload, args=(st,), daemon=True, name="rhizome-preload").start()
         yield
         stop.set()
         if worker:
@@ -196,7 +196,7 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         # bound to loopback: a page on another site that resolves its own name to 127.0.0.1 (DNS
         # rebinding) arrives with that name in Host and is refused before any route runs
         # (enforced once `rhz serve` listens; in-process test clients have no real Host)
-        if getattr(app.state, "enforce_host", False) and settings.host in ("127.0.0.1", "localhost", "::1"):
+        if getattr(app.state, "enforce_host", False) and st.host in ("127.0.0.1", "localhost", "::1"):
             host = request.headers.get("host", "").rsplit(":", 1)[0] if not request.headers.get("host", "").startswith("[") \
                 else request.headers.get("host", "").split("]")[0] + "]"
             if host not in ("127.0.0.1", "localhost", "[::1]", "::1", ""):

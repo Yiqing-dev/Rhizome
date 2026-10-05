@@ -237,3 +237,16 @@ def test_mcp_tools_carry_annotations_and_ingest_repairs(settings, session):
     out = json.loads(m.rhz_ingest(fixture.read_text("utf-8"), repair=True))
     assert out["ok"] and out["repairs"]
     assert not drift.exists()
+
+
+def test_app_built_like_rhz_serve_answers_health(settings):
+    """`rhz serve` builds the app without passing settings; the Host check and the index preload
+    must use the resolved settings, not the (None) argument (the 0.1.5 Windows smoke caught it)."""
+    from rhizome.api.app import create_app
+
+    app = create_app(start_worker=False)
+    app.state.enforce_host = True
+    with TestClient(app) as c:  # with lifespan: the preload thread starts as well
+        r = c.get("/health", headers={"host": "127.0.0.1:51999"})
+        assert r.status_code == 200 and r.json()["ok"]
+        assert c.get("/health", headers={"host": "evil.example.com"}).status_code == 421
