@@ -171,7 +171,7 @@ function PaperCard({ card }: { card: Card }) {
 
 function AssetAttrs({ card }: { card: Card }) {
   const { t } = useTranslation();
-  const hidden = new Set(["tldr", "rxf_extraction", "transfer", "links", "links_unresolved", "verified", "weight", "origin", "edited", "original_text"]);
+  const hidden = new Set(["id", "tldr", "rxf_extraction", "transfer", "links", "links_unresolved", "verified", "weight", "origin", "edited", "original_text"]);
   const rows = Object.entries(card.attrs).filter(([k, v]) => !hidden.has(k) && v !== null && typeof v !== "object");
   if (!rows.length && !card.attrs.transfer && card.aliases.length <= 1) return null;
   return (

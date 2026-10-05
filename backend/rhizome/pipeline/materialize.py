@@ -16,7 +16,7 @@ from ..i18n import _
 from ..inference import get_backend
 from ..rxf.schema import RxfDocument, uses_ids
 from ..text import norm, sha256
-from .canonicalize import resolve_claim, resolve_free, resolve_modality, resolve_organism
+from .canonicalize import is_user, resolve_claim, resolve_free, resolve_modality, resolve_organism
 from ..ml import get_reranker
 from .graph import Graph, embed_texts, knn
 
@@ -153,18 +153,21 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
                   "strength": _strength(c.evidence_type, c.logic_jump)}
         edge(work, cr.entity, c.stance, evidence=c.evidence, attrs=eattrs,
              confidence=0.5 if c.logic_jump else 1.0)
-        for other in cr.also_supports:
-            edge(work, other, "supports", evidence=c.evidence, attrs={**eattrs, "via": "nli"}, confidence=0.7)
+        if c.stance == "supports":  # a paper that contradicts this claim does not support what it entails
+            for other in cr.also_supports:
+                edge(work, other, "supports", evidence=c.evidence, attrs={**eattrs, "via": "nli"}, confidence=0.7)
         for other, p_contra in cr.contradicts:
             g.queue("contradiction", {"work": work.key, "claim": other.key, "claim_text": other.canonical_name,
                                       "new_claim": cr.entity.key, "new_text": c.text, "evidence": c.evidence,
+                                      "stance": c.stance, "evidence_type": c.evidence_type,
+                                      "strength": eattrs["strength"], "extraction_id": eid,
                                       "score": round(p_contra, 4)},
                     dedupe=f"contradiction:{work.key}|{other.key}", score=p_contra)
         remember(c, cr.entity)
         out.assets.append(cr.entity)
 
     for d in doc.assets.datasets:
-        ent = _dataset(g, d, checks)
+        ent = _dataset(g, d, checks, authoritative=d.role == "produces")
         remember(d, ent)
         if ent is None:
             continue
@@ -176,7 +179,7 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
         out.assets.append(ent)
 
     for m in doc.assets.methods:
-        ent = _method(g, m, checks)
+        ent = _method(g, m, checks, authoritative=m.role == "proposes")
         remember(m, ent)
         if ent is None:
             continue
@@ -189,24 +192,36 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
         out.assets.append(ent)
 
     for idea in doc.assets.ideas:
-        attrs = {"origin": idea.origin, "transfer": idea.transfer.model_dump() if idea.transfer else None}
-        r = resolve_free(g, "idea", idea.text, attrs=attrs)
-        if idea.origin == "user":
+        transfer, topic = None, None
+        if idea.transfer:
+            transfer = idea.transfer.model_dump()
+            if idea.transfer.to:
+                # the file-local id (t2) or name becomes the topic's canonical name and key
+                topic = ids.get(idea.transfer.to) or g.by_alias("topic", idea.transfer.to)
+                if topic is not None and topic.type == "topic":
+                    transfer.update(to=topic.canonical_name, to_key=topic.key)
+                elif by_id and idea.transfer.to in ids:
+                    transfer["to"] = None  # an id of an item that was not stored
+        attrs = {"origin": idea.origin, "transfer": transfer}
+        r = resolve_free(g, "idea", idea.text, attrs=attrs, origin=idea.origin)
+        if idea.origin == "user" and (r.created or is_user(r.entity)):
             g.update_attrs(r.entity, origin="user")
+        if transfer and (r.entity.attrs or {}).get("transfer") != transfer and topic is not None:
+            g.update_attrs(r.entity, transfer=transfer)
+            g.reindex(r.entity)
         edge(work, r.entity, "proposes", attrs={"origin": idea.origin})
         remember(idea, r.entity)
-        if idea.transfer and idea.transfer.to:
-            topic = ids.get(idea.transfer.to) or g.by_alias("topic", idea.transfer.to)
-            if topic is not None and topic.type == "topic":
-                edge(r.entity, topic, "applicable_to", attrs={"transfer_type": idea.transfer.type,
-                                                              "barrier": idea.transfer.barrier})
+        if topic is not None:
+            edge(r.entity, topic, "applicable_to", attrs={"transfer_type": idea.transfer.type,
+                                                          "barrier": idea.transfer.barrier})
         out.assets.append(r.entity)
 
     # user insights: create all first, so an insight may link to another insight of the same file
     insights = []
     for ins in doc.user_insights:
-        r = resolve_free(g, "idea", ins.text, attrs={"origin": "user", "weight": 2.0})
-        g.update_attrs(r.entity, origin="user", weight=2.0)
+        r = resolve_free(g, "idea", ins.text, attrs={"origin": "user", "weight": 2.0}, origin="user")
+        if r.created or is_user(r.entity):
+            g.update_attrs(r.entity, origin="user", weight=2.0)
         edge(work, r.entity, "proposes", attrs={"origin": "user"}, confidence=1.0)
         remember(ins, r.entity)
         insights.append((ins, r.entity))
@@ -231,8 +246,8 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
     return out
 
 
-def _dataset(g: Graph, d, checks: dict[str, str]) -> Entity | None:
-    attrs = {k: v for k, v in d.model_dump().items() if k not in ("role", "evidence") and v is not None}
+def _dataset(g: Graph, d, checks: dict[str, str], authoritative: bool = False) -> Entity | None:
+    attrs = {k: v for k, v in d.model_dump().items() if k not in ("id", "role", "evidence") and v is not None}
     if d.accession:
         raw_acc = d.accession.strip()
         if checks.get(raw_acc) in ("not_found", "bad_format"):
@@ -250,7 +265,7 @@ def _dataset(g: Graph, d, checks: dict[str, str]) -> Entity | None:
                          aliases=(acc,) + ((d.name,) if d.name else ()))
         else:
             g.anchor(e, acc)
-            g.update_attrs(e, **attrs)
+            g.merge_reported(e, attrs, authoritative=authoritative)
             g.add_alias(e, acc)
             if d.name:
                 g.add_alias(e, d.name)
@@ -259,9 +274,9 @@ def _dataset(g: Graph, d, checks: dict[str, str]) -> Entity | None:
     return resolve_free(g, "dataset", d.name, attrs=attrs).entity
 
 
-def _method(g: Graph, m, checks: dict[str, str]) -> Entity | None:
+def _method(g: Graph, m, checks: dict[str, str], authoritative: bool = False) -> Entity | None:
     attrs = {k: v for k, v in m.model_dump().items()
-             if k not in ("role", "evidence", "extends") and v not in (None, [])}
+             if k not in ("id", "role", "evidence", "extends") and v not in (None, [])}
     repo = normalize_repo(m.repo) if m.repo else None
     if m.repo and (repo is None or checks.get(repo) == "not_found"):
         # not a forge repository (a lab site, Hugging Face, ...) -> a free concept that keeps the
@@ -277,7 +292,7 @@ def _method(g: Graph, m, checks: dict[str, str]) -> Entity | None:
                          attrs={**attrs, "verified": checks.get(repo, "unverified")}, aliases=(repo,))
         else:
             g.anchor(e, repo)
-            g.update_attrs(e, **attrs)
+            g.merge_reported(e, attrs, authoritative=authoritative)
             g.add_alias(e, m.name)
             g.add_alias(e, repo)
             g.reindex(e)

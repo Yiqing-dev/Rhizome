@@ -334,6 +334,17 @@ class Graph:
     def invalidate_redirects(self) -> None:
         self._redirects = None
 
+    def pinned_by_decision(self, key: str) -> bool:
+        """``key`` takes part in a human merge whose other side does not exist (yet): during a
+        rebuild the other export may simply come later. The entity is then created under its own
+        key and left alone, so the replayed merge finds both sides; probing neighbours could
+        auto-merge one of them elsewhere and silently lose the human decision."""
+        r = self.redirects()
+        target = self.resolve_key(key)
+        if target != key:
+            return self.s.execute(select(Entity.id).where(Entity.key == target)).first() is None
+        return key in set(r.values())
+
     # -- entities --
     def by_key(self, key: str) -> Entity | None:
         return self.s.execute(select(Entity).where(Entity.key == self.resolve_key(key))).scalar_one_or_none()
@@ -417,6 +428,39 @@ class Graph:
         self.reindex(e)
         return True
 
+    REPORTED_SKIP = ("origin", "weight", "verified", "reported", "id")
+
+    def merge_reported(self, e: Entity, attrs: dict[str, Any] | None, authoritative: bool = False) -> bool:
+        """Attributes several papers report about one dataset or method (tissue, organism, scale,
+        io ...): an empty slot is filled; a conflicting value is kept in ``attrs.reported[k]`` and
+        replaces the current one only when this paper is the producer (``authoritative``) and the
+        current value did not come from a producer. Returns whether anything changed."""
+        cur = dict(e.attrs or {})
+        reported: dict[str, dict[str, Any]] = {k: dict(v) for k, v in (cur.get("reported") or {}).items()}
+        changed = False
+        for k, v in (attrs or {}).items():
+            if k in self.REPORTED_SKIP or v in (None, [], "", {}):
+                continue
+            old = cur.get(k)
+            if old in (None, [], "", {}):
+                cur[k] = v
+                changed = True
+                continue
+            if old == v or (isinstance(v, str) and isinstance(old, str) and norm(old) == norm(v)):
+                continue
+            rec = reported.setdefault(k, {"values": [old]})
+            if v not in rec["values"]:
+                rec["values"].append(v)
+            if authoritative and not rec.get("producer"):
+                rec["producer"] = v
+                cur[k] = v
+            changed = True
+        if reported:
+            cur["reported"] = reported
+        if changed:
+            e.attrs = cur
+        return changed
+
     def update_attrs(self, e: Entity, **attrs: Any) -> None:
         merged = dict(e.attrs or {})
         merged.update({k: v for k, v in attrs.items() if v not in (None, [], "")})
@@ -466,6 +510,12 @@ class Graph:
             self.s.add(ed)
             self.s.flush()
             return ed
+        if extraction_id is not None and ed.extraction_id is not None and extraction_id != ed.extraction_id:
+            # another export (a deep re-export, a merged paper): its evidence, confidence and
+            # attributes replace the record as one unit; the previous record is kept, never mixed
+            self._fold_edge(ed, confidence=confidence, extraction_id=extraction_id, evidence=evidence,
+                            attrs=attrs, status=status)
+            return ed
         ed.confidence = max(ed.confidence or 0.0, confidence)
         if attrs:
             merged = dict(ed.attrs or {})
@@ -476,6 +526,32 @@ class Graph:
         if STATUS_RANK[status] > STATUS_RANK[ed.status]:
             ed.status = status
         return ed
+
+    EDGE_RECORD_KEYS = ("evidence_type", "strength", "logic_jump", "boundary", "via", "origin", "transfer_type",
+                        "barrier")
+
+    @staticmethod
+    def edge_record(ed: Edge) -> dict[str, Any]:
+        a = ed.attrs or {}
+        return {"extraction_id": ed.extraction_id, "evidence": ed.evidence, "confidence": ed.confidence,
+                **{k: a[k] for k in Graph.EDGE_RECORD_KEYS if k in a}}
+
+    def _fold_edge(self, ed: Edge, *, confidence: float, extraction_id: int | None, evidence: str | None,
+                   attrs: dict[str, Any] | None, status: str) -> None:
+        """Replace an edge's provenance with another extraction's, keeping the old one in
+        ``attrs.evidence_records`` (also used when a merge folds two edges into one)."""
+        old = self.edge_record(ed)
+        records = [r for r in (ed.attrs or {}).get("evidence_records", []) if r.get("extraction_id") != extraction_id]
+        if old.get("extraction_id") != extraction_id:
+            records.append(old)
+        keep = {k: v for k, v in (ed.attrs or {}).items()
+                if k not in self.EDGE_RECORD_KEYS and k != "evidence_records"}
+        ed.attrs = {**keep, **(attrs or {}), "evidence_records": records}
+        ed.evidence = evidence
+        ed.extraction_id = extraction_id
+        ed.confidence = confidence
+        if STATUS_RANK[status] > STATUS_RANK[ed.status]:
+            ed.status = status
 
     # -- merge / split --
     def merge(self, src: Entity, into: Entity) -> None:
@@ -489,6 +565,13 @@ class Graph:
                 continue
             existing = self.edge(new_src, new_dst, ed.type)
             if existing is not None:
+                if ed.extraction_id is not None and ed.extraction_id != existing.extraction_id:
+                    # keep the merged-away edge's provenance as a record of the surviving edge
+                    records = list((existing.attrs or {}).get("evidence_records", []))
+                    records.append(self.edge_record(ed))
+                    existing.attrs = {**(existing.attrs or {}), "evidence_records": records}
+                    if not existing.evidence and ed.evidence:
+                        existing.evidence = ed.evidence
                 if STATUS_RANK[ed.status] > STATUS_RANK[existing.status]:
                     existing.status = ed.status
                 existing.confidence = max(existing.confidence, ed.confidence)
@@ -513,6 +596,12 @@ class Graph:
             self.s.execute(update(RawObject).where(RawObject.work_key == src.key).values(work_key=into.key))
         merged_attrs = dict(src.attrs or {})
         merged_attrs.update(into.attrs or {})
+        if (src.attrs or {}).get("origin") == "user" and (into.attrs or {}).get("origin") != "user":
+            # the user's own idea survives a merge with a model's: their wording and origin stay
+            merged_attrs.update(origin="user", weight=max(float((src.attrs or {}).get("weight") or 2.0),
+                                                           float((into.attrs or {}).get("weight") or 0)))
+            self.add_alias(into, into.canonical_name, source="merge")
+            into.canonical_name = src.canonical_name
         into.attrs = merged_attrs
         if src.status == "active" and into.status == "candidate":
             into.status = "active"

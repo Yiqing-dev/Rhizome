@@ -119,8 +119,14 @@ def _apply(s: Session, g: Graph, it: ReviewItem, p: dict[str, Any], action: str,
             made = decisions.record(g, "distinct", {"a": p["a"], "b": p["b"]})
     elif it.kind == "contradiction":
         if action == "accept":
-            made = decisions.record(g, "add_edge", {"src": p["work"], "dst": p["claim"], "type": "contradicts",
-                                                    "attrs": {"evidence": p.get("evidence")}})
+            # the paper's claim contradicts the existing one; when the paper itself argued *against*
+            # its claim, it is on the existing claim's side
+            etype = "supports" if p.get("stance") == "contradicts" else "contradicts"
+            attrs = {k: p[k] for k in ("evidence_type", "strength") if p.get(k)}
+            made = decisions.record(g, "add_edge", {"src": p["work"], "dst": p["claim"], "type": etype,
+                                                    "evidence": p.get("evidence"),
+                                                    "extraction_id": p.get("extraction_id"),
+                                                    "attrs": {**attrs, "via": "nli"}})
     elif it.kind == "retro_tag":
         if action in ("about", "applicable_to"):
             rel = action if p.get("type") == "work" else "applicable_to"

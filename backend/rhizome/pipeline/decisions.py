@@ -8,7 +8,7 @@ ops:
   distinct       {a, b}                       never propose merging these again
   split          {key, new_name, edges: [{src, dst, type}]}
   edge_status    {src, dst, type, status}     status: confirmed | rejected
-  add_edge       {src, dst, type, attrs?}
+  add_edge       {src, dst, type, attrs?, evidence?, extraction_id?, confidence?}
   create_topic   {name, definition?, examples?, counter_examples?, parent?, aliases?}
   confirm_topic  {key}
   rename         {key, name}
@@ -148,9 +148,11 @@ def _op_merge(g: Graph, p):
         raise DecisionError(f"merge target {p['into']} not found")
     src = g.s.execute(select(Entity).where(Entity.key == p["from"])).scalar_one_or_none()
     if src is None:
-        if g.resolve_key(p["from"]) != p["from"]:
-            # already merged away by an earlier decision; nothing to do (a replay, or a stale queue item)
-            return g.resolve_key(p["from"]) == into.key
+        where = g.resolve_key(p["from"])
+        if where == into.key:
+            return True  # already merged there by an earlier decision (a replay, or a stale queue item)
+        if where != p["from"]:
+            raise DecisionError(f"merge source {p['from']} ended up in {where}, not {p['into']}")
         raise DecisionError(f"merge source {p['from']} not found")
     if src.id == into.id:
         raise DecisionError("cannot merge an entity into itself")
@@ -197,7 +199,9 @@ def _op_edge_status(g: Graph, p):
 
 def _op_add_edge(g: Graph, p):
     src, dst = _need(g, p["src"]), _need(g, p["dst"])
-    ed = g.upsert_edge(src, dst, p["type"], attrs={**(p.get("attrs") or {}), "origin": "user"}, status="confirmed")
+    ed = g.upsert_edge(src, dst, p["type"], attrs={**(p.get("attrs") or {}), "origin": "user"}, status="confirmed",
+                       evidence=p.get("evidence"), extraction_id=p.get("extraction_id"),
+                       confidence=float(p.get("confidence") or 1.0))
     if ed is None:
         raise DecisionError("cannot link an entity to itself")
     ed.status = "confirmed"  # an explicit add overrides an earlier rejection (upsert never lowers 'rejected')
@@ -286,7 +290,8 @@ def _op_create_idea(g: Graph, p):
     from ..i18n import _
     from .materialize import upsert_card
 
-    r = resolve_free(g, "idea", p["text"], attrs={"origin": "user", "weight": 2.0, "links": p.get("links", [])})
+    r = resolve_free(g, "idea", p["text"], attrs={"origin": "user", "weight": 2.0, "links": p.get("links", [])},
+                     origin="user")
     g.update_attrs(r.entity, origin="user", weight=2.0)
     linked, unresolved, names = [], [], []
     for k in p.get("links", []):

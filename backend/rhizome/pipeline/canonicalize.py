@@ -41,10 +41,17 @@ def free_key(etype: str, name: str) -> str:
     return f"{etype}:{n}"
 
 
+def is_user(e: Entity | None) -> bool:
+    return bool(e is not None and (e.attrs or {}).get("origin") == "user")
+
+
 def resolve_free(g: Graph, etype: str, name: str, *, attrs: dict[str, Any] | None = None,
-                 status: str = "active", aliases: tuple[str, ...] = (), auto_merge: bool = True) -> Resolution:
+                 status: str = "active", aliases: tuple[str, ...] = (), auto_merge: bool = True,
+                 origin: str | None = None) -> Resolution:
     """``auto_merge=False``: even a very close neighbour only produces a merge *review* item (used
-    for claims without NLI, where similar wording can still mean the opposite)."""
+    for claims without NLI, where similar wording can still mean the opposite). ``origin``
+    ("user" | "model"): a user's idea and a model's are never merged automatically either, so the
+    user's wording is not silently replaced (and a model's idea not silently relabelled as theirs)."""
     th = get_settings().thresholds
     hit = g.by_alias(etype, name)
     if hit is None:
@@ -63,6 +70,8 @@ def resolve_free(g: Graph, etype: str, name: str, *, attrs: dict[str, Any] | Non
         g.add_alias(existing, name, source="redirect" if existing.key != key else "extraction")
         g.fill_attrs(existing, attrs)
         return Resolution(existing, False, 1.0)
+    if g.pinned_by_decision(key):  # the other side of a human merge comes later in this rebuild
+        return Resolution(g.create(etype, key, name, status=status, attrs=attrs, aliases=aliases), True, None)
 
     probe = Entity(type=etype, key=key, canonical_name=name, attrs=attrs or {})
     probe_text = entity_text(probe)
@@ -75,7 +84,8 @@ def resolve_free(g: Graph, etype: str, name: str, *, attrs: dict[str, Any] | Non
         scores = get_reranker().score(probe_text, [entity_text(c) for c in cands])
         j = max(range(len(cands)), key=lambda i: scores[i])
         best = (cands[j], scores[j])
-    if best and best[1] >= th.merge_auto and auto_merge:
+    cross_origin = best is not None and origin is not None and is_user(best[0]) != (origin == "user")
+    if best and best[1] >= th.merge_auto and auto_merge and not cross_origin:
         g.add_alias(best[0], name, source="auto-merge")
         for a in aliases:
             g.add_alias(best[0], a)
@@ -175,6 +185,8 @@ def resolve_claim(g: Graph, text: str, attrs: dict[str, Any]) -> ClaimResolution
     hit = g.by_alias("claim", text) or g.by_key(free_key("claim", text))
     if hit:
         return ClaimResolution(hit, False, [], [])
+    if g.pinned_by_decision(free_key("claim", text)):
+        return ClaimResolution(g.create("claim", free_key("claim", text), text, attrs=attrs), True, [], [])
     qvec = embed_texts(g.s, [text])[0]
     supports: list[Entity] = []
     contradicts: list[tuple[Entity, float]] = []
