@@ -81,7 +81,8 @@ export interface ExportView {
   extraction_id: number; depth: string; prompt_version: string | null; created_at: string; tldr: string[];
   claims: { text: string; evidence_type: string; evidence: string; boundary?: string; logic_jump?: boolean }[];
   issues: { severity: string; location?: string; text: string; test?: string }[];
-  user_insights: { text: string; links_to: string[] }[]; suspect: string[]; raw: string | null; has_pdf: boolean;
+  user_insights: { text: string; links_to: string[]; key?: string; entity_id?: number; name?: string; edited?: boolean }[];
+  suspect: string[]; raw: string | null; has_pdf: boolean;
 }
 export interface Card extends Hit {
   attrs: Record<string, any>; aliases: { alias: string; lang: string; source: string }[];
@@ -168,6 +169,8 @@ export const api = {
   recall: (text: string) => req<{ results: Hit[] }>("POST", "/recall", { text }),
   cardsDue: () => req<{ cards: DueCard[] }>("GET", "/cards/due"),
   grade: (id: string, rating: number) => req<{ interval_days: number }>("POST", `/cards/${id}/grade`, { rating }),
+  suspendCard: (id: string, entity = false) => req<{ suspended: boolean; cards: number }>("POST", `/cards/${id}/suspend`, { suspended: true, entity }),
+  dismissReview: (kind: string, topic?: string) => req<{ dismissed: number }>("POST", "/review/dismiss", { kind, topic }),
   digest: () => req<any>("GET", "/digest"),
   settings: () => req<Record<string, any>>("GET", "/settings"),
   patchSettings: (b: Record<string, unknown>) => req<Record<string, any>>("PATCH", "/settings", b),

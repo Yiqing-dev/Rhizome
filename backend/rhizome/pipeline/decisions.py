@@ -218,6 +218,11 @@ def _op_create_topic(g: Graph, p):
     if e is None:
         e = g.create("topic", key, p["name"], status="active", attrs=attrs, aliases=tuple(p.get("aliases") or ()))
     else:
+        if any(attrs.get(k) and attrs.get(k) != (e.attrs or {}).get(k) for k in attrs):
+            # a redefined topic: the pending candidates were judged against the old definition
+            g.s.execute(update(ReviewItem).where(ReviewItem.status == "pending", ReviewItem.kind == "retro_tag",
+                                                 ReviewItem.payload["topic"].as_string() == e.key)
+                        .values(status="obsolete", resolved_at=utcnow()))
         g.update_attrs(e, **attrs)
         e.status = "active"
         for a in p.get("aliases") or ():

@@ -29,13 +29,13 @@ topics:
 claims: []
 assets:
   datasets:
-    - {{accession: GSE999001, database: GEO, organism: Arabidopsis thaliana, tissue: {tissue}, modality: snRNA-seq, role: {role}}}
+    - {{accession: {acc}, database: GEO, organism: Arabidopsis thaliana, tissue: {tissue}, modality: snRNA-seq, role: {role}}}
   methods: []
 """
 
 
-def _doc(doi: str, title: str, tissue: str, role: str) -> str:
-    return LIGHT.format(doi=doi, title=title, tissue=tissue, role=role)
+def _doc(doi: str, title: str, tissue: str, role: str, acc: str = "GSE999001") -> str:
+    return LIGHT.format(doi=doi, title=title, tissue=tissue, role=role, acc=acc)
 
 
 A = "Use chromatin accessibility priors to constrain GRN edges when expression data are sparse"
@@ -125,13 +125,12 @@ def test_reported_attributes_are_not_last_writer_wins(settings, session):
     ds = g.by_key("dataset:GSE999001")
     assert ds.attrs["tissue"] == "root"
     assert ds.attrs["reported"]["tissue"]["values"] == ["root", "shoot"]
-    session.rollback()
-    g = Graph(session)
-    assert ingest_text(session, _doc("10.5555/x.2", "User paper", "shoot", "uses"), "u.yaml").ok
-    assert ingest_text(session, _doc("10.5555/x.3", "Another user", "leaf", "uses"), "v.yaml").ok
-    assert g.by_key("dataset:GSE999001").attrs["tissue"] == "shoot"  # first report fills, a second user does not flip
-    assert ingest_text(session, _doc("10.5555/x.1", "Producer paper", "root", "produces"), "p.yaml").ok
-    ds = g.by_key("dataset:GSE999001")
+    # the other order, on a second accession: users first, the producer last
+    assert ingest_text(session, _doc("10.5555/y.2", "User paper B", "shoot", "uses", "GSE999777"), "u2.yaml").ok
+    assert ingest_text(session, _doc("10.5555/y.3", "Another user B", "leaf", "uses", "GSE999777"), "v2.yaml").ok
+    assert g.by_key("dataset:GSE999777").attrs["tissue"] == "shoot"  # first report fills, a second user does not flip
+    assert ingest_text(session, _doc("10.5555/y.1", "Producer paper B", "root", "produces", "GSE999777"), "p2.yaml").ok
+    ds = g.by_key("dataset:GSE999777")
     assert ds.attrs["tissue"] == "root" and ds.attrs["reported"]["tissue"]["producer"] == "root"
     assert set(ds.attrs["reported"]["tissue"]["values"]) == {"root", "shoot", "leaf"}
     assert "id" not in ds.attrs

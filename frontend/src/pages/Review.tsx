@@ -72,6 +72,13 @@ export default function ReviewPage() {
             {KINDS.map((k) => <option key={k} value={k}>{k ? t(`review.kind.${k}`) : t("review.all")}</option>)}
           </select>
           <span className="muted small">{t("review.total", { n: q.data?.total ?? 0 })}</span>
+          {kind && (q.data?.total ?? 0) > 1 && (
+            <button className="ghost small" onClick={async () => {
+              if (!window.confirm(t("review.dismiss_confirm", { n: q.data?.total ?? 0 }))) return;
+              await api.dismissReview(kind);
+              q.reload();
+            }}>{t("review.dismiss_all")}</button>
+          )}
         </div>
       </div>
       <Loading error={q.error} loading={q.loading && !q.data} />

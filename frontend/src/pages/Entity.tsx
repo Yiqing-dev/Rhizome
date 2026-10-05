@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { Fragment, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ApiError, type Card, type EdgeView } from "../api";
+import { api, ApiError, errorText, type Card, type EdgeView, type ExportView } from "../api";
 import LocalGraph from "../components/LocalGraph";
 import { EntityLink, Legend, Loading, TypeBadge, edgeToken } from "../components/common";
 import { GraphIcon } from "../components/icons";
@@ -120,7 +120,7 @@ function EdgeGroups({ card }: { card: Card }) {
   );
 }
 
-function PaperCard({ card }: { card: Card }) {
+function PaperCard({ card, onChanged }: { card: Card; onChanged: () => void }) {
   const { t, i18n } = useTranslation();
   const [showRaw, setShowRaw] = useState<number | null>(null);
   return (
@@ -136,7 +136,7 @@ function PaperCard({ card }: { card: Card }) {
           <ol className="tldr">{ex.tldr.map((x, i) => <li key={i}>{x}</li>)}</ol>
           {ex.user_insights.length ? (<>
             <div className="section-label">{t("paper.your_view")}</div>
-            <div className="stack-sm">{ex.user_insights.map((u, i) => <div key={i} className="user-insight">{u.text}</div>)}</div>
+            <div className="stack-sm">{ex.user_insights.map((u, i) => <Insight key={i} u={u} onChanged={onChanged} />)}</div>
           </>) : null}
           {ex.claims.length ? (<>
             <div className="section-label">{t("paper.logic")}</div>
@@ -187,6 +187,44 @@ function AssetAttrs({ card }: { card: Card }) {
   );
 }
 
+/** One of your insights from an export: the current wording (editable in place; the export text
+ * stays as written) with a link to the idea it became. */
+function Insight({ u, onChanged }: { u: ExportView["user_insights"][number]; onChanged: () => void }) {
+  const { t } = useTranslation();
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(u.name ?? u.text);
+  const [err, setErr] = useState<string | null>(null);
+  async function save() {
+    if (!u.key || !text.trim() || text.trim() === (u.name ?? u.text)) { setEditing(false); return; }
+    try {
+      await api.decide("edit_text", { key: u.key, text: text.trim() });
+      setEditing(false);
+      onChanged();
+    } catch (e) {
+      setErr(errorText(e, t));
+    }
+  }
+  if (editing) {
+    return (
+      <div className="user-insight">
+        <textarea rows={3} value={text} onChange={(e) => setText(e.target.value)} style={{ width: "100%" }} />
+        <div className="row small">
+          <button className="primary" onClick={save}>{t("edit.save")}</button>
+          <button onClick={() => { setEditing(false); setText(u.name ?? u.text); }}>{t("edit.cancel")}</button>
+          {err && <span className="error">{err}</span>}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="user-insight">
+      {u.entity_id ? <a href={href(`entity/${u.entity_id}`)}>{u.name ?? u.text}</a> : u.text}
+      {u.edited ? <span className="muted small" title={u.text}> · {t("edit.edited")}</span> : null}
+      {u.key ? <button className="ghost small" title={t("edit.insight")} onClick={() => setEditing(true)} style={{ marginLeft: "0.4rem" }}>✎</button> : null}
+    </div>
+  );
+}
+
 export default function EntityPage({ id }: { id: number }) {
   const { t } = useTranslation();
   const [hops, setHops] = useState(1);
@@ -218,7 +256,7 @@ export default function EntityPage({ id }: { id: number }) {
               {c.attrs.venue ? <span>{c.attrs.venue}</span> : null}
             </div>
           </header>
-          {c.type === "work" ? <PaperCard card={c} /> : <AssetAttrs card={c} />}
+          {c.type === "work" ? <PaperCard card={c} onChanged={() => card.reload()} /> : <AssetAttrs card={c} />}
           <EditMenu card={c} onDone={card.reload} />
           <div className="two-col">
             <EdgeGroups card={c} />

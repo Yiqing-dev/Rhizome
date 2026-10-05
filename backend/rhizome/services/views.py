@@ -87,7 +87,7 @@ def entity_card(s: Session, entity_id: int, touch_access: bool = True) -> dict[s
                 "extraction_id": ex.id, "depth": o.get("depth"), "prompt_version": ex.prompt_version,
                 "schema_version": ex.schema_version, "created_at": ex.created_at.isoformat(),
                 "tldr": o.get("tldr", []), "claims": o.get("claims", []), "issues": o.get("issues", []),
-                "user_insights": o.get("user_insights", []), "suspect": (ex.meta or {}).get("suspect", []),
+                "user_insights": _insight_views(s, ex), "suspect": (ex.meta or {}).get("suspect", []),
                 "raw": raw.decode("utf-8") if raw else None,
                 "has_pdf": len(ex.input_hashes or []) > 1,
             })
@@ -98,6 +98,23 @@ def entity_card(s: Session, entity_id: int, touch_access: bool = True) -> dict[s
 
 
 HUB_TYPES = ("organism", "modality")
+
+
+def _insight_views(s: Session, ex: Extraction) -> list[dict[str, Any]]:
+    """The export's user insights with the entity each became: its key (to edit it) and its current
+    wording (edit_text changes the entity; the export text stays as written)."""
+    from ..pipeline.graph import Graph
+
+    g = Graph(s)
+    keys = (ex.meta or {}).get("insight_keys") or []
+    out = []
+    for i, ins in enumerate(ex.output.get("user_insights", [])):
+        e = g.by_key(keys[i]) if i < len(keys) else g.by_alias("idea", ins.get("text", ""))
+        view = dict(ins)
+        if e is not None:
+            view.update(key=e.key, entity_id=e.id, name=e.canonical_name, edited=bool((e.attrs or {}).get("edited")))
+        out.append(view)
+    return out
 
 
 def neighbors(s: Session, entity_id: int, hops: int = 1, edge_types: list[str] | None = None,

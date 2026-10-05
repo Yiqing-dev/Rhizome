@@ -126,7 +126,8 @@ def rhz_search(query: str, types: str | None = None, organism: str | None = None
 def rhz_get(entity: str) -> str:
     """Get a paper or asset card by key (e.g. 'dataset:GSE12345'; keys are the durable handles) or
     by a numeric id from an earlier result."""
-    card = _call(lambda c: c.get(int(entity)) if entity.isdigit() else c.get_by_key(entity))
+    # touch=False: Claude looking something up is not the user seeing it (recall's forgetting clock)
+    card = _call(lambda c: c.get(int(entity), touch=False) if entity.isdigit() else c.get_by_key(entity, touch=False))
     if card and card.get("exports"):
         for ex in card["exports"]:
             ex.pop("raw", None)  # keep responses small; the structured fields are included

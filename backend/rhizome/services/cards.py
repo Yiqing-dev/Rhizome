@@ -37,12 +37,12 @@ def due_cards(s: Session, limit: int = 20, now: datetime | None = None) -> list[
     room = max(0, st.review_daily_max - reviewed)
     if room == 0:
         return []
-    due = list(s.execute(select(ReviewCard).where(ReviewCard.introduced_at.isnot(None), ~ReviewCard.suspended,
-                                                  ReviewCard.due <= now)
+    alive = _alive_cards()
+    due = list(s.execute(select(ReviewCard).where(alive, ReviewCard.introduced_at.isnot(None), ReviewCard.due <= now)
                          .order_by(ReviewCard.priority.desc(), ReviewCard.due).limit(min(limit, room))).scalars())
     new_room = max(0, min(st.review_daily_new - introduced, room - len(due), limit - len(due)))
     if new_room:
-        due += list(s.execute(select(ReviewCard).where(ReviewCard.introduced_at.is_(None), ~ReviewCard.suspended)
+        due += list(s.execute(select(ReviewCard).where(alive, ReviewCard.introduced_at.is_(None))
                               .order_by(ReviewCard.priority.desc(), ReviewCard.id).limit(new_room)).scalars())
     names = dict(s.execute(select(Entity.key, Entity.canonical_name)
                            .where(Entity.key.in_([c.entity_key for c in due]))).all())
@@ -50,10 +50,28 @@ def due_cards(s: Session, limit: int = 20, now: datetime | None = None) -> list[
              "origin": c.origin, "new": c.introduced_at is None, "priority": c.priority} for c in due]
 
 
+def _alive_cards():
+    """Not suspended, and about an entity that still stands: not rejected, and (for an asset that
+    came from papers) with at least one source edge that is not rejected. Decided at query time,
+    so a rejection or a retraction takes the cards out at once."""
+    from sqlalchemy import exists
+
+    from ..db.models import Edge
+    from .search import SOURCE_EDGE_TYPES
+
+    ent = select(Entity).where(Entity.key == ReviewCard.entity_key).correlate(ReviewCard)
+    rejected = exists(ent.where(Entity.status == "rejected"))
+    any_source = exists(select(Edge.id).where(Edge.dst == Entity.id, Edge.type.in_(SOURCE_EDGE_TYPES)))
+    live_source = exists(select(Edge.id).where(Edge.dst == Entity.id, Edge.type.in_(SOURCE_EDGE_TYPES),
+                                              Edge.status != "rejected"))
+    orphaned = exists(ent.where(Entity.type != "work", any_source, ~live_source))
+    return ~ReviewCard.suspended & ~rejected & ~orphaned
+
+
 def due_count(s: Session) -> int:
     now = utcnow()
     return s.execute(select(func.count()).select_from(ReviewCard).where(
-        ~ReviewCard.suspended, or_(ReviewCard.introduced_at.is_(None), ReviewCard.due <= now))).scalar_one()
+        _alive_cards(), or_(ReviewCard.introduced_at.is_(None), ReviewCard.due <= now))).scalar_one()
 
 
 def grade(s: Session, card_id: str, rating: int, now: datetime | None = None) -> dict[str, Any]:
@@ -74,8 +92,20 @@ def grade(s: Session, card_id: str, rating: int, now: datetime | None = None) ->
     return {"id": c.id, "due": c.due.isoformat(), "interval_days": round((c.due - now) / timedelta(days=1), 2)}
 
 
-def suspend(s: Session, card_id: str, suspended: bool = True) -> None:
+def suspend(s: Session, card_id: str, suspended: bool = True, entity: bool = False) -> dict[str, Any]:
+    """Take a card out of rotation (or back in). ``entity``: also flag the asset so no card is ever
+    generated for it again, and suspend its other cards."""
+    from sqlalchemy import update
+
     c = s.get(ReviewCard, card_id)
     if c is None:
         raise LookupError(card_id)
     c.suspended = suspended
+    n = 1
+    if entity:
+        e = s.execute(select(Entity).where(Entity.key == c.entity_key)).scalar_one_or_none()
+        if e is not None:
+            e.attrs = {**(e.attrs or {}), "no_cards": suspended}
+        n = s.execute(update(ReviewCard).where(ReviewCard.entity_key == c.entity_key)
+                      .values(suspended=suspended)).rowcount or 1
+    return {"id": c.id, "suspended": c.suspended, "cards": n}

@@ -236,7 +236,9 @@
     },
     "side_a": "A",
     "side_b": "B",
-    "empty_hint": "New items arrive as papers are ingested and when topics are created."
+    "empty_hint": "New items arrive as papers are ingested and when topics are created.",
+    "dismiss_all": "Dismiss all shown",
+    "dismiss_confirm": "Skip all {{n}} pending items of this kind?"
   },
   "cards": {
     "title": "Review cards",
@@ -256,7 +258,11 @@
       "rxf": "from export",
       "template": "template",
       "local_llm": "local model"
-    }
+    },
+    "suspend": "Suspend this card",
+    "never": "Never for this asset",
+    "sub_suspend": "s suspends a bad card.",
+    "never_confirm": "Stop making cards about “{{name}}”? Its other cards are suspended too."
   },
   "digest": {
     "title": "Weekly digest",
@@ -427,7 +433,11 @@
     "retract": "Withdraw this paper's exports",
     "retract_confirm": "The paper's exports stop contributing to the graph (raw files are kept) and the library is rebuilt. You can undo it under Decisions.",
     "done": "Saved (decision #{{id}}).",
-    "done_rebuild": "Saved (decision #{{id}}); rebuilding in the background."
+    "done_rebuild": "Saved (decision #{{id}}); rebuilding in the background.",
+    "save": "Save",
+    "cancel": "Cancel",
+    "edited": "edited",
+    "insight": "Rewrite in your own words"
   },
   "mode": {
     "read_only": "Read-only (a remote snapshot): browse and search, no changes.",

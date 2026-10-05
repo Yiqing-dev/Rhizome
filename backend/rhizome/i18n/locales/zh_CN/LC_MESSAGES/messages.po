@@ -164,7 +164,7 @@ msgid "cli.no_cards"
 msgstr "现在没有需要复习的卡片。"
 
 msgid "cli.card_prompt"
-msgstr "评分 1=重来 2=困难 3=良好 4=简单，s=跳过，q=退出"
+msgstr "评分 1=重来 2=困难 3=良好 4=简单，k=这次跳过，s=暂停这张卡，S=这个资产不再出卡，q=退出"
 
 msgid "cli.download_hint"
 msgstr "安装可选模型支持：pip install 'rhizome[models]'"
@@ -321,3 +321,9 @@ msgstr "原始文件检查：缺失 {missing} 个、空文件 {empty} 个、残�
 
 msgid "cli.gc_done"
 msgstr "清理了 {pruned} 条不再使用的向量缓存，资料库缩小了 {mb} MB。"
+
+msgid "cli.card_suspended"
+msgstr "已暂停这张卡。"
+
+msgid "card.idea_transfer_q"
+msgstr "“{title}”里提出了哪个可以用到 {to} 的想法？"

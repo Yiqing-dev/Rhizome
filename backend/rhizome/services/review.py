@@ -139,3 +139,14 @@ def _apply(s: Session, g: Graph, it: ReviewItem, p: dict[str, Any], action: str,
             text = note or f"{p.get('a_name')} ↔ {p.get('b_name')}"
             made = decisions.record(g, "create_idea", {"text": text, "links": [p["a"], p["b"]]})
     return made
+
+
+def dismiss(s: Session, kind: str, topic: str | None = None) -> int:
+    """Skip every pending item of a kind at once (optionally only those about one topic): a
+    retro-tagging run without a local judge can queue dozens of weak candidates."""
+    from sqlalchemy import update
+
+    q = update(ReviewItem).where(ReviewItem.status == "pending", ReviewItem.kind == kind)
+    if topic:
+        q = q.where(ReviewItem.payload["topic"].as_string() == topic)
+    return s.execute(q.values(status="skipped", resolved_at=utcnow())).rowcount or 0

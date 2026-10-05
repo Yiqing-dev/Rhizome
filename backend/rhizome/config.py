@@ -155,6 +155,7 @@ class Thresholds(BaseModel):
     retro_k: int = 500
     retro_rerank_min: float = 0.3
     retro_auto_conf: float = 0.8
+    retro_queue_max: int = 30  # review items per retro-tagging run without a local judge
     topic_promote_works: int = 3
     recall_min: float = 0.25
     recall_limit: int = 5

@@ -13,7 +13,9 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..db.models import Extraction
+from sqlalchemy import select
+
+from ..db.models import Extraction, ReviewItem
 from ..inference import get_backend
 from ..ml import get_reranker
 from .graph import Graph, embed_texts, entity_text, knn
@@ -44,12 +46,22 @@ def retro_tag(s: Session, topic_key: str, k: int | None = None) -> dict:
     texts = [entity_text(e) for e in ents]
     rr = get_reranker()
     scores = [max(a, b) for a, b in zip(rr.score(definition, texts), rr.score(topic.canonical_name, texts))]
-    kept = [(e, sc) for e, sc in zip(ents, scores) if sc >= th.retro_rerank_min]
+    kept = sorted(((e, sc) for e, sc in zip(ents, scores) if sc >= th.retro_rerank_min), key=lambda x: -x[1])
     backend = get_backend()
     auto: list[dict] = []
     queued = 0
+    remaining = 0
+    # without a local judge every candidate is a question for the user: only the best
+    # retro_queue_max are queued per run; a rerun pages on (items already seen are skipped by key)
+    seen = set(s.execute(select(ReviewItem.dedupe_key).where(ReviewItem.kind == "retro_tag",
+                                                            ReviewItem.payload["topic"].as_string() == topic.key)).scalars())
     for e, sc in kept:
+        if f"retro_tag:{topic.key}|{e.key}" in seen:
+            continue
         verdict = backend.classify_topic_relation(entity_text(e), definition)
+        if verdict is None and queued >= th.retro_queue_max:  # no local judge: the user is the judge
+            remaining += 1
+            continue
         if verdict and verdict[0] == "none" and verdict[1] >= th.retro_auto_conf:
             continue
         if verdict and verdict[0] != "none" and verdict[1] >= th.retro_auto_conf:
@@ -70,4 +82,5 @@ def retro_tag(s: Session, topic_key: str, k: int | None = None) -> dict:
         from .materialize import materialize_retro
 
         materialize_retro(g, ex)
-    return {"candidates": len(cands), "after_rerank": len(kept), "auto": len(auto), "queued": queued}
+    return {"candidates": len(cands), "after_rerank": len(kept), "auto": len(auto), "queued": queued,
+            "remaining": remaining}

@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import os
 import sqlite3
+import threading
 import time
 from contextlib import contextmanager
 from datetime import datetime
@@ -21,6 +22,7 @@ log = logging.getLogger(__name__)
 
 _engines: dict[str, Engine] = {}
 _makers: dict[str, sessionmaker[Session]] = {}
+_registry_lock = threading.Lock()  # engines are created from request threads and the preload thread
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent / "migrations"
 
@@ -102,19 +104,22 @@ def get_engine(settings: Settings | None = None, read_only: bool = False) -> Eng
     settings = settings or get_settings()
     url = settings.db_url
     cache_key = f"{url}|ro={read_only}"
-    if cache_key not in _engines:
-        if url.startswith("sqlite") and not read_only:
-            settings.data_dir.mkdir(parents=True, exist_ok=True)
-        _engines[cache_key] = make_engine(url, read_only=read_only)
-        _makers[cache_key] = sessionmaker(bind=_engines[cache_key], expire_on_commit=False)
-    return _engines[cache_key]
+    with _registry_lock:
+        if cache_key not in _engines:
+            if url.startswith("sqlite") and not read_only:
+                settings.data_dir.mkdir(parents=True, exist_ok=True)
+            _engines[cache_key] = make_engine(url, read_only=read_only)
+            _makers[cache_key] = sessionmaker(bind=_engines[cache_key], expire_on_commit=False)
+        return _engines[cache_key]
 
 
 def dispose_all() -> None:
-    for e in _engines.values():
+    with _registry_lock:
+        engines = list(_engines.values())
+        _engines.clear()
+        _makers.clear()
+    for e in engines:
         e.dispose()
-    _engines.clear()
-    _makers.clear()
 
 
 @contextmanager

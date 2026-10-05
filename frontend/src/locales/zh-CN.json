@@ -236,7 +236,9 @@
     },
     "side_a": "A",
     "side_b": "B",
-    "empty_hint": "摄入论文和新建主题时会产生新的待审项。"
+    "empty_hint": "摄入论文和新建主题时会产生新的待审项。",
+    "dismiss_all": "全部跳过",
+    "dismiss_confirm": "跳过这一类的全部 {{n}} 条待审项？"
   },
   "cards": {
     "title": "复习",
@@ -256,7 +258,11 @@
       "rxf": "来自导出",
       "template": "模板生成",
       "local_llm": "本地模型生成"
-    }
+    },
+    "suspend": "暂停这张卡",
+    "never": "这个资产不再出卡",
+    "sub_suspend": "s 暂停不合适的卡。",
+    "never_confirm": "不再为“{{name}}”生成卡片？它的其他卡片也会暂停。"
   },
   "digest": {
     "title": "每周综合",
@@ -427,7 +433,11 @@
     "retract": "撤回这篇论文的导出",
     "retract_confirm": "撤回后，这篇论文的导出不再参与图谱（原始文件保留），后台会重算。可以在决策历史里撤销。",
     "done": "已保存（决策 #{{id}}）。",
-    "done_rebuild": "已保存（决策 #{{id}}），正在后台重算。"
+    "done_rebuild": "已保存（决策 #{{id}}），正在后台重算。",
+    "save": "保存",
+    "cancel": "取消",
+    "edited": "已修改",
+    "insight": "用你自己的话改写"
   },
   "mode": {
     "read_only": "只读模式（远程快照）：可以检索和浏览，不能修改。",

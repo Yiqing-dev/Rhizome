@@ -59,7 +59,7 @@ def main(ctx: typer.Context, data_dir: Optional[Path] = typer.Option(None, envva
 # Commands that change the library or need it to be the real one: refused in snapshot mode.
 WRITE_COMMANDS = frozenset({"serve", "mcp", "watch", "ingest", "decide", "undo", "retract", "reject", "rename", "alias",
                             "merge", "topic", "rebuild", "nightly", "enrich", "snapshot", "sync", "data-dir",
-                            "backups", "restore", "backup", "review", "gc"})
+                            "backups", "restore", "backup", "review", "gc", "edit"})
 
 
 def _require_writable() -> None:
@@ -399,6 +399,13 @@ def alias(key: str, alias_text: str, lang: Optional[str] = None) -> None:
 
 
 @app.command()
+def edit(key: str, text: str) -> None:
+    """Rewrite one of your insights (or any idea / claim) in your own words; the export keeps the
+    original and `rhz undo` restores it."""
+    _decide("edit_text", {"key": key, "text": text})
+
+
+@app.command()
 def merge(source: str, into: str) -> None:
     """Merge one entity into another (same type); undo with `rhz undo`."""
     _decide("merge", {"from": source, "into": into})
@@ -408,7 +415,7 @@ def merge(source: str, into: str) -> None:
 def review(limit: int = 20) -> None:
     """Spaced-repetition review in the terminal (FSRS)."""
     from .db.session import init_db, session_scope
-    from .services.cards import due_cards, grade
+    from .services.cards import due_cards, grade, suspend
 
     init_db()
     with session_scope() as s:
@@ -424,7 +431,12 @@ def review(limit: int = 20) -> None:
         r = typer.prompt(">", default="3")
         if r == "q":
             break
-        if r == "s":
+        if r == "k":
+            continue
+        if r in ("s", "S"):  # S: never make cards for this asset again
+            with session_scope() as s:
+                suspend(s, c["id"], entity=r == "S")
+            typer.echo(_("cli.card_suspended"))
             continue
         with session_scope() as s:
             res = grade(s, c["id"], int(r))

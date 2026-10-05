@@ -164,7 +164,7 @@ msgid "cli.no_cards"
 msgstr "Nothing to review right now."
 
 msgid "cli.card_prompt"
-msgstr "Rate 1=again 2=hard 3=good 4=easy, s=skip, q=quit"
+msgstr "Rate 1=again 2=hard 3=good 4=easy, k=skip for now, s=suspend card, S=never for this asset, q=quit"
 
 msgid "cli.download_hint"
 msgstr "Install optional model support with: pip install 'rhizome[models]'"
@@ -321,3 +321,9 @@ msgstr "Raw store check: {missing} missing file(s), {empty} empty, {tmp} leftove
 
 msgid "cli.gc_done"
 msgstr "Removed {pruned} unused cached vectors; the library shrank by {mb} MB."
+
+msgid "cli.card_suspended"
+msgstr "Card suspended."
+
+msgid "card.idea_transfer_q"
+msgstr "Which idea from “{title}” was proposed for {to}?"

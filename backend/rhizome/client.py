@@ -22,8 +22,8 @@ class Client(Protocol):
     def decisions(self, limit: int = 50, offset: int = 0) -> dict[str, Any]: ...
     def revoke(self, decision_id: int) -> dict[str, Any]: ...
     def search(self, q: str, **filters: Any) -> list[dict[str, Any]]: ...
-    def get(self, entity_id: int) -> dict[str, Any] | None: ...
-    def get_by_key(self, key: str) -> dict[str, Any] | None: ...
+    def get(self, entity_id: int, touch: bool = True) -> dict[str, Any] | None: ...
+    def get_by_key(self, key: str, touch: bool = True) -> dict[str, Any] | None: ...
     def related(self, entity_id: int) -> list[dict[str, Any]]: ...
     def neighbors(self, entity_id: int, hops: int = 1) -> dict[str, Any]: ...
     def recall(self, text: str, limit: int | None = None) -> list[dict[str, Any]]: ...
@@ -73,11 +73,11 @@ class HttpClient:
     def search(self, q, **filters):
         return self._get("/search", q=q, **filters)["results"]
 
-    def get(self, entity_id):
-        return self._get(f"/entity/{entity_id}")
+    def get(self, entity_id, touch=True):
+        return self._get(f"/entity/{entity_id}", **({} if touch else {"touch": "false"}))
 
-    def get_by_key(self, key):
-        return self._get("/entity/by-key", key=key)
+    def get_by_key(self, key, touch=True):
+        return self._get("/entity/by-key", key=key, **({} if touch else {"touch": "false"}))
 
     def related(self, entity_id):
         r = self._get(f"/entity/{entity_id}/related")
@@ -204,19 +204,19 @@ class LocalClient:
         with self._s() as s:
             return search(s, q, f, limit=limit, offset=offset)
 
-    def get(self, entity_id):
+    def get(self, entity_id, touch=True):
         from .services.views import entity_card
 
         with self._s() as s:
-            return entity_card(s, entity_id, touch_access=not self.read_only)
+            return entity_card(s, entity_id, touch_access=touch and not self.read_only)
 
-    def get_by_key(self, key):
+    def get_by_key(self, key, touch=True):
         from .pipeline.graph import Graph
         from .services.views import entity_card
 
         with self._s() as s:
             e = Graph(s).by_key(key)
-            return entity_card(s, e.id, touch_access=not self.read_only) if e else None
+            return entity_card(s, e.id, touch_access=touch and not self.read_only) if e else None
 
     def related(self, entity_id):
         from .db.models import Entity

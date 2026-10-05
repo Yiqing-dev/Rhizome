@@ -92,6 +92,16 @@ class GradeBody(BaseModel):
     rating: int = Field(ge=1, le=4)
 
 
+class SuspendBody(BaseModel):
+    suspended: bool = True
+    entity: bool = False  # also: never make cards for this asset again
+
+
+class DismissBody(BaseModel):
+    kind: str
+    topic: str | None = None
+
+
 class JobBody(BaseModel):
     kind: str
     payload: dict[str, Any] = Field(default_factory=dict)
@@ -284,21 +294,23 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
                     topic=topic)
         return {"results": do_search(s, q, f, limit=limit, offset=offset)}
 
+    # touch=false: a machine reader (Claude's rhz_get) looking something up is not you seeing it,
+    # so it must not reset the forgetting clock recall relies on
     @app.get("/entity/by-key", dependencies=A)
-    def entity_by_key(key: str, s: Session = Depends(db)) -> dict[str, Any]:
+    def entity_by_key(key: str, touch: bool = True, s: Session = Depends(db)) -> dict[str, Any]:
         from ..pipeline.graph import Graph
         from ..services.views import entity_card
 
         e = Graph(s).by_key(key)
         if e is None:
             raise HTTPException(404, _("api.not_found"))
-        return entity_card(s, e.id, touch_access=not read_only)
+        return entity_card(s, e.id, touch_access=touch and not read_only)
 
     @app.get("/entity/{entity_id}", dependencies=A)
-    def entity(entity_id: int, s: Session = Depends(db)) -> dict[str, Any]:
+    def entity(entity_id: int, touch: bool = True, s: Session = Depends(db)) -> dict[str, Any]:
         from ..services.views import entity_card
 
-        card = entity_card(s, entity_id, touch_access=not read_only)
+        card = entity_card(s, entity_id, touch_access=touch and not read_only)
         if card is None:
             raise HTTPException(404, _("api.not_found"))
         return card
@@ -388,6 +400,13 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
 
         return list_items(s, kind, limit, offset)
 
+    @app.post("/review/dismiss", dependencies=W)
+    def dismiss_items(body: DismissBody, s: Session = Depends(db)) -> dict[str, Any]:
+        from ..services.review import dismiss
+
+        return {"dismissed": dismiss(s, body.kind, body.topic)}
+
+    # declared after /review/dismiss: a literal path must not be read as an item id
     @app.post("/review/{item_id}", dependencies=W)
     def resolve(item_id: int, body: ResolveBody, s: Session = Depends(db)) -> dict[str, Any]:
         from ..services.review import resolve as do_resolve
@@ -470,6 +489,15 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         from ..services.cards import due_cards
 
         return {"cards": due_cards(s, limit)}
+
+    @app.post("/cards/{card_id}/suspend", dependencies=W)
+    def suspend_card(card_id: str, body: SuspendBody, s: Session = Depends(db)) -> dict[str, Any]:
+        from ..services.cards import suspend as do_suspend
+
+        try:
+            return do_suspend(s, card_id, body.suspended, entity=body.entity)
+        except LookupError:
+            raise HTTPException(404, _("api.not_found"))
 
     @app.post("/cards/{card_id}/grade", dependencies=W)
     def grade(card_id: str, body: GradeBody, s: Session = Depends(db)) -> dict[str, Any]:

@@ -228,6 +228,7 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
         out.assets.append(r.entity)
     for ins, me in insights:
         links: list[str] = []
+        names: list[str] = []
         unresolved: list[str] = []
         for target in ins.links_to:
             hit = lookup(target, ("topic", "method", "dataset", "idea", "claim", "work"))
@@ -235,10 +236,14 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
                 unresolved.append(target)
                 continue
             links.append(hit.key)
+            names.append(hit.canonical_name)
             # the user's own view joins the graph: to a topic as applicability, otherwise as a link
             edge(me, hit, "applicable_to" if hit.type == "topic" else "relates_to", attrs={"origin": "user"})
         g.update_attrs(me, links=sorted(set((me.attrs or {}).get("links", [])) | set(links)),
+                       link_names=sorted(set((me.attrs or {}).get("link_names", [])) | set(names)),
                        links_unresolved=unresolved)
+    # which entity each insight became, so the paper card can show and edit the current wording
+    ex.meta = {**meta, "insight_keys": [me.key for _, me in insights]}
 
     if doc.depth == "deep":
         _make_cards(g, doc, work, out.assets, lookup)
@@ -448,7 +453,7 @@ def _make_cards(g: Graph, doc: RxfDocument, work: Entity, assets: list[Entity], 
         upsert_card(g, target.key, rc.q, rc.a, "rxf", priority=10 if target.attrs.get("origin") == "user" else 0)
     backend = get_backend()
     for e in assets:
-        if e.key in covered or e.type == "claim":
+        if e.key in covered or e.type == "claim" or (e.attrs or {}).get("no_cards"):
             continue
         qa = backend.make_card(_card_context(e, work))
         if qa:
@@ -473,10 +478,18 @@ def template_card(e: Entity, work: Entity) -> tuple[str, str] | None:
         return (_("card.dataset_q", accession=e.external_id), ans or e.canonical_name) if ans else None
     if e.type == "method" and a.get("io"):
         return _("card.method_q", io=a["io"], title=title), e.canonical_name
-    if e.type == "idea" and a.get("origin") == "user":
-        return _("card.user_idea_q", title=title), e.canonical_name
     if e.type == "idea":
-        return _("card.idea_q", title=title), e.canonical_name
+        # the question needs a cue beyond the paper's title, or every idea of a paper gets the
+        # same question with the answer in the card's header
+        to = (a.get("transfer") or {}).get("to")
+        if to:
+            return _("card.idea_transfer_q", title=title, to=to), e.canonical_name
+        links = a.get("link_names") or []
+        if links:
+            return _("card.linked_idea_q", items=" ↔ ".join(x[:80] for x in links[:3])), e.canonical_name
+        if a.get("origin") == "user":
+            return _("card.user_idea_q", title=title), e.canonical_name
+        return None
     return None
 
 
