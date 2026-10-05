@@ -240,3 +240,18 @@ msgstr "The library is being rebuilt and cannot be changed right now; this clear
 
 msgid "ml.index_stale"
 msgstr "The library's vectors were made with {index}, but the configured model is {current}. A rebuild is needed (Settings → Local models → Rebuild now, or rhz rebuild); searching and importing are paused until then."
+
+msgid "cli.decided"
+msgstr "Recorded decision #{id} ({op}). Undo: rhz undo {id}"
+
+msgid "cli.undone"
+msgstr "Undid #{id}; rebuilding without it."
+
+msgid "cli.undo_noop"
+msgstr "#{id} was already undone."
+
+msgid "cli.replaced"
+msgstr "This export replaces the earlier exports {ids} (restore with rhz decisions / rhz undo)."
+
+msgid "cli.existing_exports"
+msgstr "This paper already has exports {ids}. If this one is a correction, import it with --replace so what only the old exports said is removed."

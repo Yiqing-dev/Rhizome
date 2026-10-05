@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { Fragment, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, type Card, type EdgeView } from "../api";
+import { api, ApiError, type Card, type EdgeView } from "../api";
 import LocalGraph from "../components/LocalGraph";
 import { EntityLink, Legend, Loading, TypeBadge, edgeToken } from "../components/common";
 import { GraphIcon } from "../components/icons";
@@ -26,6 +26,58 @@ function EdgeActions({ card, e }: { card: Card; e: EdgeView }) {
       {status !== "confirmed" && <button className="link" onClick={() => set("confirmed")}>{t("action.confirm")}</button>}
       {status !== "rejected" && <button className="link danger" onClick={() => set("rejected")}>{t("action.reject")}</button>}
     </span>
+  );
+}
+
+/** Corrections as human decisions (each one listed under Decisions, where it can be undone). */
+function EditMenu({ card, onDone }: { card: Card; onDone: () => void }) {
+  const { t } = useTranslation();
+  const [name, setName] = useState("");
+  const [alias, setAlias] = useState("");
+  const [into, setInto] = useState("");
+  const [cands, setCands] = useState<{ key: string; name: string }[]>([]);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  async function run(op: string, payload: Record<string, unknown>, confirmText?: string) {
+    if (confirmText && !window.confirm(confirmText)) return;
+    try {
+      const r = await api.decide(op, payload);
+      setMsg({ ok: true, text: t(r.rebuild_job ? "edit.done_rebuild" : "edit.done", { id: r.id }) });
+      setName(""); setAlias(""); setInto("");
+      onDone();
+    } catch (e) {
+      setMsg({ ok: false, text: String((e as ApiError).detail ?? e) });
+    }
+  }
+  async function suggest(q: string) {
+    setInto(q);
+    if (q.trim().length < 2) return setCands([]);
+    const r = await api.search(q, { types: card.type, limit: 8 }).catch(() => ({ results: [] as any[] }));
+    setCands(r.results.filter((h: any) => h.key !== card.key).map((h: any) => ({ key: h.key, name: h.name })));
+  }
+  return (
+    <details className="edit-menu">
+      <summary>{t("edit.title")}</summary>
+      <div className="row wrap">
+        <input className="grow" value={name} onChange={(e) => setName(e.target.value)} placeholder={t("edit.rename_placeholder")} />
+        <button disabled={!name.trim()} onClick={() => run("rename", { key: card.key, name: name.trim() })}>{t("edit.rename")}</button>
+      </div>
+      <div className="row wrap">
+        <input className="grow" value={alias} onChange={(e) => setAlias(e.target.value)} placeholder={t("edit.alias_placeholder")} />
+        <button disabled={!alias.trim()} onClick={() => run("add_alias", { key: card.key, alias: alias.trim() })}>{t("edit.alias")}</button>
+      </div>
+      <div className="row wrap">
+        <input className="grow" list={`merge-${card.id}`} value={into} onChange={(e) => suggest(e.target.value)} placeholder={t("edit.merge_placeholder")} />
+        <datalist id={`merge-${card.id}`}>{cands.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}</datalist>
+        <button disabled={!into.trim()} onClick={() => run("merge", { from: card.key, into: into.trim() }, t("edit.merge_confirm", { into: into.trim() }))}>{t("edit.merge")}</button>
+      </div>
+      <div className="row wrap">
+        {card.type === "work"
+          ? <button className="danger" onClick={() => run("retract", { work: card.key }, t("edit.retract_confirm"))}>{t("edit.retract")}</button>
+          : card.status !== "rejected" && <button className="danger" onClick={() => run("reject_entity", { key: card.key }, t("edit.reject_confirm"))}>{t("edit.reject")}</button>}
+        <a className="small" href={href("decisions")}>{t("decisions.title")} →</a>
+      </div>
+      {msg && <div className={`notice ${msg.ok ? "ok" : "error"}`}>{msg.text}</div>}
+    </details>
   );
 }
 
@@ -143,6 +195,7 @@ export default function EntityPage({ id }: { id: number }) {
             <div className="row wrap">
               <TypeBadge type={c.type} />
               {c.status === "candidate" ? <span className="pill">{t("status.candidate")}</span> : null}
+              {c.status === "rejected" ? <span className="pill warn">{t("status.rejected")}</span> : null}
               {c.attrs.origin === "user" ? <span className="pill user">{t("origin.user")}</span> : null}
               {c.attrs.verified === "verified" ? <span className="pill ok">{t("asset.verified")}</span> : null}
             </div>
@@ -156,6 +209,7 @@ export default function EntityPage({ id }: { id: number }) {
             </div>
           </header>
           {c.type === "work" ? <PaperCard card={c} /> : <AssetAttrs card={c} />}
+          <EditMenu card={c} onDone={card.reload} />
           <div className="two-col">
             <EdgeGroups card={c} />
             <div className="stack">

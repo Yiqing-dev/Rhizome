@@ -53,7 +53,9 @@
     "error": "Something went wrong.",
     "unauthorized": "Not authorised: open Rhizome from the link printed by `rhz serve` or from the desktop app.",
     "not_found": "Not found.",
-    "no_results": "No results."
+    "no_results": "No results.",
+    "prev": "Previous",
+    "next": "Next"
   },
   "search": {
     "placeholder": "Search datasets, methods, ideas, claims…",
@@ -372,5 +374,49 @@
     "running": "Running…",
     "rebuild_done": "Rebuild finished: {{entities}} entities in {{seconds}} s.",
     "rebuilding_banner": "The library is being rebuilt. You can browse and search meanwhile; changes are paused (dropped files are processed when it finishes)."
+  },
+  "decisions": {
+    "title": "Decisions",
+    "hint": "Your merges, renames, rejections, withdrawn exports and other decisions, newest first. Undoing one rebuilds the library from the rest.",
+    "when": "When",
+    "what": "Action",
+    "details": "Details",
+    "undo": "Undo",
+    "revoked": "undone",
+    "empty": "No decisions yet.",
+    "confirm": "Undo decision #{{id}}? The library is rebuilt in the background.",
+    "undone": "Undid #{{id}}; rebuilding in the background.",
+    "already": "#{{id}} was already undone.",
+    "op": {
+      "merge": "merge",
+      "distinct": "keep apart",
+      "split": "split",
+      "edge_status": "confirm / reject link",
+      "add_edge": "add link",
+      "create_topic": "new topic",
+      "confirm_topic": "confirm topic",
+      "rename": "rename",
+      "add_alias": "add alias",
+      "edit_text": "edit text",
+      "create_idea": "new idea",
+      "retract": "withdraw exports",
+      "reject_entity": "reject asset"
+    }
+  },
+  "edit": {
+    "title": "Edit",
+    "rename": "Rename",
+    "rename_placeholder": "New name (the old one stays an alias)",
+    "alias": "Add alias",
+    "alias_placeholder": "Another name, abbreviation or Chinese name",
+    "merge": "Merge into",
+    "merge_placeholder": "Entry of the same type to merge into (type to search, pick its key)",
+    "merge_confirm": "Merge this entry into {{into}}? You can undo it under Decisions.",
+    "reject": "Reject (wrong or made-up asset)",
+    "reject_confirm": "A rejected asset no longer appears in search, recall, datasets or reviews. You can undo it under Decisions.",
+    "retract": "Withdraw this paper's exports",
+    "retract_confirm": "The paper's exports stop contributing to the graph (raw files are kept) and the library is rebuilt. You can undo it under Decisions.",
+    "done": "Saved (decision #{{id}}).",
+    "done_rebuild": "Saved (decision #{{id}}); rebuilding in the background."
   }
 }

@@ -139,6 +139,10 @@ def _print_ingest(name: str, r: dict[str, Any]) -> None:
     typer.secho(_("cli.ingested", file=name, work=r.get("work_key")), fg="green")
     if r.get("repairs"):
         typer.secho(_("cli.repaired", fixes="; ".join(_(f"rxf.repair.{c}") for c in r["repairs"])), fg="yellow")
+    if r.get("replaced"):
+        typer.secho(_("cli.replaced", ids=", ".join(f"#{i}" for i in r["replaced"])), fg="yellow")
+    elif r.get("existing_exports"):
+        typer.secho(_("cli.existing_exports", ids=", ".join(f"#{i}" for i in r["existing_exports"])), fg="yellow")
     if r.get("suspect"):
         typer.secho(_("cli.suspect", ids=", ".join(r["suspect"])), fg="yellow")
     if r.get("related"):
@@ -151,7 +155,8 @@ def _print_ingest(name: str, r: dict[str, Any]) -> None:
 @app.command()
 def ingest(files: list[Path], move: bool = typer.Option(False, help="Move files to done/ or error/"),
            repair: bool = typer.Option(False, help="Fix known export drift first (the original stays in L0, "
-                                                    "the fix is recorded in L1)")) -> None:
+                                                    "the fix is recorded in L1)"),
+           replace: bool = typer.Option(False, help="This export supersedes the paper's earlier ones")) -> None:
     """Ingest RXF files (a same-named .pdf is attached automatically)."""
     if move:
         from .db.session import init_db
@@ -159,7 +164,7 @@ def ingest(files: list[Path], move: bool = typer.Option(False, help="Move files 
 
         init_db()
         for f in files:
-            _print_ingest(f.name, ingest_file(f, repair=repair).to_dict())
+            _print_ingest(f.name, ingest_file(f, repair=repair, replace=replace).to_dict())
         return
     from .pipeline.ingest import read_inbox_file
 
@@ -167,7 +172,7 @@ def ingest(files: list[Path], move: bool = typer.Option(False, help="Move files 
     results = []
     for f in files:
         text, pdf = read_inbox_file(f)
-        r = c.ingest(text, f.name, pdf, repair=repair)
+        r = c.ingest(text, f.name, pdf, repair=repair, replace=replace)
         results.append(r)
         if not _state["json"]:
             _print_ingest(f.name, r)
@@ -277,6 +282,71 @@ def queue(kind: Optional[str] = None, limit: int = 20) -> None:
 def decide(item_id: int, action: str, note: Optional[str] = None) -> None:
     """Resolve a review-queue item (e.g. `rhz decide 12 merge`)."""
     _out(_client().resolve(item_id, action, note)) or typer.echo("ok")
+
+
+# ---- corrections (human decisions; every one can be undone with `rhz undo ID`) ---------------------
+
+def _decide(op: str, payload: dict[str, Any]) -> None:
+    r = _client().decide(op, payload)
+    if _out(r):
+        return
+    if r.get("ok") is False:
+        typer.secho(str(r.get("error")), fg="red", err=True)
+        raise typer.Exit(1)
+    typer.echo(_("cli.decided", id=r["id"], op=r["op"]))
+
+
+@app.command()
+def decisions(limit: int = 30) -> None:
+    """Your decisions, newest first (merges, renames, rejections, ...); `rhz undo ID` reverts one."""
+    rows = _client().decisions(limit)["decisions"]
+    if _out(rows):
+        return
+    for d in rows:
+        mark = " (undone)" if d["revoked_at"] else ""
+        typer.echo(f"#{d['id']:<5} {d['created_at'][:16]}  {d['op']:<13} {json.dumps(d['payload'], ensure_ascii=False)[:100]}{mark}")
+
+
+@app.command()
+def undo(decision_id: int) -> None:
+    """Revert a decision; the graph is rebuilt without it."""
+    r = _client().revoke(decision_id)
+    if _out(r):
+        return
+    if r.get("ok") is False:
+        typer.secho(_("api.not_found"), fg="red", err=True)
+        raise typer.Exit(1)
+    typer.echo(_("cli.undone", id=decision_id) if r.get("changed") else _("cli.undo_noop", id=decision_id))
+
+
+@app.command()
+def retract(work: str) -> None:
+    """Withdraw a paper's exports (e.g. a wrong or duplicate export); undo with `rhz undo`."""
+    _decide("retract", {"work": work})
+
+
+@app.command()
+def reject(key: str) -> None:
+    """Hide a wrong asset (e.g. a hallucinated dataset) everywhere; undo with `rhz undo`."""
+    _decide("reject_entity", {"key": key})
+
+
+@app.command()
+def rename(key: str, name: str) -> None:
+    """Rename an entity (the old name stays an alias)."""
+    _decide("rename", {"key": key, "name": name})
+
+
+@app.command()
+def alias(key: str, alias_text: str, lang: Optional[str] = None) -> None:
+    """Add an alias (another name it should be found by)."""
+    _decide("add_alias", {"key": key, "alias": alias_text, **({"lang": lang} if lang else {})})
+
+
+@app.command()
+def merge(source: str, into: str) -> None:
+    """Merge one entity into another (same type); undo with `rhz undo`."""
+    _decide("merge", {"from": source, "into": into})
 
 
 @app.command()

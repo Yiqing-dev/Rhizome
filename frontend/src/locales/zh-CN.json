@@ -53,7 +53,9 @@
     "error": "出错了。",
     "unauthorized": "未授权：请通过 `rhz serve` 打印的链接或桌面应用打开 Rhizome。",
     "not_found": "未找到。",
-    "no_results": "没有结果。"
+    "no_results": "没有结果。",
+    "prev": "上一页",
+    "next": "下一页"
   },
   "search": {
     "placeholder": "检索数据集、方法、思路、论断…",
@@ -372,5 +374,49 @@
     "running": "进行中…",
     "rebuild_done": "重算完成：{{entities}} 个实体，用时 {{seconds}} 秒。",
     "rebuilding_banner": "正在重算资料库。期间可以浏览和检索，但暂时不能修改（导入的文件会在完成后自动处理）。"
+  },
+  "decisions": {
+    "title": "决策历史",
+    "hint": "你做过的合并、改名、拒绝、撤回导出等决策，最新的在前。撤销后资料库会按其余决策重算。",
+    "when": "时间",
+    "what": "操作",
+    "details": "内容",
+    "undo": "撤销",
+    "revoked": "已撤销",
+    "empty": "还没有决策。",
+    "confirm": "撤销决策 #{{id}}？资料库会在后台重算。",
+    "undone": "已撤销 #{{id}}，正在后台重算。",
+    "already": "#{{id}} 之前已经撤销过了。",
+    "op": {
+      "merge": "合并",
+      "distinct": "标记为不同",
+      "split": "拆分",
+      "edge_status": "确认/拒绝关系",
+      "add_edge": "添加关系",
+      "create_topic": "新建主题",
+      "confirm_topic": "确认主题",
+      "rename": "改名",
+      "add_alias": "添加别名",
+      "edit_text": "修改文字",
+      "create_idea": "新建思路",
+      "retract": "撤回导出",
+      "reject_entity": "拒绝资产"
+    }
+  },
+  "edit": {
+    "title": "修改",
+    "rename": "改名",
+    "rename_placeholder": "新名称（旧名称会保留为别名）",
+    "alias": "添加别名",
+    "alias_placeholder": "另一个名称、缩写或中文名",
+    "merge": "合并到",
+    "merge_placeholder": "要合并到的同类条目（输入名称搜索，选择后为其 key）",
+    "merge_confirm": "把这个条目合并到 {{into}}？可以在决策历史里撤销。",
+    "reject": "拒绝（错误或编造的资产）",
+    "reject_confirm": "拒绝后，这个资产在检索、召回、数据集和复习里都不再出现。可以在决策历史里撤销。",
+    "retract": "撤回这篇论文的导出",
+    "retract_confirm": "撤回后，这篇论文的导出不再参与图谱（原始文件保留），后台会重算。可以在决策历史里撤销。",
+    "done": "已保存（决策 #{{id}}）。",
+    "done_rebuild": "已保存（决策 #{{id}}），正在后台重算。"
   }
 }

@@ -161,3 +161,21 @@ def test_models_and_migrations_do_not_drift(settings):
         ctx = MigrationContext.configure(conn, opts={"include_object": include_object})
         diff = compare_metadata(ctx, Base.metadata)
     assert diff == [], diff
+
+
+def test_wal_switch_waits_for_a_writer(tmp_path):
+    """Switching to WAL fails immediately while another connection writes (no busy handler);
+    opening a new library next to a writing process must still work."""
+    import threading
+
+    from rhizome.db.session import _enable_wal
+
+    db = tmp_path / "w.db"
+    a = sqlite3.connect(db, isolation_level=None, check_same_thread=False)
+    a.execute("create table t(x)")
+    a.execute("BEGIN IMMEDIATE")
+    a.execute("insert into t values (1)")
+    threading.Timer(0.3, lambda: a.execute("COMMIT")).start()
+    b = sqlite3.connect(db, check_same_thread=False)
+    _enable_wal(b.cursor(), wait=5)
+    assert b.execute("PRAGMA journal_mode").fetchone()[0] == "wal"

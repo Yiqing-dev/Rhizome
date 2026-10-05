@@ -40,6 +40,25 @@ def sqlite_ro_uri(path: Path) -> str:
     return f"file://{quote(p, safe='/:')}?mode=ro"
 
 
+def _enable_wal(cur, wait: float = 30.0) -> None:
+    """PRAGMA journal_mode=WAL fails at once with 'database is locked' (the busy timeout does not
+    apply) while another connection writes, which happens when two processes open a brand-new
+    library together. Retry; once any process switched the file, WAL is persistent."""
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            cur.execute("PRAGMA journal_mode=WAL")
+            return
+        except sqlite3.OperationalError as e:
+            if "locked" not in str(e) and "busy" not in str(e):
+                raise
+            if cur.execute("PRAGMA journal_mode").fetchone()[0].lower() == "wal":
+                return
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.05)
+
+
 def make_engine(url: str, read_only: bool = False) -> Engine:
     if url.startswith("sqlite"):
         if read_only:
@@ -54,7 +73,7 @@ def make_engine(url: str, read_only: bool = False) -> Engine:
             cur = dbapi_conn.cursor()
             cur.execute("PRAGMA foreign_keys=ON")
             if not read_only:
-                cur.execute("PRAGMA journal_mode=WAL")
+                _enable_wal(cur)
                 cur.execute("PRAGMA synchronous=NORMAL")
             cur.close()
 
@@ -344,7 +363,7 @@ def _migration_engine(url: str) -> Engine:
         dbapi_conn.isolation_level = None
         cur = dbapi_conn.cursor()
         cur.execute("PRAGMA foreign_keys=OFF")
-        cur.execute("PRAGMA journal_mode=WAL")
+        _enable_wal(cur, wait=300.0)
         cur.close()
 
     @event.listens_for(engine, "begin")

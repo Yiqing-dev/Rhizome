@@ -94,6 +94,9 @@ def neighbors(s: Session, entity_id: int, hops: int = 1, edge_types: list[str] |
     page_nodes = set([entity_id] + ordered_nodes[1:][offset:offset + budget - 1])
     page_edges = [ed for ed in edges.values() if ed.src in page_nodes and ed.dst in page_nodes]
     ents = {e.id: e for e in s.execute(select(Entity).where(Entity.id.in_(page_nodes))).scalars()}
+    if not include_rejected:  # rejected assets (hallucinated, wrong) stay out of the graph view
+        ents = {i: e for i, e in ents.items() if e.status != "rejected" or i == entity_id}
+        page_edges = [ed for ed in page_edges if ed.src in ents and ed.dst in ents]
     return {
         "center": entity_id,
         "nodes": [{"id": i, "key": ents[i].key, "type": ents[i].type, "name": ents[i].canonical_name,

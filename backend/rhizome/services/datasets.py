@@ -25,7 +25,7 @@ def download_hint(accession: str, database: str | None) -> str:
 def dataset_info(s: Session, accession: str) -> dict[str, Any] | None:
     g = Graph(s)
     e = g.by_key(f"dataset:{accession}") or g.by_alias("dataset", accession)
-    if e is None:
+    if e is None or e.status == "rejected":
         return None
     papers = s.execute(select(Edge.type, Edge.evidence, Entity).join(Entity, Entity.id == Edge.src)
                        .where(Edge.dst == e.id, Entity.type == "work", Edge.status != "rejected")).all()

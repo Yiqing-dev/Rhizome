@@ -59,6 +59,7 @@ class IngestBody(BaseModel):
     text: str
     filename: str = "inline.yaml"
     repair: bool = False  # apply the known-drift fixes (recorded in L1), never done silently
+    replace: bool = False  # this export supersedes the paper's earlier ones (they are retracted)
 
 
 class InboxRetryBody(BaseModel):
@@ -209,11 +210,12 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
             pdf = await pdf_part.read() if pdf_part is not None and not isinstance(pdf_part, str) else None
             filename = f.filename or "upload.yaml"
             repair = str(form.get("repair", "")).lower() in ("1", "true", "yes")
+            replace = str(form.get("replace", "")).lower() in ("1", "true", "yes")
         else:
             body = IngestBody.model_validate(await request.json())
-            text, filename, pdf, repair = body.text, body.filename, None, body.repair
+            text, filename, pdf, repair, replace = body.text, body.filename, None, body.repair, body.replace
         # network lookups and model inference are blocking: keep them off the event loop
-        res = await run_in_threadpool(lambda: ingest_text(s, text, filename, pdf, repair=repair))
+        res = await run_in_threadpool(lambda: ingest_text(s, text, filename, pdf, repair=repair, replace=replace))
         if not res.ok:
             raise HTTPException(422, res.to_dict())
         return res.to_dict()
@@ -384,7 +386,8 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
             d = decisions.record(Graph(s), body.op, body.payload)
         except decisions.DecisionError as e:
             raise HTTPException(422, str(e))
-        return {"id": d.id, "op": d.op}
+        job = jobs.enqueue(s, "rebuild", {}).id if body.op in decisions.NEEDS_REBUILD else None
+        return {"id": d.id, "op": d.op, "rebuild_job": job}
 
     @app.get("/decisions", dependencies=A)
     def list_decisions(limit: int = 100, offset: int = 0, s: Session = Depends(db)) -> dict[str, Any]:

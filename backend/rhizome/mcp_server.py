@@ -81,11 +81,13 @@ def _j(obj: Any) -> str:
 
 
 @mcp.tool()
-def rhz_ingest(rxf_yaml: str, filename: str = "claude-desktop.yaml") -> str:
+def rhz_ingest(rxf_yaml: str, filename: str = "claude-desktop.yaml", replace: bool = False) -> str:
     """Store a paper discussion in Rhizome. `rxf_yaml` is a complete RXF v1 YAML document.
     Returns the work key, suspected hallucinated IDs, and related papers the user has read;
-    on validation failure returns the error report to fix and resubmit."""
-    return _j(_call(lambda c: c.ingest(rxf_yaml, filename)))
+    on validation failure returns the error report to fix and resubmit. If the result lists
+    `existing_exports`, the paper was stored before: when this export is a correction of that one
+    (the user fixed something), ask the user and call again with replace=true."""
+    return _j(_call(lambda c: c.ingest(rxf_yaml, filename, replace=replace)))
 
 
 @mcp.tool()
@@ -150,6 +152,25 @@ def rhz_decide(item_id: int, action: str, note: str | None = None) -> str:
     """Resolve a review item after the user confirmed. For synthesis items marked useful, `note`
     becomes the text of the new Idea (what the connection is and which problem it may help)."""
     return _j(_call(lambda c: c.resolve(item_id, action, note)))
+
+
+@mcp.tool()
+def rhz_correct(op: str, payload: dict) -> str:
+    """Correct the library, only after the user explicitly confirmed this exact change.
+    op / payload (entities by key, e.g. 'method:repo:github.com/a/b'):
+      rename {key, name} · add_alias {key, alias} · edit_text {key, text} ·
+      merge {from, into} (same type) · reject_entity {key} (a wrong / hallucinated asset).
+    Returns the decision id; tell the user it can be undone with rhz_undo."""
+    if op not in ("rename", "add_alias", "edit_text", "merge", "reject_entity"):
+        return _j({"ok": False, "error": f"op {op} is not available here"})
+    return _j(_call(lambda c: c.decide(op, payload)))
+
+
+@mcp.tool()
+def rhz_undo(decision_id: int) -> str:
+    """Revert one of the user's decisions (a merge, rename, rejection, ...), after the user asked
+    for it. The library is rebuilt without it."""
+    return _j(_call(lambda c: c.revoke(decision_id)))
 
 
 @mcp.tool()

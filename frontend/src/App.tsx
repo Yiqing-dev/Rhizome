@@ -13,6 +13,7 @@ import ReviewPage from "./pages/Review";
 import CardsPage from "./pages/Cards";
 import DigestPage from "./pages/Digest";
 import SettingsPage from "./pages/Settings";
+import DecisionsPage from "./pages/Decisions";
 
 // graph libraries (Cytoscape, sigma) load only when a graph view is opened
 const EntityPage = lazy(() => import("./pages/Entity"));
@@ -137,6 +138,7 @@ export default function App() {
     case "cards": page = <CardsPage />; break;
     case "digest": page = <DigestPage />; break;
     case "settings": page = <SettingsPage />; break;
+    case "decisions": page = <DecisionsPage />; break;
     default: page = <Home />;
   }
   const isHome = !head;

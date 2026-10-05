@@ -93,6 +93,7 @@ export interface ReviewItem {
 export interface DueCard { id: string; q: string; a: string; entity_key: string; entity_name: string | null; origin: string; new: boolean }
 export interface Stats { entities: Record<string, number>; edges: number; review_queue: number; review_queue_by_kind: Record<string, number>; cards_due: number }
 
+export interface Decision { id: number; op: string; payload: Record<string, unknown>; created_at: string; revoked_at: string | null }
 export interface JobView {
   id: number; kind: string; status: "queued" | "running" | "done" | "failed"; payload: Record<string, unknown>;
   result: Record<string, any> | null; error: string | null; created_at: string | null; started_at: string | null; finished_at: string | null;
@@ -122,7 +123,9 @@ export const api = {
     req<{ topic_id: number; job_id: number | null }>("POST", "/topic", b),
   review: (kind?: string, offset = 0) => req<{ items: ReviewItem[]; total: number }>("GET", "/review", undefined, { kind, offset, limit: 50 }),
   resolve: (id: number, action: string, note?: string) => req<{ status: string }>("POST", `/review/${id}`, { action, note }),
-  decide: (op: string, payload: Record<string, unknown>) => req<{ id: number }>("POST", "/decision", { op, payload }),
+  decide: (op: string, payload: Record<string, unknown>) => req<{ id: number; rebuild_job: number | null }>("POST", "/decision", { op, payload }),
+  decisions: (limit = 50, offset = 0) => req<{ decisions: Decision[] }>("GET", "/decisions", undefined, { limit, offset }),
+  revoke: (id: number) => req<{ revoked: number; changed: boolean; rebuild_job: number | null }>("DELETE", `/decision/${id}`),
   ingest: (text: string, filename: string) => req<any>("POST", "/ingest", { text, filename }),
   ingestFile: async (file: File, pdf?: File, repair = false) => {
     const form = new FormData();

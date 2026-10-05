@@ -59,7 +59,7 @@ export default function ReviewPage() {
       <div className="page-head">
         <div>
           <h1>{t("review.title")}</h1>
-          <p className="sub">{t("review.keys")}</p>
+          <p className="sub">{t("review.keys")} <a href={href("decisions")}>{t("decisions.title")} →</a></p>
         </div>
         <div className="row">
           <select value={kind} onChange={(e) => { setKind(e.target.value); setCur(0); }}>

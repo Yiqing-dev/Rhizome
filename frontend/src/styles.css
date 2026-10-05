@@ -424,3 +424,11 @@ a.tile:hover { text-decoration: none; transform: translateY(-1px); box-shadow: v
   .flashcard { padding: 1.3rem; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+table.decisions { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+table.decisions th, table.decisions td { text-align: left; padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+table.decisions tr.revoked td { color: var(--muted); text-decoration: line-through; }
+table.decisions tr.revoked td:last-child { text-decoration: none; }
+.edit-menu { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.4rem 0.8rem; }
+.edit-menu summary { cursor: pointer; font-weight: 600; }
+.edit-menu .row { margin-top: 0.5rem; }

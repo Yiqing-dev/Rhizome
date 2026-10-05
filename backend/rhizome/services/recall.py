@@ -189,7 +189,8 @@ def related_to_work(s: Session, work_id: int, limit: int = 5) -> list[dict[str, 
     if work is None:
         return []
     mine = list(s.execute(select(Entity).join(Edge, Edge.dst == Entity.id)
-                          .where(Edge.src == work_id, Entity.type.in_(ASSET_TYPES))).scalars())
+                          .where(Edge.src == work_id, Entity.type.in_(ASSET_TYPES),
+                                 Entity.status != "rejected", Edge.status != "rejected")).scalars())
     own_ids = {work_id, *[e.id for e in mine]}
     scores: dict[int, float] = defaultdict(float)
     dims: dict[int, list[dict[str, str]]] = defaultdict(list)
@@ -202,7 +203,7 @@ def related_to_work(s: Session, work_id: int, limit: int = 5) -> list[dict[str, 
             if sim < 0.2:
                 continue
             other = g.by_id(nid)
-            if other is None:
+            if other is None or other.status == "rejected":
                 continue
             rel = rr.score(entity_text(e), [entity_text(other)])[0]
             if rel < 0.3:

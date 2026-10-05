@@ -40,6 +40,9 @@ class IngestResult:
     new_entities: list[str] = field(default_factory=list)
     related: list[dict[str, Any]] = field(default_factory=list)
     repairs: list[str] = field(default_factory=list)  # known-drift fixes applied on request
+    existing_exports: list[int] = field(default_factory=list)  # earlier current exports of this paper
+    replaced: list[int] = field(default_factory=list)  # exports retracted because replace=True
+    rebuild_job: int | None = None
     repairable: list[str] = field(default_factory=list)  # fixes that would make a failed file valid
 
     def to_dict(self) -> dict[str, Any]:
@@ -48,6 +51,7 @@ class IngestResult:
             "problems": [p.__dict__ for p in self.problems], "report": self.report, "suspect": self.suspect,
             "new_entities": self.new_entities, "related": self.related,
             "repairs": self.repairs, "repairable": self.repairable,
+            "existing_exports": self.existing_exports, "replaced": self.replaced, "rebuild_job": self.rebuild_job,
         }
 
 
@@ -71,7 +75,7 @@ def _check_ids(doc: RxfDocument) -> tuple[dict[str, str], list[str]]:
 
 
 def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes | None = None,
-                recall: bool = True, repair: bool = False) -> IngestResult:
+                recall: bool = True, repair: bool = False, replace: bool = False) -> IngestResult:
     """``repair`` applies the known-drift fixes (rxf/repair.py): L0 keeps the original bytes, the L1
     row holds the repaired document and records the fixes in ``meta.repairs``."""
     res = load_rxf(text, repair=repair)
@@ -148,6 +152,20 @@ def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes
     new = [e.key for e in s.execute(select(Entity).where(Entity.id > max_before)).scalars()]
     result = IngestResult(ok=True, work_key=out.work.key, work_id=out.work.id, suspect=suspect, new_entities=new,
                           repairs=res.repairs)
+    earlier = list(s.execute(select(Extraction.id).where(
+        Extraction.work_key == out.work.key, Extraction.kind == "rxf", Extraction.is_current,
+        Extraction.id != ex.id).order_by(Extraction.id)).scalars())
+    if earlier and replace:
+        # a corrected re-export supersedes the earlier ones: a retract decision (undoable), and a
+        # rebuild drops what only the old exports asserted
+        from .. import jobs
+        from . import decisions
+
+        decisions.record(g, "retract", {"work": out.work.key, "extraction_ids": earlier, "reason": "replaced"})
+        result.replaced = earlier
+        result.rebuild_job = jobs.enqueue(s, "rebuild", {}).id
+    elif earlier:
+        result.existing_exports = earlier
     if recall:
         from ..services.recall import related_to_work
 
@@ -161,10 +179,10 @@ def read_inbox_file(path: Path) -> tuple[str, bytes | None]:
     return path.read_text(encoding="utf-8-sig"), (pdf_path.read_bytes() if pdf_path.exists() else None)
 
 
-def ingest_path(s: Session, path: Path, repair: bool = False) -> IngestResult:
+def ingest_path(s: Session, path: Path, repair: bool = False, replace: bool = False) -> IngestResult:
     """Ingest an inbox file (and a same-named PDF). Does not move anything: the caller commits first."""
     text, pdf = read_inbox_file(path)
-    return ingest_text(s, text, path.name, pdf, repair=repair)
+    return ingest_text(s, text, path.name, pdf, repair=repair, replace=replace)
 
 
 def file_done(path: Path, result: IngestResult | None, error: str | None = None) -> Path:
@@ -190,7 +208,7 @@ def file_done(path: Path, result: IngestResult | None, error: str | None = None)
     return dest
 
 
-def ingest_file(path: Path, repair: bool = False) -> IngestResult:
+def ingest_file(path: Path, repair: bool = False, replace: bool = False) -> IngestResult:
     """Own transaction per file; the move happens only after the commit succeeded."""
     import traceback
 
@@ -200,7 +218,7 @@ def ingest_file(path: Path, repair: bool = False) -> IngestResult:
 
     try:
         with session_scope() as s:
-            result = ingest_path(s, path, repair=repair)
+            result = ingest_path(s, path, repair=repair, replace=replace)
     except ModelUnavailable as e:  # not the file's fault: leave it in the inbox for after the fix
         log.error("inbox: %s left in place: %s", path.name, e)
         return IngestResult(ok=False, report=str(e))

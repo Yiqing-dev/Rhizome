@@ -13,7 +13,7 @@ import time
 from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
-from ..db.models import KV, Edge, Embedding, Entity, EntityAlias, Extraction, ReviewItem, Work
+from ..db.models import KV, Edge, Embedding, Entity, EntityAlias, Extraction, RawObject, ReviewItem, Work
 from ..db.session import backup_database, has_fts, recent_backup
 from ..config import get_settings
 from .decisions import apply_all
@@ -26,6 +26,18 @@ REGENERATED_REVIEW_KINDS = ("merge", "topic_relation", "contradiction")
 
 
 PREWARM_BATCH = 256
+
+
+def _restamp(s: Session, ex: Extraction, work: Entity) -> None:
+    """L0/L1 rows follow the paper they materialise into *now*: a merge moved them to the merge
+    target, and after that merge is revoked they must come back to their own paper."""
+    if work is None or ex.work_key == work.key:
+        return
+    ex.work_key = work.key
+    for h in ex.input_hashes or []:
+        obj = s.get(RawObject, h)
+        if obj is not None:
+            obj.work_key = work.key
 
 
 def _prewarm_embeddings(s: Session) -> int:
@@ -94,8 +106,10 @@ def rebuild(s: Session, backup: bool = True) -> dict:
     for phase in (("rxf", "openalex"), ("retro_tag",)):
         for ex in (x for x in current if x.kind in phase):
             try:
-                materialize(g, ex)
+                out = materialize(g, ex)
                 n += 1
+                if ex.kind in ("rxf", "openalex"):
+                    _restamp(s, ex, out.work if ex.kind == "rxf" else out)
             except Exception as e:  # keep going; report at the end
                 log.exception("extraction %s failed to materialise: %s", ex.id, e)
         if phase[0] == "rxf":

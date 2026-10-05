@@ -121,7 +121,7 @@ def apply_filters(s: Session, ids: list[int], f: Filters) -> list[int]:
     if not ids:
         return ids
     ents = {e.id: e for e in s.execute(select(Entity).where(Entity.id.in_(ids))).scalars()}
-    keep = [i for i in ids if i in ents and ents[i].type in f.types
+    keep = [i for i in ids if i in ents and ents[i].type in f.types and ents[i].status != "rejected"
             and (f.include_candidates or ents[i].status != "candidate")]
     needs_sources = any(v is not None for v in (f.organism, f.modality, f.year_min, f.year_max, f.tier, f.topic))
     if not needs_sources and not f.edge_type:
@@ -195,7 +195,7 @@ def search(s: Session, q: str, f: Filters | None = None, limit: int = 20, offset
 
 def browse(s: Session, f: Filters, limit: int = 20, offset: int = 0) -> list[dict[str, Any]]:
     """No query: newest entities of the requested types (home-page tiles), same filters and shape."""
-    q = select(Entity.id).where(Entity.type.in_(f.types))
+    q = select(Entity.id).where(Entity.type.in_(f.types), Entity.status != "rejected")
     if not f.include_candidates:
         q = q.where(Entity.status != "candidate")
     ids = list(s.execute(q.order_by(Entity.id.desc()).limit(500)).scalars())

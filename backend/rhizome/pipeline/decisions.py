@@ -15,6 +15,9 @@ ops:
   add_alias      {key, alias, lang?}
   edit_text      {key, text}                  e.g. fix a user insight that the model paraphrased badly
   create_idea    {text, links: [keys]}        e.g. from a useful weekly-synthesis pair
+  retract        {work, extraction_ids?}      withdraw a paper's exports (or the replaced ones);
+                                              takes effect on the rebuild the API queues
+  reject_entity  {key}                        a hallucinated / wrong asset: hidden everywhere
 """
 
 from __future__ import annotations
@@ -23,16 +26,17 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select, update
 
-from ..db.models import EDGE_TYPES, Edge, Entity, HumanDecision, utcnow
+from ..db.models import EDGE_TYPES, Edge, Entity, Extraction, HumanDecision, ReviewCard, ReviewItem, utcnow
 from .canonicalize import free_key, resolve_free
 from .graph import Graph
 
 log = logging.getLogger(__name__)
 
 OPS = ("merge", "distinct", "split", "edge_status", "add_edge", "create_topic", "confirm_topic",
-       "rename", "add_alias", "edit_text", "create_idea")
+       "rename", "add_alias", "edit_text", "create_idea", "retract", "reject_entity")
+NEEDS_REBUILD = ("retract",)  # ops whose effect on the graph only appears after a rebuild
 
 
 class DecisionError(ValueError):
@@ -45,7 +49,7 @@ def record(g: Graph, op: str, payload: dict[str, Any]) -> HumanDecision:
     if op not in OPS:
         raise DecisionError(f"unknown op {op}")
     _validate(op, payload)
-    d = HumanDecision(op=op, payload=payload)
+    d = HumanDecision(op=op, payload=dict(payload))
     if not apply(g, d, strict=True):
         raise DecisionError(f"{op} had no effect")
     g.s.add(d)
@@ -65,6 +69,18 @@ def revoke(g: Graph, decision_id: int) -> bool:
         return False
     d.revoked_at = utcnow()
     g.invalidate_redirects()
+    if d.op == "retract":  # the exports come back; the rebuild the API queues re-materialises them
+        ids = d.payload.get("extraction_ids") or []
+        if ids:
+            g.s.execute(update(Extraction).where(Extraction.id.in_(ids)).values(is_current=True))
+    if d.op == "reject_entity":
+        key = g.resolve_key(d.payload["key"])
+        g.s.execute(update(ReviewCard).where(ReviewCard.entity_key == key).values(suspended=False))
+    if d.op in ("merge", "distinct"):
+        # the resolved queue item for this pair would block it from ever being suggested again
+        a, b = sorted([d.payload.get("from") or d.payload.get("a"), d.payload.get("into") or d.payload.get("b")])
+        g.s.execute(delete(ReviewItem).where(ReviewItem.dedupe_key.in_([f"merge:{a}|{b}", f"topic_relation:{a}|{b}"]),
+                                             ReviewItem.status != "pending"))
     return True
 
 
@@ -74,6 +90,7 @@ def _validate(op: str, p: dict[str, Any]) -> None:
         "edge_status": ("src", "dst", "type", "status"), "add_edge": ("src", "dst", "type"),
         "create_topic": ("name",), "confirm_topic": ("key",), "rename": ("key", "name"),
         "add_alias": ("key", "alias"), "edit_text": ("key", "text"), "create_idea": ("text",),
+        "retract": ("work",), "reject_entity": ("key",),
     }[op]
     missing = [k for k in required if k not in p]
     if missing:
@@ -234,6 +251,31 @@ def _op_edit_text(g: Graph, p):
     e.canonical_name = p["text"]
     g.add_alias(e, p["text"], source="user")
     g.reindex(e)
+    return True
+
+
+def _op_retract(g: Graph, p):
+    """Mark a paper's exports (or the listed ones) as not current: L0 and L1 stay, the next rebuild
+    no longer materialises them. The ids are stored in the payload so a revoke restores exactly
+    these, and a replay is a no-op."""
+    if "extraction_ids" not in p:
+        work = g.by_key(p["work"])
+        keys = {p["work"]} | ({work.key} if work else set())
+        p["extraction_ids"] = list(g.s.execute(select(Extraction.id).where(
+            Extraction.work_key.in_(keys), Extraction.is_current, Extraction.kind.in_(("rxf", "openalex")))
+        ).scalars())
+    if not p["extraction_ids"]:
+        raise DecisionError(f"no current exports for {p['work']}")
+    g.s.execute(update(Extraction).where(Extraction.id.in_(p["extraction_ids"])).values(is_current=False))
+    return True
+
+
+def _op_reject_entity(g: Graph, p):
+    e = _need(g, p["key"])
+    if e.type == "work":
+        raise DecisionError("a paper is withdrawn with retract, not rejected")
+    e.status = "rejected"
+    g.s.execute(update(ReviewCard).where(ReviewCard.entity_key == e.key).values(suspended=True))
     return True
 
 

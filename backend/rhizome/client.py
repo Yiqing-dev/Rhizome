@@ -18,7 +18,9 @@ from .config import Settings, get_settings
 
 class Client(Protocol):
     def ingest(self, text: str, filename: str = "inline.yaml", pdf: bytes | None = None,
-               repair: bool = False) -> dict[str, Any]: ...
+               repair: bool = False, replace: bool = False) -> dict[str, Any]: ...
+    def decisions(self, limit: int = 50, offset: int = 0) -> dict[str, Any]: ...
+    def revoke(self, decision_id: int) -> dict[str, Any]: ...
     def search(self, q: str, **filters: Any) -> list[dict[str, Any]]: ...
     def get(self, entity_id: int) -> dict[str, Any] | None: ...
     def get_by_key(self, key: str) -> dict[str, Any] | None: ...
@@ -56,13 +58,13 @@ class HttpClient:
         r.raise_for_status()
         return r.json()
 
-    def ingest(self, text, filename="inline.yaml", pdf=None, repair=False):
+    def ingest(self, text, filename="inline.yaml", pdf=None, repair=False, replace=False):
         if pdf is not None:
             files = {"file": (filename, text.encode("utf-8"), "application/yaml"),
                      "pdf": (Path(filename).with_suffix(".pdf").name, pdf, "application/pdf")}
-            r = self._c.post("/ingest", files=files, data={"repair": "true" if repair else "false"})
+            r = self._c.post("/ingest", files=files, data={"repair": str(repair).lower(), "replace": str(replace).lower()})
         else:
-            r = self._c.post("/ingest", json={"text": text, "filename": filename, "repair": repair})
+            r = self._c.post("/ingest", json={"text": text, "filename": filename, "repair": repair, "replace": replace})
         if r.status_code == 422:
             return r.json()["detail"]
         r.raise_for_status()
@@ -101,6 +103,16 @@ class HttpClient:
 
     def decide(self, op, payload):
         return self._post("/decision", {"op": op, "payload": payload})
+
+    def decisions(self, limit=50, offset=0):
+        return self._get("/decisions", limit=limit, offset=offset)
+
+    def revoke(self, decision_id):
+        r = self._c.delete(f"/decision/{decision_id}")
+        if r.status_code == 404:
+            return {"ok": False, "error": "not found"}
+        r.raise_for_status()
+        return r.json()
 
     def digest(self, days=7):
         return self._get("/digest", days=days)
@@ -160,12 +172,17 @@ class LocalClient:
 
             raise PermissionError(_("cli.read_only"))
 
-    def ingest(self, text, filename="inline.yaml", pdf=None, repair=False):
+    def ingest(self, text, filename="inline.yaml", pdf=None, repair=False, replace=False):
         self._rw()
         from .pipeline.ingest import ingest_text
 
         with self._s() as s:
-            return ingest_text(s, text, filename, pdf, repair=repair).to_dict()
+            out = ingest_text(s, text, filename, pdf, repair=repair, replace=replace).to_dict()
+        if out.get("rebuild_job"):
+            from . import jobs
+
+            jobs.run_job(out["rebuild_job"])
+        return out
 
     def search(self, q, **filters):
         from .services.search import DEFAULT_TYPES, Filters, search
@@ -248,9 +265,48 @@ class LocalClient:
         from .pipeline import decisions
         from .pipeline.graph import Graph
 
+        try:
+            with self._s() as s:
+                d = decisions.record(Graph(s), op, payload)
+                job = None
+                if op in decisions.NEEDS_REBUILD:
+                    from . import jobs
+
+                    job = jobs.enqueue(s, "rebuild", {}).id
+                out = {"id": d.id, "op": d.op, "rebuild_job": job}
+        except decisions.DecisionError as e:  # same shape as the API's 422
+            return {"ok": False, "error": str(e)}
+        if job:
+            from . import jobs
+
+            jobs.run_job(job)
+        return out
+
+    def decisions(self, limit=50, offset=0):
+        from sqlalchemy import select
+
+        from .db.models import HumanDecision
+
         with self._s() as s:
-            d = decisions.record(Graph(s), op, payload)
-            return {"id": d.id, "op": d.op}
+            rows = s.execute(select(HumanDecision).order_by(HumanDecision.id.desc()).offset(offset).limit(limit)).scalars()
+            return {"decisions": [{"id": d.id, "op": d.op, "payload": d.payload, "created_at": d.created_at.isoformat(),
+                                   "revoked_at": d.revoked_at.isoformat() if d.revoked_at else None} for d in rows]}
+
+    def revoke(self, decision_id):
+        self._rw()
+        from . import jobs
+        from .pipeline import decisions
+        from .pipeline.graph import Graph
+
+        with self._s() as s:
+            try:
+                changed = decisions.revoke(Graph(s), decision_id)
+            except decisions.DecisionError:
+                return {"ok": False, "error": "not found"}
+            job = jobs.enqueue(s, "rebuild", {}).id if changed else None
+        if job:
+            jobs.run_job(job)
+        return {"revoked": decision_id, "changed": changed, "rebuild_job": job}
 
     def digest(self, days=7):
         from .services.synthesis import weekly_digest

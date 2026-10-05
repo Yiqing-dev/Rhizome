@@ -240,3 +240,18 @@ msgstr "正在重算资料库，暂时不能修改；完成后会自动恢复（
 
 msgid "ml.index_stale"
 msgstr "资料库的向量是用 {index} 生成的，当前设置的模型是 {current}。需要重算一次（设置 → 本地模型 → 立即重算，或 rhz rebuild），在此之前检索和导入会暂停。"
+
+msgid "cli.decided"
+msgstr "已记录决策 #{id}（{op}）。撤销：rhz undo {id}"
+
+msgid "cli.undone"
+msgstr "已撤销 #{id}，正在按撤销后的决策重算。"
+
+msgid "cli.undo_noop"
+msgstr "#{id} 之前已经撤销过了。"
+
+msgid "cli.replaced"
+msgstr "这份导出取代了之前的导出 {ids}（可用 rhz decisions / rhz undo 恢复）。"
+
+msgid "cli.existing_exports"
+msgstr "这篇论文已有导出 {ids}。如果这份是修正版，用 --replace 重新导入，旧导出里的错误内容才会被移除。"
