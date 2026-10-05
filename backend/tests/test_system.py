@@ -85,7 +85,31 @@ def test_frozen_app_points_claude_at_itself(home, settings, monkeypatch):
     monkeypatch.setattr(sys, "executable", r"C:\Program Files\Rhizome\server\rhz.exe")
     entry = system.claude_desktop_snippet()["mcpServers"]["rhizome"]
     assert entry["command"].endswith("rhz.exe") and entry["args"] == ["mcp"]
-    assert entry["env"]["RHIZOME_DATA_DIR"] == str(settings.data_dir)  # non-default dir is passed along
+    # a library found via the pointer file is found the same way by `rhz mcp`: not pinned
+    assert "env" not in entry
+    monkeypatch.setenv("RHIZOME_DATA_DIR", str(settings.data_dir))  # an explicit one is passed along
+    entry = system.claude_desktop_snippet()["mcpServers"]["rhizome"]
+    assert entry["env"]["RHIZOME_DATA_DIR"] == str(settings.data_dir.resolve())
+
+
+def test_moving_the_library_unpins_claude_config(home, settings, library, session, monkeypatch):
+    """A config written by 0.1.x pins the old data dir; after a move Claude would keep writing to
+    the abandoned copy."""
+    from rhizome import system
+
+    session.commit()
+    monkeypatch.setattr(sys, "platform", "win32")
+    cfg = home / "Roaming" / "Claude" / "claude_desktop_config.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(json.dumps({"mcpServers": {
+        "rhizome": {"command": "rhz.exe", "args": ["mcp"], "env": {"RHIZOME_DATA_DIR": str(settings.data_dir)}},
+        "other": {"command": "x", "env": {"RHIZOME_DATA_DIR": "unrelated"}}}}), "utf-8")
+    out = system.move_data_dir(str(home / "新 位置" / "Rhizome"))
+    assert out["claude_config_updated"] == [str(cfg)]
+    data = json.loads(cfg.read_text("utf-8"))
+    assert "env" not in data["mcpServers"]["rhizome"]
+    assert data["mcpServers"]["other"]["env"]["RHIZOME_DATA_DIR"] == "unrelated"
+    assert cfg.with_suffix(".json.bak").exists()
 
 
 def test_server_marker_lets_clients_find_a_random_port(settings):

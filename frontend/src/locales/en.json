@@ -319,7 +319,8 @@
     "backups_count": "{{n}} files, {{size}} MB",
     "backups_dir_placeholder": "e.g. D:\\Backups\\Rhizome or a folder in your cloud drive (empty = backups inside the data folder)",
     "backup_now": "Back up now",
-    "backup_done": "Backed up to {{path}}"
+    "backup_done": "Backed up to {{path}}",
+    "dir_claude_updated": "The Claude Desktop config now follows the new location too; restart Claude Desktop."
   },
   "lang": {
     "short_en": "EN",

@@ -319,7 +319,8 @@
     "backups_count": "共 {{n}} 份，{{size}} MB",
     "backups_dir_placeholder": "例如 D:\\备份\\Rhizome 或网盘里的文件夹（留空 = 资料库目录下的 backups）",
     "backup_now": "立即备份",
-    "backup_done": "已备份到 {{path}}"
+    "backup_done": "已备份到 {{path}}",
+    "dir_claude_updated": "Claude Desktop 的配置也已改为跟随新位置，请重启 Claude Desktop。"
   },
   "lang": {
     "short_en": "EN",

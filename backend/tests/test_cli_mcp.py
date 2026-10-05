@@ -78,3 +78,45 @@ def test_mcp_tools_local(settings):
     tools = {t.name for t in m.mcp._tool_manager.list_tools()}
     assert {"rhz_ingest", "rhz_recall", "rhz_search", "rhz_get", "rhz_related", "rhz_queue", "rhz_decide"} <= tools
     m._client = None
+
+
+def test_mcp_follows_app_restarts(settings, monkeypatch):
+    """Claude Desktop keeps the MCP process for its whole session; the app gets a new port and token
+    on every start. A changed marker/token re-resolves the client; a refused connection or a 401
+    reconnects once."""
+    import httpx
+
+    from rhizome import mcp_server
+
+    made = []
+
+    class Fake:
+        def __init__(self, n):
+            self.n = n
+
+        def stats(self):
+            if self.n == 1:
+                raise httpx.ConnectError("refused")
+            return {"client": self.n}
+
+    def fake_connect():
+        made.append(len(made))
+        return Fake(len(made) - 1)
+
+    monkeypatch.setattr(mcp_server, "connect", fake_connect)
+    monkeypatch.setattr(mcp_server, "_client", None)
+    monkeypatch.setattr(mcp_server, "_signature", None)
+    assert mcp_server._call(lambda c: c.stats()) == {"client": 0}
+    assert mcp_server._call(lambda c: c.stats()) == {"client": 0}  # nothing changed: same client
+    (settings.data_dir / "server.json").write_text('{"url": "http://127.0.0.1:50001", "pid": 1}', "utf-8")
+    # the app (re)started: new client (#1) refuses the connection -> one reconnect (#2)
+    assert mcp_server._call(lambda c: c.stats()) == {"client": 2}
+    assert len(made) == 3
+
+    def unauthorized(c):
+        if c.n == 2:
+            req = httpx.Request("GET", "http://x")
+            raise httpx.HTTPStatusError("401", request=req, response=httpx.Response(401, request=req))
+        return {"client": c.n}
+
+    assert mcp_server._call(unauthorized) == {"client": 3}

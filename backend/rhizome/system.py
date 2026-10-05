@@ -150,12 +150,38 @@ def claude_config_paths() -> list[Path]:
 
 
 def claude_desktop_snippet() -> dict[str, Any]:
+    """The `rhizome` MCP entry. The data directory is pinned only when this process was given one
+    explicitly (RHIZOME_DATA_DIR): a library found through the pointer file or portable mode is
+    found the same way by `rhz mcp`, and pinning it would go stale after moving the library."""
     cmd = cli_command()
     entry: dict[str, Any] = {"command": cmd[0], "args": [*cmd[1:], "mcp"]}
-    st = get_settings()
-    if st.data_dir != platform_data_dir():
-        entry["env"] = {"RHIZOME_DATA_DIR": str(st.data_dir)}
+    explicit = os.environ.get("RHIZOME_DATA_DIR")
+    if explicit and portable_dir() is None:
+        entry["env"] = {"RHIZOME_DATA_DIR": str(Path(explicit).resolve())}
     return {"mcpServers": {"rhizome": entry}}
+
+
+def unpin_claude_configs(old: Path) -> list[str]:
+    """Drop a RHIZOME_DATA_DIR that pins Claude Desktop's `rhizome` server to ``old`` (written by an
+    earlier version or by hand), so it follows the library after a move. Keeps a .bak."""
+    changed = []
+    for p in claude_config_paths():
+        try:
+            data = json.loads(p.read_text("utf-8-sig").strip() or "{}") if p.exists() else None
+        except (OSError, ValueError):
+            continue
+        entry = (data or {}).get("mcpServers", {}).get("rhizome")
+        env = entry.get("env") if isinstance(entry, dict) else None
+        pinned = env.get("RHIZOME_DATA_DIR") if isinstance(env, dict) else None
+        if not pinned or Path(pinned).resolve() != Path(old).resolve():
+            continue
+        shutil.copy2(p, p.with_suffix(".json.bak"))
+        env.pop("RHIZOME_DATA_DIR")
+        if not env:
+            entry.pop("env")
+        p.write_text(json.dumps(data, indent=2, ensure_ascii=False), "utf-8")
+        changed.append(str(p))
+    return changed
 
 
 def install_claude_desktop() -> dict[str, Any]:
@@ -219,7 +245,9 @@ def move_data_dir(path: str | None, copy: bool = True) -> dict[str, Any]:
                 copy_sqlite(db, target / "rhizome.db")  # consistent copy while the app is running
             copied = True
     set_data_dir_pointer(None if target == platform_data_dir().resolve() else target)
-    return {"data_dir": str(target), "copied": copied, "restart_required": True}
+    claude = unpin_claude_configs(st.data_dir)
+    return {"data_dir": str(target), "copied": copied, "restart_required": True,
+            "claude_config_updated": claude}
 
 
 # ---- parent watchdog ---------------------------------------------------------------------------

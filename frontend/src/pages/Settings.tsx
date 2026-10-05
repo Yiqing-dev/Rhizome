@@ -56,7 +56,8 @@ export default function SettingsPage() {
   async function moveDir(path: string | null) {
     try {
       const r = await api.moveDataDir(path);
-      setDirMsg({ ok: true, text: r.restart_required ? t("settings.dir_moved", { dir: r.data_dir }) : t("settings.dir_same") });
+      const claude = r.claude_config_updated?.length ? "\n\n" + t("settings.dir_claude_updated") : "";
+      setDirMsg({ ok: true, text: (r.restart_required ? t("settings.dir_moved", { dir: r.data_dir }) : t("settings.dir_same")) + claude });
     } catch (e) {
       setDirMsg({ ok: false, text: String((e as ApiError).detail ?? e) });
     }

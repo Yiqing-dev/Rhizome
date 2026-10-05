@@ -144,6 +144,6 @@ export const api = {
   backupNow: () => req<BackupStatus & { path: string | null }>("POST", "/system/backup"),
   connectClaude: () => req<{ written: string[]; entry: Record<string, unknown> }>("POST", "/system/claude-desktop"),
   moveDataDir: (path: string | null, copy = true) =>
-    req<{ data_dir: string; copied: boolean; restart_required: boolean }>("POST", "/system/data-dir", { path, copy }),
+    req<{ data_dir: string; copied: boolean; restart_required: boolean; claude_config_updated?: string[] }>("POST", "/system/data-dir", { path, copy }),
   runJob: (kind: string) => req<{ id: number }>("POST", "/jobs", { kind, payload: {} }),
 };
