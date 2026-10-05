@@ -21,6 +21,9 @@ export default function SettingsPage() {
   const [backupMsg, setBackupMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const rebuild = useJob("rebuild");
+  const ADV_KEY = "rhizome.settings.advanced";
+  const [adv, setAdv] = useState(() => { try { return localStorage.getItem(ADV_KEY) === "1"; } catch { return false; } });
+  const rememberAdv = (open: boolean) => { setAdv(open); try { localStorage.setItem(ADV_KEY, open ? "1" : "0"); } catch { /* ignore */ } };
 
   async function patch(b: Record<string, unknown>) {
     await api.patchSettings(b);
@@ -136,6 +139,17 @@ export default function SettingsPage() {
       </section>
       {s && (
         <>
+          <section className="panel" id="project-setup">
+            <h2>{t("settings.project")}</h2>
+            <p className="hint">{t("settings.project_hint")}</p>
+            <div className="row wrap">
+              <button className="primary" onClick={copyInstructions}>{copied ? t("settings.copied") : t("settings.project_copy")}</button>
+              <button onClick={downloadInstructions}>{t("settings.project_download")}</button>
+              <button onClick={downloadVocab}>{t("settings.vocab_download")}</button>
+              <label className="small"><input type="checkbox" checked={vocabCandidates} onChange={(e) => setVocabCandidates(e.target.checked)} /> {t("settings.vocab_candidates")}</label>
+            </div>
+            <p className="hint">{t("settings.vocab_hint")}</p>
+          </section>
           <section className="panel">
             <h2>{t("settings.paths")}</h2>
             <dl className="attrs">
@@ -150,6 +164,43 @@ export default function SettingsPage() {
                 <button className="link" onClick={() => api.openFolder("logs")}>{t("settings.open")}</button></dd>
               {si?.app_dir && (<><dt>{t("settings.app_dir")}</dt><dd><code className="mono">{si.app_dir}</code></dd></>)}
             </dl>
+          </section>
+          <section className="panel">
+            <h2>{t("settings.backups")}</h2>
+            <p className="hint">{t("settings.backups_hint")}</p>
+            {si && (
+              <dl className="attrs">
+                <dt>{t("settings.backups_dir")}</dt>
+                <dd className="row wrap"><code className="mono">{si.backups.dir}</code>
+                  <button className="link" onClick={() => api.openFolder("backups")}>{t("settings.open")}</button></dd>
+                <dt>{t("settings.backups_last")}</dt>
+                <dd>{si.backups.last_daily ? fmtDate(si.backups.last_daily, i18n.language) : t("settings.backups_never")}
+                  {" · "}{t("settings.backups_count", { n: si.backups.count, size: (si.backups.bytes / 1048576).toFixed(1) })}</dd>
+              </dl>
+            )}
+            {si?.backups.error && <div className="notice error">{si.backups.error}</div>}
+            <div className="row wrap">
+              <button className="primary" onClick={backupNow}>{t("settings.backup_now")}</button>
+            </div>
+            {backupMsg && <div className={`notice ${backupMsg.ok ? "ok" : "error"}`}><pre>{backupMsg.text}</pre></div>}
+          </section>
+          <section className="panel">
+            <h2>{t("settings.claude")}</h2>
+            <p className="hint">{t("settings.claude_hint")}</p>
+            <div className="row"><button className="primary" onClick={connectClaude}>{t("settings.claude_connect")}</button></div>
+            {claudeMsg && <div className={`notice ${claudeMsg.ok ? "ok" : "error"}`}><pre>{claudeMsg.text}</pre></div>}
+            {si && (
+              <details>
+                <summary className="small muted">{t("settings.claude_manual")}</summary>
+                <pre className="raw">{JSON.stringify(si.claude_desktop, null, 2)}</pre>
+              </details>
+            )}
+          </section>
+          <details className="disclosure advanced" open={adv} onToggle={(e) => rememberAdv((e.target as HTMLDetailsElement).open)}>
+            <summary><h2>{t("settings.advanced")}</h2><span className="hint">{t("settings.advanced_hint")}</span></summary>
+            <div className="stack">
+          <section className="panel">
+            <h2>{t("settings.data_dir")}</h2>
             {si?.portable ? <p className="hint">{t("settings.portable_hint")}</p> : (
               <div className="stack-sm">
                 <p className="hint">{t("settings.move_hint")}</p>
@@ -177,19 +228,7 @@ export default function SettingsPage() {
             )}
           </section>
           <section className="panel">
-            <h2>{t("settings.backups")}</h2>
-            <p className="hint">{t("settings.backups_hint")}</p>
-            {si && (
-              <dl className="attrs">
-                <dt>{t("settings.backups_dir")}</dt>
-                <dd className="row wrap"><code className="mono">{si.backups.dir}</code>
-                  <button className="link" onClick={() => api.openFolder("backups")}>{t("settings.open")}</button></dd>
-                <dt>{t("settings.backups_last")}</dt>
-                <dd>{si.backups.last_daily ? fmtDate(si.backups.last_daily, i18n.language) : t("settings.backups_never")}
-                  {" · "}{t("settings.backups_count", { n: si.backups.count, size: (si.backups.bytes / 1048576).toFixed(1) })}</dd>
-              </dl>
-            )}
-            {si?.backups.error && <div className="notice error">{si.backups.error}</div>}
+            <h2>{t("settings.backups_dir")}</h2>
             {si && (
               <details>
                 <summary className="small muted">{t("settings.restore_title")}</summary>
@@ -201,21 +240,7 @@ export default function SettingsPage() {
               <input className="grow" value={backupDir} onChange={(e) => setBackupDir(e.target.value)} placeholder={t("settings.backups_dir_placeholder")} />
               <button onClick={() => patchChecked({ backup_dir: backupDir.trim() || null })}>{t("settings.save")}</button>
               {s.backup_dir && <button className="ghost" onClick={() => { setBackupDir(""); patchChecked({ backup_dir: null }); }}>{t("settings.move_default")}</button>}
-              <button className="primary" onClick={backupNow}>{t("settings.backup_now")}</button>
             </div>
-            {backupMsg && <div className={`notice ${backupMsg.ok ? "ok" : "error"}`}><pre>{backupMsg.text}</pre></div>}
-          </section>
-          <section className="panel">
-            <h2>{t("settings.claude")}</h2>
-            <p className="hint">{t("settings.claude_hint")}</p>
-            <div className="row"><button className="primary" onClick={connectClaude}>{t("settings.claude_connect")}</button></div>
-            {claudeMsg && <div className={`notice ${claudeMsg.ok ? "ok" : "error"}`}><pre>{claudeMsg.text}</pre></div>}
-            {si && (
-              <details>
-                <summary className="small muted">{t("settings.claude_manual")}</summary>
-                <pre className="raw">{JSON.stringify(si.claude_desktop, null, 2)}</pre>
-              </details>
-            )}
           </section>
           <section className="panel">
             <h2><SettingsIcon />{t("settings.models")}</h2>
@@ -269,17 +294,8 @@ export default function SettingsPage() {
             {remotesErr && <div className="notice error">{t("settings.remotes_invalid")}</div>}
             <div className="row"><button onClick={saveRemotes} disabled={remotes === null}>{t("settings.save")}</button></div>
           </section>
-          <section className="panel" id="project-setup">
-            <h2>{t("settings.project")}</h2>
-            <p className="hint">{t("settings.project_hint")}</p>
-            <div className="row wrap">
-              <button className="primary" onClick={copyInstructions}>{copied ? t("settings.copied") : t("settings.project_copy")}</button>
-              <button onClick={downloadInstructions}>{t("settings.project_download")}</button>
-              <button onClick={downloadVocab}>{t("settings.vocab_download")}</button>
-              <label className="small"><input type="checkbox" checked={vocabCandidates} onChange={(e) => setVocabCandidates(e.target.checked)} /> {t("settings.vocab_candidates")}</label>
             </div>
-            <p className="hint">{t("settings.vocab_hint")}</p>
-          </section>
+          </details>
         </>
       )}
     </div>

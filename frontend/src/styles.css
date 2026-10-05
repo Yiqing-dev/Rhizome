@@ -159,6 +159,28 @@ label.check input { accent-color: var(--accent); width: 1rem; height: 1rem; marg
 .topbar nav a.active { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 .nav-count { font-size: 0.7rem; font-weight: 700; background: var(--warn); color: #fff; border-radius: 999px; padding: 0 0.4em; line-height: 1.5; }
 .topbar .spacer { flex: 1; }
+.more-menu { position: relative; }
+.nav-more { border: none; background: none; color: var(--muted); padding: 0.35rem 0.7rem; border-radius: 999px; font: inherit; font-size: 0.92rem; cursor: pointer; display: inline-flex; align-items: center; gap: 0.3rem; }
+.nav-more:hover { background: var(--bg-elev); color: var(--ink); }
+.nav-more.active { color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.menu { position: absolute; top: calc(100% + 0.35rem); left: 0; min-width: 11rem; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-2, var(--shadow-1)); padding: 0.3rem; display: flex; flex-direction: column; z-index: 30; }
+.menu a { display: flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.7rem; border-radius: 6px; color: var(--ink); white-space: nowrap; }
+.menu a:hover { background: var(--bg-elev); text-decoration: none; }
+.menu a.active { color: var(--accent); background: var(--accent-soft); }
+/* progressive disclosure: advanced controls fold away behind a one-line summary */
+.disclosure > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.disclosure > summary::-webkit-details-marker { display: none; }
+.disclosure > summary::before { content: "▸"; color: var(--muted); font-size: 0.8rem; transition: transform 0.15s; }
+.disclosure[open] > summary::before { transform: rotate(90deg); }
+.disclosure > summary h2 { margin: 0; display: inline-flex; align-items: center; gap: 0.5rem; }
+.disclosure > summary .hint { font-size: 0.85rem; color: var(--muted); }
+.disclosure.inline { border-top: 1px dashed var(--line); padding-top: 0.5rem; }
+.disclosure.inline > summary { font-size: 0.85rem; color: var(--muted); }
+.disclosure.inline[open] > summary { margin-bottom: 0.5rem; }
+.disclosure.advanced { padding: 0.9rem 1.1rem; border: 1px dashed var(--line-strong); border-radius: var(--radius); }
+.disclosure.advanced[open] > summary { margin-bottom: 0.9rem; }
+.todo { display: flex; gap: 1.2rem; flex-wrap: wrap; font-size: 0.92rem; }
+.todo a::before { content: "•"; margin-right: 0.4rem; color: var(--warn); }
 .topbar-search { display: flex; align-items: center; gap: 0.4rem; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 999px; padding: 0.2rem 0.3rem 0.2rem 0.8rem; min-width: 260px; }
 .topbar-search input { border: none; background: none; padding: 0.2rem 0; flex: 1; min-width: 0; }
 .topbar-search input:focus-visible { outline: none; }

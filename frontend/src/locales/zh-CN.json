@@ -9,7 +9,9 @@
     "review": "审核队列",
     "cards": "复习",
     "digest": "每周综合",
-    "settings": "设置"
+    "settings": "设置",
+    "more": "更多",
+    "decisions": "决策记录"
   },
   "type": {
     "work": "论文",
@@ -73,7 +75,8 @@
     "empty_hint": "试试减少筛选条件，或直接输入 accession、方法名。",
     "results_of": "{{n}} / {{total}} 条",
     "results_more": "{{n}}+ 条结果",
-    "load_more": "加载更多"
+    "load_more": "加载更多",
+    "more_filters": "更多筛选"
   },
   "home": {
     "ingested": "已摄入 {{work}}",
@@ -116,7 +119,10 @@
     "importing": "正在导入 {{done}} / {{total}}…",
     "recalling": "正在召回…",
     "recall_chars": "已读取 {{n}} / {{max}} 字",
-    "vocab_stale": "主题词表自上次放进 Project 之后已有变化。"
+    "vocab_stale": "主题词表自上次放进 Project 之后已有变化。",
+    "todo_cards": "{{n}} 张卡片待复习",
+    "todo_queue": "审核队列有 {{n}} 项待处理",
+    "recall_summary": "贴上你正在做的事，找回已经忘掉的资产"
   },
   "action": {
     "confirm": "确认",
@@ -185,7 +191,8 @@
     "reject_confirm": "在所有地方隐藏主题“{{name}}”？（可在“决策”里撤销）",
     "merge": "并入…",
     "merge_placeholder": "要并入的主题 key 或名称",
-    "merge_confirm": "把这个主题并入 {{into}}？"
+    "merge_confirm": "把这个主题并入 {{into}}？",
+    "manage": "管理主题"
   },
   "column": {
     "dataset": "数据",
@@ -372,7 +379,9 @@
     "contact_email_hint": "填写后 OpenAlex 和 NCBI 会把请求放进更稳定的“礼貌通道”，较少被限流。只用于这两个服务的请求头。在需要代理才能上网的校园网或公司网络里，设置环境变量 HTTPS_PROXY 后重启应用；命令行 rhz doctor 可以检查网络。",
     "network_failing": "{{host}} 最近 {{failed}} 次请求失败（成功 {{ok}} 次）。失败时相关 ID 记为“未验证”，不会被丢弃；之后会自动补查。",
     "lexical_only": "内置模型只做字面匹配（同义词、缩写、中英文对应不会自动合并；首字母能对上的会进待审）。",
-    "vocab_candidates": "包含候选主题"
+    "vocab_candidates": "包含候选主题",
+    "advanced": "高级设置",
+    "advanced_hint": "数据目录、模型、远程快照、复习上限。日常使用不需要动这里。"
   },
   "lang": {
     "short_en": "EN",

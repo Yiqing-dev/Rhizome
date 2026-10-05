@@ -9,6 +9,7 @@ import { go } from "../router";
 const TYPES = ["work", "dataset", "method", "idea", "claim", "topic"];
 const ROLES = ["", "proposes", "uses", "produces", "evaluates", "supports", "contradicts"];
 const PAGE = 20;
+const ADVANCED = ["organism", "modality", "year_min", "year_max", "edge_type"];
 
 /** The query without paging: the page is keyed on it (App.tsx), so a top-bar search remounts the
  * form with the new values, while "load more" only changes the offset. */
@@ -73,6 +74,8 @@ export default function SearchPage({ query }: { query: URLSearchParams }) {
             </label>
           ))}
         </div>
+        <details className="disclosure inline" open={ADVANCED.some((k) => !!form[k])}>
+          <summary>{t("search.more_filters")}</summary>
         <div className="row wrap">
           <input value={form.organism ?? ""} onChange={(e) => set("organism", e.target.value)} placeholder={t("search.organism")} />
           <input value={form.modality ?? ""} onChange={(e) => set("modality", e.target.value)} placeholder={t("search.modality")} />
@@ -82,6 +85,7 @@ export default function SearchPage({ query }: { query: URLSearchParams }) {
             {ROLES.map((r) => <option key={r} value={r}>{r ? t(`edge.${r}`) : t("search.any_role")}</option>)}
           </select>
         </div>
+        </details>
       </form>
       <Loading error={error} loading={loading && !items.length} />
       {page && (q || browsing) && (

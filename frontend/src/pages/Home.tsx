@@ -137,18 +137,16 @@ export default function Home() {
               <div className="lbl">{t(`type.${k}`)}</div>
             </a>
           ))}
-          <a className={`tile ${s.review_queue > 0 ? "attention" : ""}`} href={href("review")}>
-            <div className="num">{fmtNum(s.review_queue, i18n.language)}</div>
-            <div className="lbl">{t("home.queue")}</div>
-          </a>
-          <a className="tile" href={href("cards")}>
-            <div className="num">{fmtNum(s.cards_due, i18n.language)}</div>
-            <div className="lbl">{t("home.cards_due")}</div>
-          </a>
         </section>
       )}
+      {s && total > 0 && (s.cards_due > 0 || s.review_queue > 0) && (
+        <p className="todo">
+          {s.cards_due > 0 && <a href={href("cards")}>{t("home.todo_cards", { n: fmtNum(s.cards_due, i18n.language) })}</a>}
+          {s.review_queue > 0 && <a href={href("review")}>{t("home.todo_queue", { n: fmtNum(s.review_queue, i18n.language) })}</a>}
+        </p>
+      )}
 
-      <div className="grid-2">
+      <div className="stack">
         <section className="panel">
           <h2><UploadIcon />{t("home.ingest_title")}</h2>
           <div className="row between wrap">
@@ -208,8 +206,8 @@ export default function Home() {
             </div>
           ) : null}
         </section>
-        <section className="panel">
-          <h2><SparkIcon />{t("home.recall_title")}</h2>
+        <details className="panel disclosure">
+          <summary><h2><SparkIcon />{t("home.recall_title")}</h2><span className="hint">{t("home.recall_summary")}</span></summary>
           <p className="hint">{t("home.recall_hint")}</p>
           <textarea rows={5} value={ctx} onChange={(e) => setCtx(e.target.value)} placeholder={t("home.recall_placeholder")} />
           <div className="row between wrap">
@@ -224,7 +222,7 @@ export default function Home() {
           {recalled && (recalled.length
             ? <ul className="hits">{recalled.map((h) => <HitRow key={h.id} h={h} score={h.score} />)}</ul>
             : <EmptyState title={t("common.no_results")} hint={t("home.recall_empty_hint")} />)}
-        </section>
+        </details>
       </div>
     </div>
   );

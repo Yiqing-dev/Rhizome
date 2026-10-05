@@ -71,9 +71,9 @@ export default function MapPage() {
           </aside>
         </div>
       ) : <EmptyState title={t("map.empty")} hint={t("map.empty_hint")} />)}
-      <form className="panel" onSubmit={create}>
-        <h2>{t("map.new_topic")}</h2>
-        <p className="hint">{t("map.new_topic_hint")}</p>
+      <details className="panel disclosure">
+        <summary><h2>{t("map.new_topic")}</h2><span className="hint">{t("map.new_topic_hint")}</span></summary>
+        <form className="stack-sm" onSubmit={create}>
         <div className="form-grid">
           <label>{t("map.name")}<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
           <label>{t("map.parent")}<input value={form.parent} onChange={(e) => setForm({ ...form, parent: e.target.value })} /></label>
@@ -84,7 +84,8 @@ export default function MapPage() {
           <label>{t("map.counter")}<textarea rows={3} value={form.counter} onChange={(e) => setForm({ ...form, counter: e.target.value })} /></label>
         </div>
         <div className="row"><button type="submit" className="primary" disabled={busy || !form.name.trim()}>{t("map.create")}</button></div>
-      </form>
+        </form>
+      </details>
     </div>
   );
 }

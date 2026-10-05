@@ -21,10 +21,41 @@ import DecisionsPage from "./pages/Decisions";
 const EntityPage = lazy(() => import("./pages/Entity"));
 const MapPage = lazy(() => import("./pages/Map"));
 
-const NAV = [
-  ["", "nav.home"], ["search", "nav.search"], ["map", "nav.map"], ["review", "nav.review"],
-  ["cards", "nav.cards"], ["digest", "nav.digest"], ["settings", "nav.settings"],
-] as const;
+// The main surface stays small: what you do every day. Maintenance and analysis views live in "More".
+const NAV = [["", "nav.home"], ["map", "nav.map"], ["cards", "nav.cards"]] as const;
+const MORE = [["search", "nav.search"], ["review", "nav.review"], ["digest", "nav.digest"], ["decisions", "nav.decisions"]] as const;
+
+function MoreMenu({ head, queue }: { head: string; queue: number }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  useEffect(() => setOpen(false), [head]);  // navigating closes it
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (!(e.target as Element).closest?.(".more-menu")) setOpen(false); };
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", esc);
+    return () => { document.removeEventListener("click", close); document.removeEventListener("keydown", esc); };
+  }, [open]);
+  const active = MORE.some(([p]) => p === head);
+  return (
+    <div className="more-menu">
+      <button type="button" className={`nav-more ${active ? "active" : ""}`} aria-haspopup="menu" aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}>
+        {t("nav.more")}{queue > 0 ? <span className="nav-count">{queue}</span> : null}<span aria-hidden="true"> ▾</span>
+      </button>
+      {open && (
+        <div className="menu" role="menu">
+          {MORE.map(([p, k]) => (
+            <a key={p} role="menuitem" href={href(p)} className={head === p ? "active" : ""}>
+              {t(k)}{p === "review" && queue > 0 ? <span className="nav-count">{queue}</span> : null}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function TopbarSearch() {
   const { t } = useTranslation();
@@ -201,11 +232,10 @@ export default function App() {
           <a className="brand" href={href("")}><Logo />{t("app.name")}</a>
           <nav>
             {NAV.map(([p, k]) => (
-              <a key={p} href={href(p)} className={(head ?? "") === p ? "active" : ""}>
-                {t(k)}
-                {p === "review" && queue > 0 ? <span className="nav-count">{queue}</span> : null}
-              </a>
+              <a key={p} href={href(p)} className={(head ?? "") === p ? "active" : ""}>{t(k)}</a>
             ))}
+            <MoreMenu head={head ?? ""} queue={queue} />
+            <a href={href("settings")} className={head === "settings" ? "active" : ""}>{t("nav.settings")}</a>
           </nav>
           <span className="spacer" />
           {!isHome && <TopbarSearch />}

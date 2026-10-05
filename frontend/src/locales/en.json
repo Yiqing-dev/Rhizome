@@ -9,7 +9,9 @@
     "review": "Review queue",
     "cards": "Review cards",
     "digest": "Weekly digest",
-    "settings": "Settings"
+    "settings": "Settings",
+    "more": "More",
+    "decisions": "Decisions"
   },
   "type": {
     "work": "Paper",
@@ -73,7 +75,8 @@
     "empty_hint": "Try fewer filters, an accession, or a method name.",
     "results_of": "{{n}} of {{total}}",
     "results_more": "{{n}}+ results",
-    "load_more": "Load more"
+    "load_more": "Load more",
+    "more_filters": "More filters"
   },
   "home": {
     "ingested": "Ingested {{work}}",
@@ -116,7 +119,10 @@
     "importing": "Importing {{done}} / {{total}}…",
     "recalling": "Recalling…",
     "recall_chars": "{{n}} / {{max}} characters read",
-    "vocab_stale": "The topic vocabulary has changed since you last put it into the Project."
+    "vocab_stale": "The topic vocabulary has changed since you last put it into the Project.",
+    "todo_cards": "{{n}} cards due for review",
+    "todo_queue": "{{n}} items waiting in the review queue",
+    "recall_summary": "Paste what you are working on and get the assets you forgot"
   },
   "action": {
     "confirm": "confirm",
@@ -185,7 +191,8 @@
     "reject_confirm": "Hide the topic “{{name}}” everywhere? (undo under Decisions)",
     "merge": "Merge into…",
     "merge_placeholder": "topic key or name to merge into",
-    "merge_confirm": "Merge this topic into {{into}}?"
+    "merge_confirm": "Merge this topic into {{into}}?",
+    "manage": "Manage topic"
   },
   "column": {
     "dataset": "Data",
@@ -372,7 +379,9 @@
     "contact_email_hint": "With an address, OpenAlex and NCBI put requests in their more reliable 'polite pool' with fewer rate limits. It is only sent to those two services. Behind a campus or company proxy, set HTTPS_PROXY and restart the app; `rhz doctor` checks the network.",
     "network_failing": "{{host}}: {{failed}} recent requests failed ({{ok}} succeeded). Affected ids are kept as 'unverified', never dropped, and checked again later.",
     "lexical_only": "Built-in model: matching is lexical only (synonyms, acronyms and Chinese/English pairs are not merged; they are queued for review when the initials match).",
-    "vocab_candidates": "include candidate topics"
+    "vocab_candidates": "include candidate topics",
+    "advanced": "Advanced",
+    "advanced_hint": "Data folder, models, remote snapshots, review limits. Nothing here is needed day to day."
   },
   "lang": {
     "short_en": "EN",
