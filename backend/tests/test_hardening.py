@@ -250,3 +250,8 @@ def test_app_built_like_rhz_serve_answers_health(settings):
         r = c.get("/health", headers={"host": "127.0.0.1:51999"})
         assert r.status_code == 200 and r.json()["ok"]
         assert c.get("/health", headers={"host": "evil.example.com"}).status_code == 421
+    import threading
+
+    for t in threading.enumerate():  # the preload must not outlive this test's database (segfault on 3.10)
+        if t.name == "rhizome-preload":
+            t.join(30)

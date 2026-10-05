@@ -289,9 +289,14 @@ jobs:
           }
           $existing = gh release view $tag --repo $env:GITHUB_REPOSITORY --json targetCommitish,assets 2>$null | ConvertFrom-Json
           if ($existing) {
-            # the same version published from another commit is a mistake, not a no-op
             if ($existing.targetCommitish -ne $env:GITHUB_SHA -and $existing.assets.Count -gt 0) {
-              Write-Error "release $tag already exists from commit $($existing.targetCommitish); bump the version instead of rebuilding it"; exit 1
+              # a tag pointing at another commit than the published one is a mistake; an ordinary push
+              # after the release (docs, tests) is just not a release until the version is bumped
+              if ($env:GITHUB_REF -like "refs/tags/*") {
+                Write-Error "release $tag already exists from commit $($existing.targetCommitish); bump the version instead of rebuilding it"; exit 1
+              }
+              Write-Host "::notice::$tag was published from $($existing.targetCommitish); this commit is not released until the version is bumped"
+              exit 0
             }
             Write-Host "release $tag already exists for this commit; nothing to publish"; exit 0
           }
