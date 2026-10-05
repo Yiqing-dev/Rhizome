@@ -70,7 +70,10 @@
     "year_max": "To year",
     "any_role": "Any role",
     "results_count": "{{n}} results",
-    "empty_hint": "Try fewer filters, an accession, or a method name."
+    "empty_hint": "Try fewer filters, an accession, or a method name.",
+    "results_of": "{{n}} of {{total}}",
+    "results_more": "{{n}}+ results",
+    "load_more": "Load more"
   },
   "home": {
     "ingested": "Ingested {{work}}",
@@ -108,7 +111,8 @@
       "topic_new_flag": "drop new from topics"
     },
     "inbox_pending": "{{n}} inbox files are waiting (retried automatically while the library is busy or a model is missing): {{files}}",
-    "inbox_ignored": "{{n}} inbox files are not RXF exports and were skipped: {{files}}"
+    "inbox_ignored": "{{n}} inbox files are not RXF exports and were skipped: {{files}}",
+    "importing": "Importing {{done}} / {{total}}…"
   },
   "action": {
     "confirm": "confirm",

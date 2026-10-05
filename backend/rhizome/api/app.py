@@ -228,7 +228,12 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
             f = form.get("file")
             if f is None or isinstance(f, str):
                 raise HTTPException(422, "file is required")
-            text = (await f.read()).decode("utf-8-sig")
+            from ..rxf.loader import RxfEncodingError, decode_rxf
+
+            try:
+                text = decode_rxf(await f.read())
+            except RxfEncodingError as e:
+                raise HTTPException(422, {"ok": False, "report": str(e), "problems": [], "repairable": []})
             pdf_part = form.get("pdf")
             pdf = await pdf_part.read() if pdf_part is not None and not isinstance(pdf_part, str) else None
             filename = f.filename or "upload.yaml"
@@ -287,12 +292,12 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
                modality: str | None = None, year_min: int | None = None, year_max: int | None = None,
                tier: int | None = None, topic: int | None = None, limit: int = Query(20, le=100),
                offset: int = 0, s: Session = Depends(db)) -> dict[str, Any]:
-        from ..services.search import DEFAULT_TYPES, Filters, search as do_search
+        from ..services.search import DEFAULT_TYPES, Filters, search_page
 
         f = Filters(types=tuple(types.split(",")) if types else DEFAULT_TYPES, edge_type=edge_type,
                     organism=organism, modality=modality, year_min=year_min, year_max=year_max, tier=tier,
                     topic=topic)
-        return {"results": do_search(s, q, f, limit=limit, offset=offset)}
+        return search_page(s, q, f, limit=limit, offset=offset)
 
     # touch=false: a machine reader (Claude's rhz_get) looking something up is not you seeing it,
     # so it must not reset the forgetting clock recall relies on

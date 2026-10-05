@@ -14,7 +14,7 @@ export function captureToken(): void {
       /* storage unavailable: token lives for this page only */
       (window as unknown as { __rhzToken?: string }).__rhzToken = decodeURIComponent(m[1]);
     }
-    window.location.hash = "#/";
+    history.replaceState(null, "", "#/"); // not a new history entry: Back must not return to #token=
   }
 }
 
@@ -135,7 +135,8 @@ export interface BackupStatus { dir: string; count: number; bytes: number; last:
 export const api = {
   health: () => req<{ ok: boolean; version: string; read_only: boolean; moved_to?: string | null; language: string }>("GET", "/health"),
   stats: () => req<Stats>("GET", "/stats"),
-  search: (q: string, f: Record<string, unknown> = {}) => req<{ results: Hit[] }>("GET", "/search", undefined, { q, ...f }),
+  search: (q: string, f: Record<string, unknown> = {}) =>
+    req<{ results: Hit[]; has_more?: boolean; total?: number; offset?: number }>("GET", "/search", undefined, { q, ...f }),
   entity: (id: number) => req<Card>("GET", `/entity/${id}`),
   neighbors: (id: number, hops = 1, offset = 0) => req<GraphView>("GET", `/entity/${id}/neighbors`, undefined, { hops, offset }),
   related: (id: number) => req<{ related: any[] }>("GET", `/entity/${id}/related`),

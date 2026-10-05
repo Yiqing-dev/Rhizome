@@ -70,7 +70,10 @@
     "year_max": "截止年份",
     "any_role": "任意角色",
     "results_count": "{{n}} 条结果",
-    "empty_hint": "试试减少筛选条件，或直接输入 accession、方法名。"
+    "empty_hint": "试试减少筛选条件，或直接输入 accession、方法名。",
+    "results_of": "{{n}} / {{total}} 条",
+    "results_more": "{{n}}+ 条结果",
+    "load_more": "加载更多"
   },
   "home": {
     "ingested": "已摄入 {{work}}",
@@ -108,7 +111,8 @@
       "topic_new_flag": "删除 topics 里的 new"
     },
     "inbox_pending": "收件箱里有 {{n}} 个文件等待处理（资料库忙或模型不可用时会自动重试）：{{files}}",
-    "inbox_ignored": "收件箱里有 {{n}} 个文件不是 RXF 导出，已跳过：{{files}}"
+    "inbox_ignored": "收件箱里有 {{n}} 个文件不是 RXF 导出，已跳过：{{files}}",
+    "importing": "正在导入 {{done}} / {{total}}…"
   },
   "action": {
     "confirm": "确认",

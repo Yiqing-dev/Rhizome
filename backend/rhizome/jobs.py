@@ -157,10 +157,11 @@ class Worker(threading.Thread):
     def __init__(self, interval: float = 2.0):
         super().__init__(daemon=True, name="rhizome-worker")
         self.interval = interval
-        self._stop = threading.Event()
+        self._halt = threading.Event()  # not `_stop`: threading.Thread._stop() is a method
+        self._last_check = 0.0
 
     def stop(self) -> None:
-        self._stop.set()
+        self._halt.set()
 
     @staticmethod
     def _daily_backup() -> None:
@@ -173,33 +174,41 @@ class Worker(threading.Thread):
         except Exception:  # a missing backup folder must not stop the worker
             log.exception("daily backup failed")
 
-    def run(self) -> None:  # pragma: no cover - exercised by the app, not unit tests
-        import time
-
-        last_check = 0.0
+    def startup(self) -> None:
         try:
             with session_scope() as s:
                 recover_stale_jobs(s)
         except Exception:
             log.exception("could not recover stale jobs")
         self._daily_backup()
-        while not self._stop.is_set():
-            try:
-                from .services.recall import flush_seen
+        self._last_check = 0.0
 
-                flush_seen()
-                # by wall clock, at start and every 5 minutes, busy or not: short desktop sessions
-                # must still get their nightly batch and backup
-                if time.monotonic() - last_check > CHECK_EVERY or last_check == 0.0:
-                    last_check = time.monotonic()
-                    self._daily_backup()
-                    with session_scope() as s:
-                        maybe_schedule_nightly(s)
-                if run_next() is None:
-                    self._stop.wait(self.interval)
+    def step(self, now: float | None = None) -> bool:
+        """One pass of the loop (tested synchronously): flush buffered views; by wall clock, at
+        start and every CHECK_EVERY seconds, busy or not, the daily backup and the nightly check
+        (short desktop sessions must still get them); then one job. Returns whether a job ran."""
+        import time
+
+        from .services.recall import flush_seen
+
+        now = time.monotonic() if now is None else now
+        flush_seen()
+        if now - self._last_check > CHECK_EVERY or self._last_check == 0.0:
+            self._last_check = now
+            self._daily_backup()
+            with session_scope() as s:
+                maybe_schedule_nightly(s)
+        return run_next() is not None
+
+    def run(self) -> None:  # pragma: no cover - the loop glue; step() is what the tests run
+        self.startup()
+        while not self._halt.is_set():
+            try:
+                if not self.step():
+                    self._halt.wait(self.interval)
             except Exception:
                 log.exception("worker loop error")
-                self._stop.wait(self.interval * 5)
+                self._halt.wait(self.interval * 5)
 
 
 # ---- handlers ------------------------------------------------------------------------

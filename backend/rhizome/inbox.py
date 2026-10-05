@@ -30,9 +30,13 @@ _RXF_KEY = re.compile(r"^[ \t]*rxf_version[ \t]*:", re.M)  # anywhere: prose or 
 def looks_like_rxf(p: Path, head: int = 65536) -> bool:
     try:
         with p.open("rb") as f:
-            text = f.read(head).decode("utf-8-sig", errors="replace")
+            data = f.read(head)
     except OSError:
         return False
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):  # UTF-16 exports (Windows Notepad "Unicode")
+        text = data.decode("utf-16", errors="replace")
+    else:
+        text = data.decode("utf-8-sig", errors="replace")
     return bool(_RXF_KEY.search(text))
 
 

@@ -28,6 +28,7 @@
 | --- | --- |
 | `Rhizome_x.y.z_x64-setup.exe` | **推荐**。Windows 10/11 64 位。缺少 WebView2 时会自动下载安装 |
 | `Rhizome_x.y.z_x64-offline-setup.exe` | 离线版，内置 WebView2 运行时，适合无网络的电脑 |
+| `SHA256SUMS.txt` | 两个安装包的校验和（PowerShell：`Get-FileHash 文件名`） |
 
 ## 安装 / Install
 

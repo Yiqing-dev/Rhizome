@@ -33,6 +33,12 @@ export function setLanguage(lng: "en" | "zh-CN"): void {
   }
 }
 
+/** Adopt the language the backend resolved ("en" | "zh_CN"), without writing it back. */
+export function applyBackendLanguage(backend: string): void {
+  const lng = backend.startsWith("zh") ? "zh-CN" : "en";
+  if (lng !== i18n.language) setLanguage(lng);
+}
+
 /** Backend language code for a UI language. */
 export const backendLang = (lng: string) => (lng.startsWith("zh") ? "zh_CN" : "en");
 

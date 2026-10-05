@@ -58,6 +58,33 @@ _NoDatesLoader.yaml_implicit_resolvers = {
 }
 
 
+class RxfEncodingError(ValueError):
+    """The bytes are not UTF-8 (or UTF-16 with a BOM): the user must save the export as UTF-8."""
+
+
+_CJK_BYTES = re.compile(rb"[\x81-\xfe][\x40-\xfe]")
+
+
+def decode_rxf(data: bytes) -> str:
+    """Text of an export file: UTF-8 (with or without BOM) or UTF-16 with a BOM. A file that is
+    clearly GB18030 (a Chinese editor's default) is decoded with that codec; anything else is a
+    localised error telling the user to save as UTF-8, instead of a traceback."""
+    if data.startswith((b"\xff\xfe", b"\xfe\xff")):
+        try:
+            return data.decode("utf-16").lstrip("\ufeff")
+        except UnicodeDecodeError as e:
+            raise RxfEncodingError(_("rxf.encoding", detail="UTF-16")) from e
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError as e:
+        if len(_CJK_BYTES.findall(data)) >= 4:
+            try:
+                return data.decode("gb18030")
+            except UnicodeDecodeError:
+                pass
+        raise RxfEncodingError(_("rxf.encoding", detail=f"byte {e.start}")) from e
+
+
 def strip_fences(text: str) -> str:
     """The RXF document inside the text: the first fenced block that contains rxf_version, else
     (no fences) the text from its rxf_version line on, so prose around an export is ignored."""

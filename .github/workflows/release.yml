@@ -16,6 +16,11 @@ on:
 permissions:
   contents: write
 
+# one release build at a time per ref: two pushes must not race to create the same release
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   windows:
     runs-on: windows-latest
@@ -152,6 +157,9 @@ jobs:
           if ($LASTEXITCODE) { exit 1 }
           $offlineName = ($std.BaseName -replace '-setup$', '-offline-setup') + '.exe'
           Copy-Item $std.FullName (Join-Path ..\dist $offlineName)
+          # checksums next to the (unsigned) installers, so a download can be verified
+          $sums = Get-ChildItem ..\dist\*.exe | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name }
+          Set-Content -Path ..\dist\SHA256SUMS.txt -Value $sums -Encoding ascii
           Get-ChildItem ..\dist | Format-Table Name, @{n='MB';e={[math]::Round($_.Length/1MB,1)}}
 
       - name: Install, launch and uninstall (end-to-end, Chinese paths)
@@ -228,7 +236,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Rhizome-windows-installers
-          path: dist/*.exe
+          path: |
+            dist/*.exe
+            dist/SHA256SUMS.txt
           if-no-files-found: error
 
       - name: Publish GitHub release (new version only)
@@ -239,9 +249,22 @@ jobs:
         run: |
           $ver = (Get-Content desktop\src-tauri\tauri.conf.json -Raw | ConvertFrom-Json).version
           $tag = "v$ver"
-          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
-          if ($LASTEXITCODE -eq 0) { Write-Host "release $tag already exists; nothing to publish"; exit 0 }
-          $files = (Get-ChildItem dist\*.exe).FullName
-          gh release create $tag $files --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Rhizome $ver" --notes-file desktop/RELEASE_NOTES.md
+          # a pushed tag must be the version the tree says it is
+          if ($env:GITHUB_REF -like "refs/tags/*" -and $env:GITHUB_REF_NAME -ne $tag) {
+            Write-Error "tag $env:GITHUB_REF_NAME does not match version $ver in tauri.conf.json"; exit 1
+          }
+          $existing = gh release view $tag --repo $env:GITHUB_REPOSITORY --json targetCommitish,assets 2>$null | ConvertFrom-Json
+          if ($existing) {
+            # the same version published from another commit is a mistake, not a no-op
+            if ($existing.targetCommitish -ne $env:GITHUB_SHA -and $existing.assets.Count -gt 0) {
+              Write-Error "release $tag already exists from commit $($existing.targetCommitish); bump the version instead of rebuilding it"; exit 1
+            }
+            Write-Host "release $tag already exists for this commit; nothing to publish"; exit 0
+          }
+          # release-notes links point at this version's tree, not at a working branch
+          $notes = (Get-Content desktop\RELEASE_NOTES.md -Raw) -replace 'blob/[^/)\s]+(/[^/)\s]+)*/desktop/README\.md', "blob/$tag/desktop/README.md"
+          Set-Content -Path "$env:RUNNER_TEMP\notes.md" -Value $notes -Encoding utf8
+          $files = (Get-ChildItem dist\*.exe, dist\SHA256SUMS.txt).FullName
+          gh release create $tag $files --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Rhizome $ver" --notes-file "$env:RUNNER_TEMP\notes.md"
           if ($LASTEXITCODE) { exit 1 }
           Write-Host "published https://github.com/$env:GITHUB_REPOSITORY/releases/tag/$tag"

@@ -249,7 +249,12 @@ fn monitor(app: AppHandle, generation: u64, port: u16, token: String, logs: Path
         }
         if !navigated && TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok() {
             if let (Some(win), Ok(u)) = (main_window(&app), Url::parse(&format!("http://127.0.0.1:{port}/#token={token}"))) {
-                let _ = win.navigate(u);
+                // replace the loading page in the history instead of pushing the app after it:
+                // mouse Back / Alt+Left must not land on the dead spinner
+                let js = format!("location.replace({})", js_string(u.as_str()));
+                if win.eval(&js).is_err() {
+                    let _ = win.navigate(u);
+                }
             }
             navigated = true;
         }

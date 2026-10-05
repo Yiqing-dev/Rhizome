@@ -1,26 +1,60 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api } from "../api";
+import { api, errorText, type Hit } from "../api";
 import { EmptyState, HitRow, Loading } from "../components/common";
 import { SearchIcon } from "../components/icons";
-import { useLoad } from "../hooks";
 import { go } from "../router";
 
 const TYPES = ["work", "dataset", "method", "idea", "claim", "topic"];
 const ROLES = ["", "proposes", "uses", "produces", "evaluates", "supports", "contradicts"];
+const PAGE = 20;
+
+/** The query without paging: the page is keyed on it (App.tsx), so a top-bar search remounts the
+ * form with the new values, while "load more" only changes the offset. */
+export function searchKey(query: URLSearchParams): string {
+  const p = new URLSearchParams(query);
+  p.delete("offset");
+  return p.toString();
+}
 
 export default function SearchPage({ query }: { query: URLSearchParams }) {
   const { t } = useTranslation();
-  const [form, setForm] = useState(() => Object.fromEntries(query.entries()) as Record<string, string>);
+  const [form, setForm] = useState(() => {
+    const f = Object.fromEntries(query.entries()) as Record<string, string>;
+    delete f.offset;
+    return f;
+  });
   const q = (query.get("q") ?? "").trim();
   const params = Object.fromEntries(query.entries());
+  const offset = Number(params.offset ?? 0) || 0;
   const browsing = !q && !!params.types;  // tiles on the home page: list everything of a type
-  const res = useLoad(() => (q || browsing ? api.search(q, params) : Promise.resolve({ results: [] })), [query.toString()]);
+  const [items, setItems] = useState<Hit[]>([]);
+  const [page, setPage] = useState<{ has_more?: boolean; total?: number } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!(q || browsing)) { setItems([]); setPage(null); return; }
+    let live = true;
+    setLoading(true);
+    api.search(q, { ...params, limit: PAGE, offset })
+      .then((r) => {
+        if (!live) return;
+        setItems((prev) => (offset > 0 ? [...prev, ...r.results] : r.results));
+        setPage({ has_more: r.has_more, total: r.total });
+        setError(null);
+      })
+      .catch((e) => live && setError(errorText(e, t)))
+      .finally(() => live && setLoading(false));
+    return () => { live = false; };
+  }, [query.toString()]);  // eslint-disable-line react-hooks/exhaustive-deps
   const set = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const types = (form.types ?? "").split(",").filter(Boolean);
   const toggleType = (ty: string) => set("types", (types.includes(ty) ? types.filter((x) => x !== ty) : [...types, ty]).join(","));
-  const n = res.data?.results.length ?? 0;
+  const n = items.length;
+  const countLabel = page?.total !== undefined
+    ? t("search.results_of", { n, total: page.total })
+    : page?.has_more ? t("search.results_more", { n }) : t("search.results_count", { n });
 
   return (
     <div className="stack">
@@ -49,15 +83,20 @@ export default function SearchPage({ query }: { query: URLSearchParams }) {
           </select>
         </div>
       </form>
-      <Loading error={res.error} loading={res.loading} />
-      {res.data && (q || browsing) && (
+      <Loading error={error} loading={loading && !items.length} />
+      {page && (q || browsing) && (
         <div className="row between">
-          <span className="muted small">{t("search.results_count", { n })}</span>
+          <span className="muted small">{countLabel}</span>
         </div>
       )}
-      {res.data && (n
-        ? <ul className="hits">{res.data.results.map((h) => <HitRow key={h.id} h={h} />)}</ul>
+      {page && (n
+        ? <ul className="hits">{items.map((h) => <HitRow key={h.id} h={h} />)}</ul>
         : q || browsing ? <EmptyState title={t("common.no_results")} hint={t("search.empty_hint")} /> : null)}
+      {page?.has_more && (
+        <div className="row">
+          <button disabled={loading} onClick={() => go("search", { ...params, offset: String(n) })}>{t("search.load_more")}</button>
+        </div>
+      )}
     </div>
   );
 }

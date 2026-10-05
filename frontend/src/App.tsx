@@ -9,7 +9,7 @@ import { useJob } from "./hooks";
 import { backendLang, setLanguage } from "./i18n";
 import { go, href, useRoute } from "./router";
 import Home from "./pages/Home";
-import SearchPage from "./pages/Search";
+import SearchPage, { searchKey } from "./pages/Search";
 import TopicPage from "./pages/Topic";
 import ReviewPage from "./pages/Review";
 import CardsPage from "./pages/Cards";
@@ -164,7 +164,7 @@ export default function App() {
 
   let page;
   switch (head) {
-    case "search": page = <SearchPage query={route.query} />; break;
+    case "search": page = <SearchPage key={searchKey(route.query)} query={route.query} />; break;
     case "entity": page = <EntityPage id={Number(id)} />; break;
     case "topic": page = <TopicPage id={Number(id)} />; break;
     case "map": page = <MapPage />; break;

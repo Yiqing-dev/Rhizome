@@ -243,9 +243,12 @@ def enrich_missing(s: Session, limit: int = 50) -> dict[str, Any]:
 
 
 def read_inbox_file(path: Path) -> tuple[str, bytes | None]:
-    """RXF text plus the same-named PDF, if present."""
+    """RXF text plus the same-named PDF, if present. Raises RxfEncodingError for a file that is
+    not UTF-8 / UTF-16 (the message tells the user to save as UTF-8)."""
+    from ..rxf.loader import decode_rxf
+
     pdf_path = path.with_suffix(".pdf")
-    return path.read_text(encoding="utf-8-sig"), (pdf_path.read_bytes() if pdf_path.exists() else None)
+    return decode_rxf(path.read_bytes()), (pdf_path.read_bytes() if pdf_path.exists() else None)
 
 
 def ingest_path(s: Session, path: Path, repair: bool = False, replace: bool = False) -> IngestResult:
@@ -285,9 +288,15 @@ def ingest_file(path: Path, repair: bool = False, replace: bool = False) -> Inge
 
     from ..ml import ModelUnavailable
 
+    from ..rxf.loader import RxfEncodingError
+
     try:
         with session_scope() as s:
             result = ingest_path(s, path, repair=repair, replace=replace)
+    except RxfEncodingError as e:  # the file itself: moved to error/ with the plain explanation
+        result = IngestResult(ok=False, report=f"{path.name}: {e}")
+        file_done(path, result)
+        return result
     except ModelUnavailable as e:  # not the file's fault: leave it in the inbox for after the fix
         log.error("inbox: %s left in place: %s", path.name, e)
         return IngestResult(ok=False, report=str(e))

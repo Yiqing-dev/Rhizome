@@ -55,6 +55,7 @@ rhizome = ["web/*", "web/assets/*", "data/*", "i18n/locales/*/LC_MESSAGES/*.po",
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["bench: timing runs on a synthetic library (RHIZOME_BENCH=1 to enable)"]
 
 [tool.ruff]
 line-length = 110

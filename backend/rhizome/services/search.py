@@ -210,16 +210,77 @@ def search(s: Session, q: str, f: Filters | None = None, limit: int = 20, offset
             for i in page]
 
 
-def browse(s: Session, f: Filters, limit: int = 20, offset: int = 0) -> list[dict[str, Any]]:
-    """No query: newest entities of the requested types (home-page tiles), same filters and shape."""
+def _browse_query(s: Session, f: Filters):
+    """The browse filters as one SQL query over entity ids (an exact count and a page at any
+    offset, instead of filtering the 500 newest ids in Python)."""
+    from sqlalchemy import and_, exists, or_
+
     q = select(Entity.id).where(Entity.type.in_(f.types), Entity.status != "rejected")
     if not f.include_candidates:
         q = q.where(Entity.status != "candidate")
-    ids = list(s.execute(q.order_by(Entity.id.desc()).limit(500)).scalars())
-    ids = apply_filters(s, ids, f)[offset:offset + limit]
+
+    def via_work(cond):
+        """``cond(work_id)`` holds for the entity itself (a work) or for one of its source papers."""
+        own = and_(Entity.type == "work", cond(Entity.id))
+        other = exists(select(Edge.id).where(Edge.dst == Entity.id, Edge.type.in_(SOURCE_EDGE_TYPES),
+                                             Edge.status != "rejected", cond(Edge.src)))
+        return or_(own, other)
+
+    if f.edge_type:
+        q = q.where(exists(select(Edge.id).where(Edge.dst == Entity.id, Edge.type == f.edge_type,
+                                                 Edge.status != "rejected")))
+    for etype, name, rel in (("organism", f.organism, "of_organism"), ("modality", f.modality, "of_modality")):
+        if name:
+            targets = _named(s, etype, name) or {-1}
+
+            def linked(x, _t=tuple(targets), _rel=rel):
+                return exists(select(Edge.id).where(Edge.src == x, Edge.dst.in_(_t), Edge.type == _rel,
+                                                    Edge.status != "rejected"))
+            q = q.where(or_(linked(Entity.id), via_work(linked)))
+    if f.year_min or f.year_max or f.tier:
+        def year_ok(x):
+            conds = [Work.entity_id == x]
+            if f.year_min:
+                conds.append(Work.year >= f.year_min)
+            if f.year_max:
+                conds.append(Work.year <= f.year_max)
+            if f.tier:
+                conds.append(Work.tier >= f.tier)
+            return exists(select(Work.entity_id).where(*conds))
+        q = q.where(via_work(year_ok))
+    if f.topic:
+        sub = tuple(topic_subtree(s, f.topic)) or (-1,)
+
+        def on_topic(x):
+            return exists(select(Edge.id).where(Edge.src == x, Edge.dst.in_(sub), Edge.type.in_(("about", "applicable_to")),
+                                                Edge.status != "rejected"))
+        q = q.where(or_(Entity.id.in_(sub), on_topic(Entity.id), via_work(on_topic)))
+    return q
+
+
+def browse(s: Session, f: Filters, limit: int = 20, offset: int = 0) -> list[dict[str, Any]]:
+    """No query: newest entities of the requested types (home-page tiles), same filters and shape."""
+    return browse_page(s, f, limit, offset)["results"]
+
+
+def browse_page(s: Session, f: Filters, limit: int = 20, offset: int = 0) -> dict[str, Any]:
+    q = _browse_query(s, f)
+    total = s.execute(select(func.count()).select_from(q.subquery())).scalar_one()
+    ids = list(s.execute(q.order_by(Entity.id.desc()).offset(offset).limit(limit)).scalars())
     ents = {e.id: e for e in s.execute(select(Entity).where(Entity.id.in_(ids))).scalars()}
     src = source_works(s, ids)
-    return [summarize(ents[i], None, src.get(i, [])) for i in ids if i in ents]
+    return {"results": [summarize(ents[i], None, src.get(i, [])) for i in ids if i in ents],
+            "total": total, "offset": offset, "has_more": offset + limit < total}
+
+
+def search_page(s: Session, q: str, f: Filters | None = None, limit: int = 20, offset: int = 0) -> dict[str, Any]:
+    """``search`` plus paging facts: an exact total when browsing, ``has_more`` for text search
+    (one result beyond the page is fetched, never a count over a fused ranking)."""
+    f = f or Filters()
+    if not q.strip():
+        return browse_page(s, f, limit, offset)
+    rows = search(s, q, f, limit=limit + 1, offset=offset)
+    return {"results": rows[:limit], "offset": offset, "has_more": len(rows) > limit}
 
 
 def summarize(e: Entity, score: float | None = None, sources: list[dict[str, Any]] | None = None) -> dict[str, Any]:

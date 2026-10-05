@@ -71,15 +71,28 @@ def client(force: bool = False) -> Client:
 def _call(fn: Callable[[Client], Any]) -> Any:
     """Run a tool against the current client. A refused connection (the app was closed or restarted)
     or a 401 (new token) never reached the handler, so reconnecting and retrying once is safe even
-    for ingest; timeouts and 5xx are not retried."""
+    for ingest; timeouts and 5xx are not retried. Every other failure comes back as
+    {ok: false, error} whichever client is in use, so Claude sees one behaviour."""
     try:
-        return fn(client())
-    except httpx.ConnectError:
-        pass
+        try:
+            return fn(client())
+        except httpx.ConnectError:
+            pass
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code != 401:
+                raise
+        return fn(client(force=True))
     except httpx.HTTPStatusError as e:
-        if e.response.status_code != 401:
-            raise
-    return fn(client(force=True))
+        detail = None
+        try:
+            detail = e.response.json().get("detail")
+        except ValueError:
+            pass
+        return {"ok": False, "error": detail or f"HTTP {e.response.status_code}"}
+    except (ValueError, LookupError, PermissionError) as e:
+        return {"ok": False, "error": str(e)}
+    except httpx.HTTPError as e:
+        return {"ok": False, "error": f"{type(e).__name__}: the app did not answer ({e})"}
 
 
 def _j(obj: Any) -> str:

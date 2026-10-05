@@ -18,12 +18,14 @@ export default function Home() {
   const [ctx, setCtx] = useState("");
   const [recalled, setRecalled] = useState<Hit[] | null>(null);
   const [over, setOver] = useState(false);
+  const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
   const [ingestMsg, setIngestMsg] = useState<{ ok: boolean; text: string; related?: any[]; retry?: File[]; repairable?: string[] } | null>(null);
 
   const failed = useLoad(() => api.inboxFailed(), []);
   const fixes = (codes: string[]) => codes.map((c) => t(`home.fix.${c}`)).join("; ");
 
   async function onFiles(list: FileList | File[] | null, repair = false) {
+    if (busy) return;  // a second drop while importing would interleave two runs
     const files = Array.from(list ?? []);
     const stem = (n: string) => n.replace(/\.[^.]+$/, "").toLowerCase();
     const pdfs = new Map(files.filter((f) => /\.pdf$/i.test(f.name)).map((f) => [stem(f.name), f]));
@@ -31,7 +33,12 @@ export default function Home() {
     const rxf: File[] = [];
     for (const f of files) {
       if (/\.pdf$/i.test(f.name)) continue;
-      if (/\.(ya?ml|rxf)$/i.test(f.name) || RXF_HEAD.test(await f.slice(0, 65536).text())) rxf.push(f);
+      if (/\.(ya?ml|rxf)$/i.test(f.name)) { rxf.push(f); continue; }
+      try {
+        if (RXF_HEAD.test(await f.slice(0, 65536).text())) rxf.push(f);
+      } catch {
+        /* a folder or an unreadable file: skipped */
+      }
     }
     if (!rxf.length) {
       setIngestMsg({ ok: false, text: t("home.drop_not_rxf") });
@@ -42,7 +49,10 @@ export default function Home() {
     let related: any[] = [];
     const retry: File[] = [];
     const repairable = new Set<string>();
+    setBusy({ done: 0, total: rxf.length });
+    try {
     for (const f of rxf) {
+      setBusy({ done: lines.length, total: rxf.length });
       try {
         const r = await api.ingestFile(f, pdfs.get(stem(f.name)), repair);
         lines.push(t(r.duplicate ? "home.ingested_dup" : "home.ingested", { work: r.work_key }));
@@ -61,6 +71,9 @@ export default function Home() {
     setIngestMsg({ ok, text: lines.join("\n\n"), related: [...new Map(related.map((r) => [r.work_id, r])).values()],
                    retry: retry.length ? retry : undefined, repairable: [...repairable] });
     stats.reload();
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function retryFailed(name: string, repair: boolean) {
@@ -125,13 +138,13 @@ export default function Home() {
             <p className="hint grow">{t("home.ingest_hint")}</p>
             <button onClick={() => api.openFolder("inbox")}>{t("home.open_inbox")}</button>
           </div>
-          <label className={`drop ${over ? "over" : ""}`}
+          <label className={`drop ${over ? "over" : ""} ${busy ? "busy" : ""}`} aria-busy={!!busy}
             onDragOver={(e) => { e.preventDefault(); setOver(true); }}
             onDragLeave={() => setOver(false)}
             onDrop={(e) => { e.preventDefault(); setOver(false); onFiles(e.dataTransfer.files); }}>
             <input type="file" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }} />
             <UploadIcon />
-            <span>{t("home.drop")}</span>
+            <span>{busy ? t("home.importing", { done: busy.done, total: busy.total }) : t("home.drop")}</span>
           </label>
           {ingestMsg && (
             <div className={`notice ${ingestMsg.ok ? "ok" : "error"}`}>

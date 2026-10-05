@@ -360,3 +360,6 @@ msgstr "rhz recover --from-raw   把当前资料库目录的 raw/ 文件夹重�
 
 msgid "cli.recover_done"
 msgstr "恢复了 {recovered} 份导出；{already_present} 份已存在；{failed} 份失败。"
+
+msgid "rxf.encoding"
+msgstr "这个文件不是 UTF-8 编码的文本（{detail}）。请把导出另存为 UTF-8（编辑器里：另存为 → 编码选 UTF-8）后再导入。"

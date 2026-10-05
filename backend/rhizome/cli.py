@@ -222,11 +222,18 @@ def ingest(files: list[Path], move: bool = typer.Option(False, help="Move files 
             _print_ingest(f.name, ingest_file(f, repair=repair, replace=replace).to_dict())
         return
     from .pipeline.ingest import read_inbox_file
+    from .rxf.loader import RxfEncodingError
 
     c = _client()
     results = []
     for f in files:
-        text, pdf = read_inbox_file(f)
+        try:
+            text, pdf = read_inbox_file(f)
+        except RxfEncodingError as e:
+            r = {"ok": False, "report": f"{f.name}: {e}"}
+            results.append(r)
+            typer.secho(r["report"], fg="red", err=True)
+            continue
         r = c.ingest(text, f.name, pdf, repair=repair, replace=replace)
         results.append(r)
         if not _state["json"]:

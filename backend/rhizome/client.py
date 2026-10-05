@@ -53,7 +53,7 @@ class HttpClient:
 
     def _post(self, path: str, body: dict[str, Any]) -> Any:
         r = self._c.post(path, json=body)
-        if r.status_code == 422:
+        if r.status_code in (404, 422):  # the same shape LocalClient returns for these
             return {"ok": False, "error": r.json().get("detail")}
         r.raise_for_status()
         return r.json()
@@ -71,6 +71,8 @@ class HttpClient:
         return r.json()
 
     def search(self, q, **filters):
+        if filters.get("limit"):
+            filters["limit"] = min(int(filters["limit"]), MAX_LIMIT)
         return self._get("/search", q=q, **filters)["results"]
 
     def get(self, entity_id, touch=True):
@@ -87,7 +89,8 @@ class HttpClient:
         return self._get(f"/entity/{entity_id}/neighbors", hops=hops)
 
     def recall(self, text, limit=None):
-        return self._post("/recall", {"text": text, "limit": limit})["results"]
+        r = self._post("/recall", {"text": text, "limit": limit})
+        return r["results"] if isinstance(r, dict) and "results" in r else r
 
     def recall_code(self, source, limit=None):
         return self._post("/recall/code", {"text": source, "limit": limit})
@@ -149,6 +152,9 @@ class HttpClient:
         return r.json()
 
 
+MAX_LIMIT = 100  # result page cap shared by the API (Query le=) and the in-process client
+
+
 class NoLibrary(FileNotFoundError):
     """A read-only command found no library (and must not create an empty one)."""
 
@@ -197,7 +203,7 @@ class LocalClient:
         from .services.search import DEFAULT_TYPES, Filters, search
 
         types = filters.pop("types", None)
-        limit = filters.pop("limit", 20)
+        limit = min(int(filters.pop("limit", 20) or 20), MAX_LIMIT)  # the API's cap
         offset = filters.pop("offset", 0)
         f = Filters(types=tuple(types.split(",")) if isinstance(types, str) else (tuple(types) if types else DEFAULT_TYPES),
                     **{k: v for k, v in filters.items() if v is not None})
@@ -266,8 +272,15 @@ class LocalClient:
         self._rw()
         from .services.review import resolve
 
-        with self._s() as s:
-            return resolve(s, item_id, action, note)
+        try:
+            with self._s() as s:
+                return resolve(s, item_id, action, note)
+        except LookupError:  # the API's 404 / 422 shapes, so MCP tools behave the same either way
+            from .i18n import _
+
+            return {"ok": False, "error": _("api.not_found")}
+        except ValueError as e:
+            return {"ok": False, "error": str(e)}
 
     def decide(self, op, payload):
         self._rw()

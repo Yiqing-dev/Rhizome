@@ -193,6 +193,19 @@
 | U5 | `NORM_VERSION` 与黄金测试锁定 norm/free_key 输出，注释写明改动所需的数据迁移 |
 | D30 | OpenAlex 响应存为 L0，`<sha>.meta.json` 记录文件名、时间、PDF/OpenAlex 哈希、修复；`rhz recover --from-raw` 离线重放并保留原时间 |
 
+## 测试组与前端组（2026-10-05）
+
+| 编号 | 修改 |
+| --- | --- |
+| T2 | release.yml：同一 ref 的发布串行；生成 `SHA256SUMS.txt` 并随安装包发布；推 tag 时校验 tag 与版本一致；同一版本从另一提交再发布会失败而不是静默跳过；发布说明里的链接指向该版本的 tag |
+| T3 | `Worker.step()` 从循环里抽出并同步测试（任务、每日备份、按墙钟的夜间检查）；TestClient 生命周期测试确认工作线程和收件箱线程启停；`_Handler` 在中文路径上的事件测试。顺带修了 `Worker._stop` 遮住 `Thread._stop()` 的旧 bug |
+| T5 | 真实 uvicorn 端口上的 `HttpClient` 与 `LocalClient` 参数化对比（含错误用例）：404/422 统一为 `{ok: false, error}`，分页上限 `MAX_LIMIT` 两边共用，MCP `_call` 把所有失败归一化 |
+| T11 | spawn 两个进程各自循环导入的并发测试；`bench` 标记（`RHIZOME_BENCH=1`）在约 2k 篇的合成库上打印检索/卡片/两跳图耗时 |
+| F1 | 启动时读 `/health.language`（最多等 1.5 s）再渲染，localStorage 只作首屏猜测 |
+| F2 | 桌面壳用 `location.replace` 进入应用，token 捕获用 `replaceState`：后退不再回到加载页 |
+| F5 F6 | 搜索分页：浏览模式的过滤全部下推到 SQL 并返回精确总数，文本搜索返回 `has_more`；界面"加载更多"、诚实的计数文案；搜索页按去掉 offset 的查询串作 key，顶栏搜索后表单同步 |
+| F9 | `decode_rxf`：UTF-8/UTF-16（带 BOM）/明显的 GB18030，其余给出"另存为 UTF-8"的本地化提示（API 422、收件箱报告、CLI 均如此）；拖放区有忙碌状态，导入中忽略再次拖放，嗅探放进 try |
+
 ## 还需要你来做的（M0）
 
 - 定稿导出指令：`rxf-spec/instructions/` 里是按设计文档整理的版本，加了一条“含问号的文本不要写进花括号”——

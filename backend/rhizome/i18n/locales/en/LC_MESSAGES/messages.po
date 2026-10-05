@@ -360,3 +360,6 @@ msgstr "rhz recover --from-raw   replays the raw/ folder of the current data dir
 
 msgid "cli.recover_done"
 msgstr "Recovered {recovered} capture(s); {already_present} already present; {failed} failed."
+
+msgid "rxf.encoding"
+msgstr "This file is not UTF-8 text ({detail}). Save the export as UTF-8 (in the editor: Save as → encoding UTF-8) and import it again."
