@@ -110,10 +110,22 @@ def test_bad_decision_rejected(library, session):
 def test_rebuild_is_deterministic(library, session):
     from rhizome.db.models import Entity
 
-    before = sorted(session.execute(select(Entity.key)).scalars())
+    from rhizome.db.models import ReviewItem
+
+    g = Graph(session)
+    decisions.record(g, "create_topic", {"name": "my own topic"})
+    t = g.by_key("topic:spatial domain detection")
+    decisions.record(g, "merge", {"from": t.key, "into": "topic:grn inference"})
+    session.commit()
+    before = dict(session.execute(select(Entity.key, Entity.id)).all())
+    items = dict(session.execute(select(ReviewItem.dedupe_key, ReviewItem.id)
+                                 .where(ReviewItem.status == "pending")).all())
     rebuild(session, backup=False)
-    after = sorted(session.execute(select(Entity.key)).scalars())
-    assert before == after
+    after = dict(session.execute(select(Entity.key, Entity.id)).all())
+    assert before == after  # same keys, and every key keeps its id (ids are handles)
+    items_after = dict(session.execute(select(ReviewItem.dedupe_key, ReviewItem.id)
+                                       .where(ReviewItem.status == "pending")).all())
+    assert {k: v for k, v in items_after.items() if k in items} == {k: items[k] for k in items_after if k in items}
 
 
 def test_vector_index_follows_renames_in_process(library, session):

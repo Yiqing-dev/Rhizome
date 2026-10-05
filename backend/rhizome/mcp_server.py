@@ -104,7 +104,8 @@ def rhz_search(query: str, types: str | None = None, organism: str | None = None
 
 @mcp.tool()
 def rhz_get(entity: str) -> str:
-    """Get a paper or asset card by numeric id or key (e.g. 'dataset:GSE12345')."""
+    """Get a paper or asset card by key (e.g. 'dataset:GSE12345'; keys are the durable handles) or
+    by a numeric id from an earlier result."""
     card = _call(lambda c: c.get(int(entity)) if entity.isdigit() else c.get_by_key(entity))
     if card and card.get("exports"):
         for ex in card["exports"]:
@@ -113,9 +114,16 @@ def rhz_get(entity: str) -> str:
 
 
 @mcp.tool()
-def rhz_related(entity_id: int) -> str:
-    """Papers / assets related to an entity (for a paper: which read papers relate and along which dimension)."""
-    return _j(_call(lambda c: c.related(entity_id)))
+def rhz_related(entity: str) -> str:
+    """Papers / assets related to an entity (for a paper: which read papers relate and along which
+    dimension). `entity` is a key (e.g. 'work:doi:10.1/x', 'method:repo:github.com/a/b'; keys are
+    the durable handles) or a numeric id from an earlier result."""
+    def run(c):
+        if entity.isdigit():
+            return c.related(int(entity))
+        card = c.get_by_key(entity)
+        return c.related(card["id"]) if card else []
+    return _j(_call(run))
 
 
 @mcp.tool()

@@ -207,6 +207,22 @@ class Graph:
         self._redirects: dict[str, str] | None = None
         # When set (replaying an extraction), new entities and edges are stamped with this time.
         self.clock: datetime | None = None
+        # Set by rebuild: entities and review items get back the ids they had before (the UI, CLI
+        # and MCP use ids as handles); new ones get ids above every id ever handed out.
+        self.id_plan: dict[str, int] | None = None
+        self.next_id = 0
+        self.item_plan: dict[str, int] | None = None
+        self.next_item_id = 0
+
+    def _planned(self, model, plan: dict[str, int] | None, key: str, attr: str) -> int | None:
+        if plan is None:
+            return None
+        want = plan.get(key)
+        if want is not None and self.s.get(model, want) is None:
+            return want
+        nid = getattr(self, attr)
+        setattr(self, attr, nid + 1)
+        return nid
 
     # -- keys / redirects (from human merge decisions) --
     def redirects(self) -> dict[str, str]:
@@ -257,7 +273,8 @@ class Graph:
     def create(self, etype: str, key: str, name: str, *, external_id: str | None = None,
                status: str = "active", attrs: dict[str, Any] | None = None,
                aliases: Iterable[str] = (), embed: bool = True) -> Entity:
-        e = Entity(type=etype, key=key, canonical_name=name, external_id=external_id, status=status,
+        e = Entity(id=self._planned(Entity, self.id_plan, key, "next_id"), type=etype, key=key,
+                   canonical_name=name, external_id=external_id, status=status,
                    attrs=attrs or {}, created_at=self.clock or utcnow())
         self.s.add(e)
         self.s.flush()
@@ -393,7 +410,8 @@ class Graph:
         existing = self.s.execute(select(ReviewItem).where(ReviewItem.dedupe_key == dedupe)).scalar_one_or_none()
         if existing is not None:
             return None
-        item = ReviewItem(kind=kind, payload=payload, dedupe_key=dedupe, score=score)
+        item = ReviewItem(id=self._planned(ReviewItem, self.item_plan, dedupe, "next_item_id"),
+                          kind=kind, payload=payload, dedupe_key=dedupe, score=score)
         self.s.add(item)
         self.s.flush()
         return item

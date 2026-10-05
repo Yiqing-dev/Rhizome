@@ -10,10 +10,10 @@ from __future__ import annotations
 import logging
 import time
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
-from ..db.models import Edge, Embedding, Entity, EntityAlias, Extraction, ReviewItem, Work
+from ..db.models import KV, Edge, Embedding, Entity, EntityAlias, Extraction, ReviewItem, Work
 from ..db.session import backup_database, has_fts, recent_backup
 from ..config import get_settings
 from .decisions import apply_all
@@ -39,6 +39,16 @@ def rebuild(s: Session, backup: bool = True) -> dict:
             except Exception as e:  # noqa: BLE001
                 log.warning("pre-rebuild backup failed: %s", e)
                 warnings.append(f"pre-rebuild backup failed: {e}")
+    # ids are handles (UI URLs, CLI, MCP, review items): remember them so the same key gets the same
+    # id back, and a new entity never inherits the id of one that is gone
+    id_plan = dict(s.execute(select(Entity.key, Entity.id)).all())
+    item_plan = dict(s.execute(select(ReviewItem.dedupe_key, ReviewItem.id).where(
+        ReviewItem.status == "pending", ReviewItem.kind.in_(REGENERATED_REVIEW_KINDS))).all())
+    high = s.get(KV, "id_high_water")
+    hv = dict(high.v) if high and high.v else {}
+    next_id = max(s.execute(select(func.coalesce(func.max(Entity.id), 0))).scalar_one(), hv.get("entity", 0)) + 1
+    next_item = max(s.execute(select(func.coalesce(func.max(ReviewItem.id), 0))).scalar_one(),
+                    hv.get("review_item", 0)) + 1
     for model in (Edge, Embedding, EntityAlias, Work, Entity):
         s.execute(delete(model))
     if has_fts(s):
@@ -48,6 +58,7 @@ def rebuild(s: Session, backup: bool = True) -> dict:
     s.flush()
     VECTORS.clear()
     g = Graph(s)
+    g.id_plan, g.next_id, g.item_plan, g.next_item_id = id_plan, next_id, item_plan, next_item
     n = 0
     current = s.execute(select(Extraction).where(Extraction.is_current).order_by(Extraction.id)).scalars().all()
     # pass 1: paper-level extractions; pass 2 (after decisions, which may create topics): retro tags
@@ -70,6 +81,14 @@ def rebuild(s: Session, backup: bool = True) -> dict:
                         + ", ".join(f"#{x['id']} {x['op']}" for x in skipped))
     promoted = promote_topics(g)
     s.flush()
+    hv = {"entity": max(g.next_id - 1, s.execute(select(func.coalesce(func.max(Entity.id), 0))).scalar_one()),
+          "review_item": max(g.next_item_id - 1,
+                             s.execute(select(func.coalesce(func.max(ReviewItem.id), 0))).scalar_one())}
+    if high is None:
+        s.add(KV(k="id_high_water", v=hv))
+    else:
+        high.v = hv
+    g.id_plan = g.item_plan = None
     return {"extractions": n, "cites": cites, "decisions_applied": applied, "topics_promoted": promoted,
             "entities": s.query(Entity).count(), "edges": s.query(Edge).count(),
             "seconds": round(time.time() - t0, 2), "decisions_skipped": skipped,

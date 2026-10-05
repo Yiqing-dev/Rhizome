@@ -110,7 +110,7 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
     p = doc.paper
     work = resolve_work(g, openalex_id=meta.get("openalex_id"), doi=p.doi, title=p.title, year=p.year)
     w = g.s.get(Work, work.id)
-    w.tier = max(w.tier, 1)
+    w.tier = max(w.tier or 0, ex.tier or 1)  # T2: a deep export with the PDF attached
     g.update_attrs(work, tldr=doc.tldr, paper_types=p.type, venue=p.venue, authors=p.authors, url=p.url,
                    depth="deep" if doc.depth == "deep" or work.attrs.get("depth") == "deep" else "light",
                    rxf_extraction=ex.id)

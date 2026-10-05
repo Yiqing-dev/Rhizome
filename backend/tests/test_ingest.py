@@ -197,3 +197,17 @@ def test_chinese_topic_and_alias(library, session):
     t = g.by_alias("topic", "空间转录组")
     assert t is not None and t.type == "topic"
     assert session.execute(select(Entity).where(Entity.type == "topic", Entity.status == "candidate")).first()
+
+
+def test_deep_export_with_pdf_is_tier_2_and_survives_rebuild(settings, session):
+    from rhizome.pipeline.rebuild import rebuild
+    from rhizome.services.search import Filters, search
+
+    r = ingest_text(session, example("deep-grn-atlas.yaml"), "a.yaml", pdf=b"%PDF-1.4 synthetic")
+    assert session.get(Work, r.work_id).tier == 2
+    session.commit()
+    rebuild(session, backup=False)
+    session.flush()
+    w = session.query(Work).one()
+    assert w.tier == 2
+    assert search(session, "single-nucleus multiome atlas", Filters(types=("work",), tier=2))
