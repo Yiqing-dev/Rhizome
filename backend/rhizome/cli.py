@@ -415,6 +415,37 @@ def sync(remote: str, dry_run: bool = False) -> None:
 
 
 @app.command()
+def backups() -> None:
+    """List backups (newest first) with their schema revision."""
+    from datetime import datetime as dt
+
+    from .db.session import backup_revision, list_backups
+
+    rows = [{"file": str(p), "modified": dt.fromtimestamp(p.stat().st_mtime).isoformat(timespec="seconds"),
+             "mb": round(p.stat().st_size / 1048576, 1), "revision": backup_revision(p)}
+            for p in list_backups(get_settings())]
+    if _out(rows):
+        return
+    for r in rows:
+        typer.echo(f"{r['modified']}  {r['mb']:>7} MB  rev {r['revision']}  {r['file']}")
+
+
+@app.command()
+def restore(backup_file: Path, yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask")) -> None:
+    """Replace the library with a backup (the app and Claude Desktop must be closed)."""
+    from .db.session import RestoreError, restore_database
+
+    if not yes and not typer.confirm(_("cli.restore_confirm", backup=str(backup_file))):
+        raise typer.Exit(1)
+    try:
+        pre = restore_database(get_settings(), backup_file)
+    except RestoreError as e:
+        typer.secho(str(e), fg="red", err=True)
+        raise typer.Exit(2) from None
+    typer.echo(_("cli.restore_done", pre=str(pre)))
+
+
+@app.command()
 def backup() -> None:
     """Copy the database into the backups directory."""
     from .db.session import backup_database
@@ -525,3 +556,15 @@ def models_download(name: str = typer.Argument(..., help="bge-m3 | bge-reranker-
 
 if __name__ == "__main__":  # pragma: no cover
     app()
+
+
+def run() -> None:
+    """Console entry point (`rhz`, rhz.exe): known user-facing failures print their message, not a
+    traceback."""
+    from .db.session import SchemaTooNew
+
+    try:
+        app(prog_name="rhz")
+    except SchemaTooNew as e:
+        typer.secho(str(e), fg="red", err=True)
+        raise SystemExit(3) from None

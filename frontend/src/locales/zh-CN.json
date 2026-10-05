@@ -325,7 +325,10 @@
     "project_hint": "在 Claude 或 ChatGPT 里建一个 Project：把导出指令粘贴进 Project 指令，把主题词表 rhizome-vocab.yaml 放进 Project 知识。之后每次讨论完说一句“导出 RXF”。在 Claude Desktop 里连接了 Rhizome 时，Claude 也能自己调用 rhz_rxf_guide 拿到这份指令。",
     "project_copy": "复制导出指令",
     "project_download": "下载导出指令 (.md)",
-    "copied": "已复制"
+    "copied": "已复制",
+    "restore_title": "如何从备份恢复",
+    "restore_hint": "先关闭 Rhizome 和 Claude Desktop，然后在命令行运行下面两条命令：第一条列出所有备份，第二条用选中的备份覆盖资料库。恢复前的状态会自动另存一份，可以再恢复回来。",
+    "restore_file": "备份文件路径"
   },
   "lang": {
     "short_en": "EN",

@@ -176,6 +176,13 @@ export default function SettingsPage() {
               </dl>
             )}
             {si?.backups.error && <div className="notice error">{si.backups.error}</div>}
+            {si && (
+              <details>
+                <summary className="small muted">{t("settings.restore_title")}</summary>
+                <p className="hint">{t("settings.restore_hint")}</p>
+                <pre className="raw">{`"${si.cli.join(" ")}" backups\n"${si.cli.join(" ")}" restore "<${t("settings.restore_file")}>"`}</pre>
+              </details>
+            )}
             <div className="row wrap">
               <input className="grow" value={backupDir} onChange={(e) => setBackupDir(e.target.value)} placeholder={t("settings.backups_dir_placeholder")} />
               <button onClick={() => patchChecked({ backup_dir: backupDir.trim() || null })}>{t("settings.save")}</button>

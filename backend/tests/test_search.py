@@ -132,3 +132,55 @@ def test_keyword_query_is_bounded():
     q = _fts_query(words * 3)
     assert q.count(" OR ") + 1 == MAX_FTS_TERMS
     assert '"the"' not in q and q.count('"term0001"') <= 1
+
+
+def _fts_text(session, entity_id):
+    from sqlalchemy import text
+
+    return session.execute(text("select text from entity_fts where rowid = :i"), {"i": entity_id}).scalar_one()
+
+
+def test_aliases_are_searchable_after_decisions_and_rebuild(library, session):
+    """D8: an alias added by a decision (or an auto-merge) reaches the full-text index at once and
+    after a rebuild; every entity has exactly one FTS row, keyed by its id."""
+    from sqlalchemy import func, select, text
+
+    from rhizome.db.models import Entity
+    from rhizome.pipeline import decisions
+    from rhizome.pipeline.graph import Graph
+    from rhizome.pipeline.rebuild import rebuild
+    from rhizome.services.search import Filters, keyword_ids
+
+    g = Graph(session)
+    m = g.by_alias("method", "RootNet")
+    decisions.record(g, "add_alias", {"key": m.key, "alias": "根网络推断器"})
+    assert "根网络推断器" in _fts_text(session, m.id)
+    assert m.id in keyword_ids(session, "根网络推断器", Filters().types)
+    session.commit()
+    rebuild(session, backup=False)
+    m = Graph(session).by_key(m.key)
+    assert "根网络推断器" in _fts_text(session, m.id)
+    n_fts = session.execute(text("select count(*) from entity_fts")).scalar_one()
+    assert n_fts == session.execute(select(func.count(Entity.id))).scalar_one()
+
+
+def test_upgrade_from_0001_rebuilds_the_fts_index(library, session, settings):
+    from alembic import command
+    from sqlalchemy import text
+
+    from rhizome.db.session import _alembic_config, dispose_all, get_engine, init_db
+
+    session.commit()
+    session.close()
+    engine = get_engine(settings)
+    with engine.begin() as conn:
+        cfg = _alembic_config(engine)
+        cfg.attributes["connection"] = conn
+        command.downgrade(cfg, "0001")  # an install made by 0.1.x
+    dispose_all()
+    init_db(settings)
+    with get_engine(settings).connect() as c:
+        rows = dict(c.execute(text("select rowid, text from entity_fts")).all())
+        ids = [r[0] for r in c.execute(text("select id from entity"))]
+        alias_ok = all(a in rows[eid] for eid, a in c.execute(text("select entity_id, alias from entity_alias")))
+    assert sorted(rows) == sorted(ids) and alias_ok

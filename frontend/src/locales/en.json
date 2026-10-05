@@ -325,7 +325,10 @@
     "project_hint": "Create a Project in Claude or ChatGPT: paste the export instructions into the Project instructions and add the topic vocabulary rhizome-vocab.yaml to the Project knowledge. Then say \"export RXF\" after each discussion. When Rhizome is connected to Claude Desktop, Claude can also fetch the instructions itself with rhz_rxf_guide.",
     "project_copy": "Copy export instructions",
     "project_download": "Download instructions (.md)",
-    "copied": "Copied"
+    "copied": "Copied",
+    "restore_title": "How to restore a backup",
+    "restore_hint": "Close Rhizome and Claude Desktop, then run these in a terminal: the first lists the backups, the second replaces the library with the one you pick. The state before the restore is saved first, so you can go back.",
+    "restore_file": "backup file"
   },
   "lang": {
     "short_en": "EN",

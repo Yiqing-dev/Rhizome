@@ -183,6 +183,63 @@ def prune_backups(settings: Settings) -> list[Path]:
     return removed
 
 
+def backup_revision(path: Path) -> str | None:
+    try:
+        with closing_ro(path) as c:
+            row = c.execute("select version_num from alembic_version").fetchone()
+        return row[0] if row else None
+    except sqlite3.Error:
+        return None
+
+
+def closing_ro(path: Path):
+    from contextlib import closing
+
+    return closing(sqlite3.connect(sqlite_ro_uri(Path(path).resolve()), uri=True))
+
+
+class RestoreError(RuntimeError):
+    pass
+
+
+def restore_database(settings: Settings, backup: Path) -> Path | None:
+    """Copy a backup over the live library *through SQLite* (backup API), never by swapping files:
+    a stale -wal file next to a swapped-in database corrupts it. Refuses while any other process
+    has the library open, checks the backup first, and keeps a pre-restore copy of the current
+    state. Returns that copy."""
+    from ..i18n import _
+
+    backup = Path(backup)
+    if not backup.is_file():
+        raise RestoreError(_("db.restore_missing", path=str(backup)))
+    try:
+        with closing_ro(backup) as c:
+            ok = c.execute("PRAGMA integrity_check").fetchone()[0]
+    except sqlite3.Error as e:
+        raise RestoreError(_("db.restore_bad", path=str(backup), error=str(e))) from e
+    if ok != "ok":
+        raise RestoreError(_("db.restore_bad", path=str(backup), error=ok))
+    rev = backup_revision(backup)
+    engine = get_engine(settings)
+    if rev is not None and not _known_revision(engine, rev):
+        raise RestoreError(_("db.restore_newer", revision=rev))
+    dispose_all()  # our own pooled connections would count as "in use"
+    live = Path(settings.db_url.split("sqlite:///", 1)[1])
+    pre = backup_database(settings, tag="pre-restore") if live.exists() else None
+    dispose_all()
+    from contextlib import closing
+
+    with closing(sqlite3.connect(str(live), timeout=0)) as dst:
+        try:
+            dst.execute("BEGIN EXCLUSIVE")
+            dst.execute("ROLLBACK")
+        except sqlite3.OperationalError as e:
+            raise RestoreError(_("db.restore_busy")) from e
+        with closing(sqlite3.connect(str(backup))) as src:
+            src.backup(dst)
+    return pre
+
+
 def backup_status(settings: Settings) -> dict:
     files = list_backups(settings)
     return {"dir": str(settings.backups_dir), "count": len(files),
@@ -222,21 +279,123 @@ def copy_sqlite(src: Path, dst: Path) -> None:
     os.replace(tmp, dst)
 
 
+def include_object(obj, name, type_, reflected, compare_to) -> bool:
+    """Alembic filter: the FTS5 virtual table and its shadow tables are not in the models, so
+    autogenerate must not propose dropping them."""
+    return not (type_ == "table" and name and name.startswith("entity_fts"))
+
+
+class SchemaTooNew(RuntimeError):
+    """The library was last opened by a newer Rhizome (its schema revision is unknown here)."""
+
+
+SCHEMA_FILE = "schema.json"
+
+
+def _known_revision(engine: Engine, rev: str) -> bool:
+    from alembic.script import ScriptDirectory
+
+    try:
+        return ScriptDirectory.from_config(_alembic_config(engine)).get_revision(rev) is not None
+    except Exception:  # noqa: BLE001 - alembic raises several types for unknown ids
+        return False
+
+
+def _schema_too_new(settings: Settings, rev: str) -> SchemaTooNew:
+    import json
+
+    from .. import __version__
+    from ..i18n import _
+
+    by = "?"
+    try:
+        by = json.loads((settings.data_dir / SCHEMA_FILE).read_text("utf-8")).get("app_version", "?")
+    except (OSError, ValueError):
+        pass
+    return SchemaTooNew(_("db.schema_too_new", revision=rev, version=by, current=__version__,
+                          backups=str(settings.backups_dir)))
+
+
+def _write_schema_marker(settings: Settings, rev: str | None) -> None:
+    import json
+
+    from .. import __version__
+
+    p = settings.data_dir / SCHEMA_FILE
+    data = {"revision": rev, "app_version": __version__}
+    try:
+        if not p.exists() or json.loads(p.read_text("utf-8")) != data:
+            p.write_text(json.dumps(data), "utf-8")
+    except (OSError, ValueError):
+        pass
+
+
+def _migration_engine(url: str) -> Engine:
+    """Own connection for migrations: pysqlite does not put DDL in a transaction by itself, so a
+    crash half-way would leave tables created while alembic_version still says the old revision.
+    BEGIN IMMEDIATE makes the whole upgrade one transaction and serialises concurrent starters
+    (app, CLI, Claude's MCP server). Foreign keys are off so batch table copies don't cascade."""
+    from sqlalchemy.pool import NullPool
+
+    engine = create_engine(url, poolclass=NullPool, connect_args={"timeout": 300})
+
+    @event.listens_for(engine, "connect")
+    def _connect(dbapi_conn, _rec):  # pragma: no cover - trivial
+        dbapi_conn.isolation_level = None
+        cur = dbapi_conn.cursor()
+        cur.execute("PRAGMA foreign_keys=OFF")
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.close()
+
+    @event.listens_for(engine, "begin")
+    def _begin(conn):  # pragma: no cover - trivial
+        conn.exec_driver_sql("BEGIN IMMEDIATE")
+
+    return engine
+
+
 def init_db(settings: Settings | None = None) -> Engine:
-    """Create or upgrade the schema to head. Backs up first when an upgrade is needed."""
+    """Create or upgrade the schema to head: one transaction, serialised across processes, with a
+    backup taken first (inside the lock, so concurrent starters make exactly one)."""
     from alembic import command
+    from alembic.runtime.migration import MigrationContext
 
     settings = settings or get_settings()
     engine = get_engine(settings)
-    cur, head = current_revision(engine), head_revision(engine)
-    if cur != head:
-        if cur is not None:
-            path = backup_database(settings, tag=f"pre-{head}")
-            log.info("backed up database to %s before migrating %s -> %s", path, cur, head)
+    head = head_revision(engine)
+    cur = current_revision(engine)
+    if cur is not None and cur != head and not _known_revision(engine, cur):
+        raise _schema_too_new(settings, cur)  # before any backup: nothing to undo
+    if cur == head:
+        _write_schema_marker(settings, head)
+        return engine
+    if not is_sqlite(engine):
         with engine.begin() as conn:
             cfg = _alembic_config(engine)
             cfg.attributes["connection"] = conn
             command.upgrade(cfg, "head")
+        return engine
+    mig = _migration_engine(settings.db_url)
+    try:
+        with mig.begin() as conn:
+            cur = MigrationContext.configure(conn).get_current_revision()  # under the lock
+            if cur == head:
+                return engine  # another process migrated while we waited
+            if cur is not None:
+                if not _known_revision(engine, cur):
+                    raise _schema_too_new(settings, cur)
+                path = backup_database(settings, tag=f"pre-{head}")
+                log.info("backed up database to %s before migrating %s -> %s", path, cur, head)
+            cfg = _alembic_config(engine)
+            cfg.attributes["connection"] = conn
+            command.upgrade(cfg, "head")
+            bad = conn.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
+            if bad:
+                raise RuntimeError(f"migration left {len(bad)} dangling foreign keys; rolled back")
+    finally:
+        mig.dispose()
+    engine.dispose()  # pooled connections may hold the old schema
+    _write_schema_marker(settings, head)
     return engine
 
 

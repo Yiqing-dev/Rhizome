@@ -58,6 +58,37 @@ def entity_text(e: Entity) -> str:
     return "\n".join(p for p in parts if p)
 
 
+# ---- full-text rows -------------------------------------------------------------------
+# entity_fts rowid = entity id (one row per entity): updates and deletes are rowid lookups.
+FTS_DDL = "create virtual table entity_fts using fts5(text, tokenize='trigram')"
+
+
+def fts_body(e, aliases: Iterable[str]) -> str:
+    return entity_text(e) + "\n" + "\n".join(aliases)
+
+
+def rebuild_fts(conn) -> int:
+    """Re-derive every FTS row from entities and aliases (migrations, snapshots, repairs).
+    ``conn`` is a SQLAlchemy Connection or Session."""
+    from types import SimpleNamespace
+
+    aliases: dict[int, list[str]] = {}
+    for eid, alias in conn.execute(text("select entity_id, alias from entity_alias order by id")):
+        aliases.setdefault(eid, []).append(alias)
+    conn.execute(text("delete from entity_fts"))
+    n = 0
+    for eid, etype, name, attrs in conn.execute(text("select id, type, canonical_name, attrs from entity")).all():
+        if isinstance(attrs, str):
+            import json
+
+            attrs = json.loads(attrs or "{}")
+        e = SimpleNamespace(type=etype, canonical_name=name, attrs=attrs or {})
+        conn.execute(text("insert into entity_fts(rowid, text) values (:i, :t)"),
+                     {"i": eid, "t": fts_body(e, aliases.get(eid, []))})
+        n += 1
+    return n
+
+
 # ---- in-process vector index --------------------------------------------------------
 
 class _VectorCache:
@@ -279,24 +310,40 @@ class Graph:
         self.s.add(e)
         self.s.flush()
         for a in [name, *aliases]:
-            self.add_alias(e, a)
+            self.add_alias(e, a, index=False)  # reindex() below writes the FTS row once
         if etype == "work":
             self.s.add(Work(entity_id=e.id, dois=[], tier=0))
         self.reindex(e, embed=embed)
         return e
 
-    def add_alias(self, e: Entity, alias: str | None, source: str = "extraction", lang: str | None = None) -> None:
+    def add_alias(self, e: Entity, alias: str | None, source: str = "extraction", lang: str | None = None,
+                  index: bool = True) -> bool:
+        """Add an alias; the entity's full-text row is refreshed so the alias is searchable at once
+        (``index=False`` when the caller reindexes anyway). Returns whether it was new."""
         if not alias:
-            return
+            return False
         n = norm(alias)
         if not n or len(n) > 500:
-            return
+            return False
         exists = self.s.execute(select(EntityAlias.id).where(EntityAlias.entity_id == e.id,
                                                              EntityAlias.norm == n)).first()
-        if not exists:
-            self.s.add(EntityAlias(entity_id=e.id, alias=alias.strip(), norm=n, lang=lang or lang_of(alias),
-                                   source=source))
-            self.s.flush()
+        if exists:
+            return False
+        self.s.add(EntityAlias(entity_id=e.id, alias=alias.strip(), norm=n, lang=lang or lang_of(alias),
+                               source=source))
+        self.s.flush()
+        if index:
+            self._refresh_fts(e)
+        return True
+
+    def _refresh_fts(self, e: Entity) -> None:
+        if not self._fts:
+            return
+        aliases = self.s.execute(select(EntityAlias.alias).where(EntityAlias.entity_id == e.id)
+                                 .order_by(EntityAlias.id)).scalars().all()
+        self.s.execute(text("delete from entity_fts where rowid = :i"), {"i": e.id})
+        self.s.execute(text("insert into entity_fts(rowid, text) values (:i, :t)"),
+                       {"i": e.id, "t": fts_body(e, aliases)})
 
     def update_attrs(self, e: Entity, **attrs: Any) -> None:
         merged = dict(e.attrs or {})
@@ -305,11 +352,7 @@ class Graph:
 
     def reindex(self, e: Entity, embed: bool = True) -> None:
         """Refresh full-text row and embedding of one entity."""
-        if self._fts:
-            aliases = self.s.execute(select(EntityAlias.alias).where(EntityAlias.entity_id == e.id)).scalars().all()
-            body = entity_text(e) + "\n" + "\n".join(aliases)
-            self.s.execute(text("delete from entity_fts where entity_id = :i"), {"i": e.id})
-            self.s.execute(text("insert into entity_fts(text, entity_id) values (:t, :i)"), {"t": body, "i": e.id})
+        self._refresh_fts(e)
         if embed and e.type not in ("organism", "modality"):
             vec = embed_texts(self.s, [entity_text(e)])[0]
             model = get_embedder().name
@@ -320,7 +363,7 @@ class Graph:
 
     def delete_entity(self, e: Entity) -> None:
         if self._fts:
-            self.s.execute(text("delete from entity_fts where entity_id = :i"), {"i": e.id})
+            self.s.execute(text("delete from entity_fts where rowid = :i"), {"i": e.id})
         self.s.execute(delete(Edge).where((Edge.src == e.id) | (Edge.dst == e.id)))
         self.s.execute(delete(EntityAlias).where(EntityAlias.entity_id == e.id))
         self.s.execute(delete(Embedding).where(Embedding.entity_id == e.id))

@@ -163,7 +163,7 @@ def test_work_summary_is_indexed(library, session):
     row = session.execute(select(Entity).where(Entity.key == hits[0]["key"])).scalar_one()
     from sqlalchemy import text as sqltext
 
-    fts = session.execute(sqltext("select text from entity_fts where entity_id = :i"), {"i": row.id}).scalar_one()
+    fts = session.execute(sqltext("select text from entity_fts where rowid = :i"), {"i": row.id}).scalar_one()
     assert "TCP factors" in fts
 
 

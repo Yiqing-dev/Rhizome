@@ -207,3 +207,24 @@ msgstr "Backup failed: {error}"
 
 msgid "ml.unavailable"
 msgstr "The {kind} model {model} chosen in settings cannot be loaded by this program ({module} is not installed). The installed desktop app runs the built-in models only: click \"Use built-in models\" in Settings → Local models and rebuild, or run the pip-installed rhz serve instead."
+
+msgid "db.schema_too_new"
+msgstr "This library was last opened by a newer Rhizome ({version}); its schema revision {revision} is unknown to {current}. Install {version} or newer, or restore a backup made with the older version (backups are in {backups}; use rhz restore). The library was not modified."
+
+msgid "db.restore_missing"
+msgstr "Backup file not found: {path}"
+
+msgid "db.restore_bad"
+msgstr "The backup is incomplete or damaged; nothing was restored: {path} ({error})"
+
+msgid "db.restore_newer"
+msgstr "This backup comes from a newer Rhizome (schema revision {revision}) and cannot be opened by this version."
+
+msgid "db.restore_busy"
+msgstr "The library is in use. Close the Rhizome app and Claude Desktop (it starts Rhizome's MCP server), then run the restore again."
+
+msgid "cli.restore_confirm"
+msgstr "Replace the current library with {backup}? The current state is backed up first."
+
+msgid "cli.restore_done"
+msgstr "Restored. The state before the restore was saved to: {pre}"

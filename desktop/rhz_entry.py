@@ -26,6 +26,6 @@ if __name__ == "__main__":
                     stream.reconfigure(encoding="utf-8", errors="backslashreplace")
             except (ValueError, OSError):
                 pass
-    from rhizome.cli import app
+    from rhizome.cli import run
 
-    app(prog_name="rhz")
+    run()

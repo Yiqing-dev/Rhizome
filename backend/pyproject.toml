@@ -42,14 +42,14 @@ keyring = ["keyring>=24"]
 dev = ["pytest>=8", "pip-licenses>=4.4", "ruff==0.15.20"]
 
 [project.scripts]
-rhz = "rhizome.cli:app"
+rhz = "rhizome.cli:run"
 rhizome-mcp = "rhizome.mcp_server:main"
 
 [tool.setuptools.packages.find]
 include = ["rhizome*"]
 
 [tool.setuptools.package-data]
-rhizome = ["web/*", "web/assets/*", "data/*", "i18n/locales/*/LC_MESSAGES/*.po", "migrations/*", "migrations/versions/*", "alembic.ini"]
+rhizome = ["web/*", "web/assets/*", "data/*", "i18n/locales/*/LC_MESSAGES/*.po", "migrations/*", "migrations/versions/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -17,6 +17,7 @@ from sqlalchemy import create_engine, insert, select, text
 from ..config import RemoteTarget, Settings
 from ..db.models import Base
 from ..db.session import copy_sqlite, get_engine, is_sqlite
+from ..pipeline.graph import FTS_DDL, rebuild_fts
 
 
 def make_snapshot(settings: Settings, dst: Path) -> Path:
@@ -33,12 +34,10 @@ def make_snapshot(settings: Settings, dst: Path) -> Path:
             rows = [dict(r._mapping) for r in src.execute(select(table))]
             if rows:
                 tgt.execute(insert(table), rows)
-        tgt.execute(text("create virtual table entity_fts using fts5(text, entity_id unindexed, tokenize='trigram')"))
-    # FTS rows: rebuild from names/aliases
+        tgt.execute(text(FTS_DDL))
+    # FTS rows: the same text the app indexes
     with out.begin() as tgt:
-        tgt.execute(text("insert into entity_fts(text, entity_id) select e.canonical_name || ' ' || "
-                         "coalesce((select group_concat(alias, ' ') from entity_alias a where a.entity_id = e.id), ''), "
-                         "e.id from entity e"))
+        rebuild_fts(tgt)
         tgt.execute(text("create table if not exists alembic_version (version_num varchar(32) primary key)"))
     out.dispose()
     return dst

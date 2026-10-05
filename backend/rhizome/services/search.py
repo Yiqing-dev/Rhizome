@@ -62,7 +62,7 @@ def keyword_ids(s: Session, q: str, types: Iterable[str], k: int = 200) -> list[
     fq = _fts_query(q)
     if fq and has_fts(s):
         rows = s.execute(text(
-            "select f.entity_id from entity_fts f join entity e on e.id = f.entity_id "
+            "select f.rowid from entity_fts f join entity e on e.id = f.rowid "
             f"where entity_fts match :q and e.type in ({','.join(':t%d' % i for i in range(len(types)))}) "
             "order by bm25(entity_fts) limit :k"),
             {"q": fq, "k": k, **{f"t{i}": t for i, t in enumerate(types)}}).all()

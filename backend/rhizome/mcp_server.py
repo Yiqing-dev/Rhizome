@@ -173,7 +173,15 @@ def warm_up() -> None:
 
 
 def main() -> None:
-    warm_up()
+    import sys
+
+    from .db.session import SchemaTooNew
+
+    try:
+        warm_up()
+    except SchemaTooNew as e:  # Claude Desktop shows the server's stderr in its MCP log
+        print(str(e), file=sys.stderr)
+        raise SystemExit(3) from None
     mcp.run()
 
 

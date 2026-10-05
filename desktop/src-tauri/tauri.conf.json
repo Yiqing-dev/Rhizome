@@ -49,6 +49,7 @@
       "../../NOTICE": "NOTICE.txt"
     },
     "windows": {
+      "allowDowngrades": false,
       "webviewInstallMode": {
         "type": "embedBootstrapper"
       },

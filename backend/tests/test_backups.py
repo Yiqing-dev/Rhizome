@@ -81,3 +81,41 @@ def test_system_info_reports_backups(settings):
     dbs.backup_database(settings, tag="daily")
     b = info()["backups"]
     assert b["count"] == 1 and b["last_daily"] and b["bytes"] > 0
+
+
+def test_restore_goes_through_sqlite_and_keeps_a_pre_restore_copy(library, session, settings):
+    import sqlite3
+
+    from rhizome.db.models import Work
+
+    session.commit()
+    snap = dbs.backup_database(settings, tag="manual")
+    assert dbs.backup_revision(snap) == dbs.head_revision(dbs.get_engine(settings))
+    session.query(Work).delete()  # something we will want to undo
+    session.commit()
+    session.close()
+    pre = dbs.restore_database(settings, snap)
+    with sqlite3.connect(settings.data_dir / "rhizome.db") as c:
+        assert c.execute("select count(*) from work").fetchone()[0] == 3
+        assert c.execute("pragma integrity_check").fetchone()[0] == "ok"
+    with sqlite3.connect(pre) as c:
+        assert c.execute("select count(*) from work").fetchone()[0] == 0
+
+
+def test_restore_refuses_while_in_use_and_bad_backups(library, session, settings, tmp_path):
+    import sqlite3
+
+    session.commit()
+    snap = dbs.backup_database(settings, tag="manual")
+    holder = sqlite3.connect(settings.data_dir / "rhizome.db")
+    holder.execute("BEGIN IMMEDIATE")  # another process (the app, Claude's MCP) is writing
+    try:
+        with pytest.raises(dbs.RestoreError, match="Close the Rhizome app"):
+            dbs.restore_database(settings, snap)
+    finally:
+        holder.rollback()
+        holder.close()
+    junk = tmp_path / "junk.db"
+    junk.write_bytes(b"not a database at all" * 100)
+    with pytest.raises(dbs.RestoreError):
+        dbs.restore_database(settings, junk)
