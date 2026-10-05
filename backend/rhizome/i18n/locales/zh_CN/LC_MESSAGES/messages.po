@@ -315,3 +315,9 @@ msgstr "研究 / 项目：先列出所有 run：https://www.ebi.ac.uk/ena/portal
 
 msgid "dl.GEO_series"
 msgstr "GEO：https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc={acc}  处理后文件：https://ftp.ncbi.nlm.nih.gov/geo/series/{bucket}/{acc}/suppl/（原始测序数据在关联的 SRA 研究里）"
+
+msgid "cli.raw_problems"
+msgstr "原始文件检查：缺失 {missing} 个、空文件 {empty} 个、残留临时文件 {tmp} 个；详见 info.json 的 raw"
+
+msgid "cli.gc_done"
+msgstr "清理了 {pruned} 条不再使用的向量缓存，资料库缩小了 {mb} MB。"

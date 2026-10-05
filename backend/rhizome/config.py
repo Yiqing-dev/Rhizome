@@ -374,6 +374,11 @@ _current: Settings | None = None
 _overrides: dict[str, Any] = {}
 
 
+def token_path(settings: Settings) -> Path:
+    """Where the running app leaves its API token for the CLI and the MCP server."""
+    return settings.data_dir / "token"
+
+
 def snapshot_settings(path: Path) -> Settings:
     """The current settings (language, thresholds, embedder, models dir ...) pointed at a read-only
     snapshot file instead of the library's own database."""

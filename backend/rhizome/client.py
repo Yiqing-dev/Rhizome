@@ -392,7 +392,7 @@ def connect(settings: Settings | None = None, snapshot: Path | None = None, pref
         return LocalClient(st, read_only=True, create=False)
     st = settings or get_settings()
     if prefer_http:
-        from .api.app import token_path
+        from .config import token_path
 
         from .system import running_server_url
 

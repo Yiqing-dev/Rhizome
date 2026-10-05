@@ -141,6 +141,9 @@ def rebuild(s: Session, backup: bool = True) -> dict:
     from .materialize import reconcile_cards
 
     cards = reconcile_cards(g)
+    from .graph import prune_vector_cache
+
+    pruned = prune_vector_cache(s)
     hv = {"entity": max(g.next_id - 1, s.execute(select(func.coalesce(func.max(Entity.id), 0))).scalar_one()),
           "review_item": max(g.next_item_id - 1,
                              s.execute(select(func.coalesce(func.max(ReviewItem.id), 0))).scalar_one())}
@@ -152,4 +155,5 @@ def rebuild(s: Session, backup: bool = True) -> dict:
     return {"extractions": n, "cites": cites, "decisions_applied": applied, "topics_promoted": promoted,
             "entities": s.query(Entity).count(), "edges": s.query(Edge).count(),
             "seconds": round(time.time() - t0, 2), "prewarmed": prewarmed, "cards": cards, "decisions_skipped": skipped,
+            "vector_cache_pruned": pruned,
             "warnings": warnings}

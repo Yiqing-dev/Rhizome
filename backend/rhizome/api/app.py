@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from .. import __version__, jobs
-from ..config import Settings, get_settings, set_settings, settings_problems, ui_language, update_settings
+from ..config import Settings, get_settings, set_settings, settings_problems, token_path, ui_language, update_settings
 from ..db.models import EDGE_TYPES, Entity, HumanDecision, Job
 from ..db.session import session_scope
 from ..i18n import _
@@ -31,10 +31,6 @@ log = logging.getLogger(__name__)
 
 
 # ---- auth ----------------------------------------------------------------------------
-
-def token_path(settings: Settings) -> Path:
-    return settings.data_dir / "token"
-
 
 def get_or_create_token(settings: Settings) -> str:
     """The desktop shell generates the token and passes it in RHIZOME_API_TOKEN; it is written to the
@@ -146,6 +142,10 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
             from ..inbox import watch
 
             threading.Thread(target=watch, kwargs={"stop": stop}, daemon=True, name="rhizome-inbox").start()
+        if not read_only:  # the first search should not pay for loading the vector index
+            from ..pipeline.graph import VECTORS
+
+            threading.Thread(target=VECTORS.preload, args=(settings,), daemon=True, name="rhizome-preload").start()
         yield
         stop.set()
         if worker:

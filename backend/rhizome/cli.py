@@ -59,7 +59,7 @@ def main(ctx: typer.Context, data_dir: Optional[Path] = typer.Option(None, envva
 # Commands that change the library or need it to be the real one: refused in snapshot mode.
 WRITE_COMMANDS = frozenset({"serve", "mcp", "watch", "ingest", "decide", "undo", "retract", "reject", "rename", "alias",
                             "merge", "topic", "rebuild", "nightly", "enrich", "snapshot", "sync", "data-dir",
-                            "backups", "restore", "backup", "review"})
+                            "backups", "restore", "backup", "review", "gc"})
 
 
 def _require_writable() -> None:
@@ -651,10 +651,13 @@ def diag(output: Path = typer.Option(None, "-o")) -> None:
 
     st = get_settings()
     output = output or Path(f"rhizome-diag-{datetime.now():%Y%m%d-%H%M%S}.zip")
+    from . import rawstore
+
     with _local_session() as s:
         stats = home_stats(s)
+        raw = rawstore.check(s) if _state["snapshot"] is None else None
     info = {"version": __version__, "python": sys.version, "platform": sys.platform,
-            "sqlite": sqlite3.sqlite_version, "snapshot": str(_state["snapshot"] or ""), "stats": stats,
+            "sqlite": sqlite3.sqlite_version, "snapshot": str(_state["snapshot"] or ""), "stats": stats, "raw": raw,
             "settings": st.model_dump(mode="json", exclude={"contact_email", "remotes"}),
             "remotes": [r.name for r in st.remotes]}
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as z:
@@ -662,7 +665,32 @@ def diag(output: Path = typer.Option(None, "-o")) -> None:
         for log in sorted(st.logs_dir.glob("rhizome*.log*")):
             z.write(log, f"logs/{log.name}")
     typer.echo(f"Rhizome {__version__} · Python {sys.version.split()[0]} · SQLite {sqlite3.sqlite_version}")
+    if raw and not raw["ok"]:
+        typer.secho(_("cli.raw_problems", missing=len(raw["missing"]), empty=len(raw["empty"]),
+                      tmp=len(raw["stray_tmp"])), fg="yellow")
     typer.echo(_("cli.diag_done", path=output))
+
+
+@app.command()
+def gc() -> None:
+    """Compact the library: drop cached vectors nothing uses any more and reclaim the space."""
+    from sqlalchemy import text as sql
+
+    from .db.session import init_db, session_scope
+    from .pipeline.graph import prune_vector_cache
+
+    _require_writable()
+    init_db()
+    with session_scope() as s:
+        pruned = prune_vector_cache(s)
+    with session_scope() as s:
+        before = s.execute(sql("select page_count * page_size from pragma_page_count(), pragma_page_size()")).scalar_one()
+        s.commit()
+        s.connection().exec_driver_sql("COMMIT")  # VACUUM needs no open transaction
+        s.connection().exec_driver_sql("VACUUM")
+        after = s.execute(sql("select page_count * page_size from pragma_page_count(), pragma_page_size()")).scalar_one()
+    _out({"vector_cache_pruned": pruned, "bytes_before": before, "bytes_after": after}) or typer.echo(
+        _("cli.gc_done", pruned=pruned, mb=round((before - after) / 1e6, 1)))
 
 
 # ---- rxf -------------------------------------------------------------------------------------------

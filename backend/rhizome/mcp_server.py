@@ -41,7 +41,7 @@ _signature: tuple | None = None
 
 def _app_signature() -> tuple:
     """What identifies the running desktop app: its marker (url, pid) and its token."""
-    from .api.app import token_path
+    from .config import token_path
 
     st = get_settings()
     out: list[str | None] = []
@@ -59,6 +59,12 @@ def client(force: bool = False) -> Client:
     if force or _client is None or sig != _signature:
         _client, _signature = connect(), sig
         log.info("rhizome-mcp: using %s", type(_client).__name__)
+        if type(_client).__name__ == "LocalClient":  # in-process searches: warm the index now
+            import threading
+
+            from .pipeline.graph import VECTORS
+
+            threading.Thread(target=VECTORS.preload, daemon=True, name="rhizome-preload").start()
     return _client
 
 

@@ -88,7 +88,10 @@ def make_engine(url: str, read_only: bool = False) -> Engine:
             cur.execute("PRAGMA foreign_keys=ON")
             if not read_only:
                 _enable_wal(cur)
-                cur.execute("PRAGMA synchronous=NORMAL")
+                # FULL: a commit survives a power cut (NORMAL in WAL mode may lose the last
+                # transactions, i.e. a paper whose export already moved to inbox/done). Commits
+                # are few and the extra fsync is cheap next to embedding.
+                cur.execute("PRAGMA synchronous=FULL")
             cur.close()
 
         return engine

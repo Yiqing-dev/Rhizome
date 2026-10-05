@@ -127,7 +127,8 @@ def test_server_marker_lets_clients_find_a_random_port(settings):
 
 
 def test_token_from_shell_env(settings, monkeypatch):
-    from rhizome.api.app import get_or_create_token, token_path
+    from rhizome.api.app import get_or_create_token
+    from rhizome.config import token_path
 
     monkeypatch.setenv("RHIZOME_API_TOKEN", "from-the-shell")
     assert get_or_create_token(settings) == "from-the-shell"

@@ -5,7 +5,7 @@ by Claude through MCP, not generated locally."""
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 import numpy as np
@@ -13,9 +13,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..db.models import KV, Edge, Embedding, Entity, ReviewItem, utcnow
+from ..db.models import KV, Edge, Entity, ReviewItem, utcnow
 from ..ml import get_embedder
-from ..pipeline.graph import Graph, knn
+from ..pipeline.graph import VECTORS, Graph
 from .search import summarize
 
 ASSETS = ("dataset", "method", "idea", "claim")
@@ -78,36 +78,68 @@ def reset_threshold(s: Session) -> float:
     return current_threshold(s)
 
 
-def generate_candidates(s: Session, days: int = 7, max_items: int = 20) -> int:
-    since = utcnow() - timedelta(days=days)
+MAX_SOURCES = 2000
+PER_SOURCE = 2
+CHUNK = 256
+
+
+def generate_candidates(s: Session, days: int = 7, max_items: int = 20, since: datetime | None = None) -> int:
+    """Pairs (recent asset, any asset) above the similarity bar, in different communities and not
+    within two hops, best first and at most PER_SOURCE per source. ``since`` is the watermark of the
+    last run (assets added between runs are never skipped); ``days`` is the fallback window. One
+    matrix multiply per chunk of sources instead of one knn per asset, and the graph checks run
+    only for the pairs that are good enough; the queue is written afterwards, in one short step."""
+    since = since or (utcnow() - timedelta(days=days))
     th = current_threshold(s)
     comm = (s.get(KV, "communities") or KV(v={})).v or {}
     g = Graph(s)
     model = get_embedder().name
-    recent = s.execute(select(Entity, Embedding.vec).join(Embedding, Embedding.entity_id == Entity.id)
-                       .where(Entity.type.in_(ASSETS), Entity.created_at >= since, Embedding.model == model)).all()
+    ids, types, mat = VECTORS.get(s, model)
+    if len(ids) == 0:
+        return 0
+    recent = s.execute(select(Entity.id).where(Entity.type.in_(ASSETS), Entity.created_at >= since)
+                       .order_by(Entity.created_at.desc(), Entity.id.desc()).limit(MAX_SOURCES)).scalars().all()
+    pos = {int(i): k for k, i in enumerate(ids)}
+    src_rows = [pos[i] for i in recent if i in pos]
+    asset_mask = np.isin(types, list(ASSETS))
+    pairs: list[tuple[float, int, int]] = []  # (sim, source id, other id)
+    for start in range(0, len(src_rows), CHUNK):
+        rows = src_rows[start:start + CHUNK]
+        sims = mat[rows] @ mat.T
+        sims[:, ~asset_mask] = -np.inf
+        for r, row in enumerate(rows):
+            sims[r, row] = -np.inf
+            hit = np.nonzero(sims[r] >= th)[0]
+            if len(hit) > 10:
+                hit = hit[np.argpartition(-sims[r, hit], 9)[:10]]
+            pairs += [(float(sims[r, j]), int(ids[row]), int(ids[j])) for j in hit]
+    pairs.sort(key=lambda x: (-x[0], x[1], x[2]))
     made = 0
-    for e, vec in recent:
-        g_two: set[int] | None = None
-        for nid, sim in knn(s, np.frombuffer(vec, dtype=np.float32), types=ASSETS, k=10, exclude={e.id}):
-            if sim < th:
-                break
-            other = g.by_id(nid)
-            if other is None:
-                continue
-            if comm and comm.get(e.key) is not None and comm.get(e.key) == comm.get(other.key):
-                continue
-            g_two = g_two or _two_hop(s, e.id)
-            if nid in g_two:
-                continue
-            a, b = sorted([e.key, other.key])
-            if g.queue("synthesis", {"a": e.key, "b": other.key, "a_name": e.canonical_name[:300],
-                                     "b_name": other.canonical_name[:300], "a_type": e.type, "b_type": other.type,
-                                     "score": round(sim, 4)},
-                       dedupe=f"synthesis:{a}|{b}", score=sim):
-                made += 1
-            if made >= max_items:
-                return made
+    per_source: dict[int, int] = {}
+    two_hop: dict[int, set[int]] = {}
+    seen_pairs: set[frozenset[int]] = set()
+    for sim, sid, oid in pairs:
+        if per_source.get(sid, 0) >= PER_SOURCE or frozenset((sid, oid)) in seen_pairs:
+            continue
+        e, other = g.by_id(sid), g.by_id(oid)
+        if e is None or other is None or e.status == "rejected" or other.status == "rejected":
+            continue
+        if comm and comm.get(e.key) is not None and comm.get(e.key) == comm.get(other.key):
+            continue
+        if sid not in two_hop:
+            two_hop[sid] = _two_hop(s, sid)
+        if oid in two_hop[sid]:
+            continue
+        seen_pairs.add(frozenset((sid, oid)))
+        a, b = sorted([e.key, other.key])
+        if g.queue("synthesis", {"a": e.key, "b": other.key, "a_name": e.canonical_name[:300],
+                                 "b_name": other.canonical_name[:300], "a_type": e.type, "b_type": other.type,
+                                 "score": round(sim, 4)},
+                   dedupe=f"synthesis:{a}|{b}", score=sim):
+            made += 1
+            per_source[sid] = per_source.get(sid, 0) + 1
+        if made >= max_items:
+            break
     return made
 
 

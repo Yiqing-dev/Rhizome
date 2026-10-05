@@ -9,7 +9,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, literal, select
 from sqlalchemy.orm import Session
 
 from .. import rawstore
@@ -97,44 +97,53 @@ def entity_card(s: Session, entity_id: int, touch_access: bool = True) -> dict[s
     return card
 
 
+HUB_TYPES = ("organism", "modality")
+
+
 def neighbors(s: Session, entity_id: int, hops: int = 1, edge_types: list[str] | None = None,
               limit: int = MAX_ELEMENTS, offset: int = 0, include_rejected: bool = False) -> dict[str, Any]:
+    """The local graph, paged in SQL: node ids of one or two hops are a subquery (never a Python
+    list bound into IN, which Windows SQLite caps), hubs (organism, modality: everything is two
+    hops away through them) are not expanded, and only the edges among the page's nodes are read."""
+    from sqlalchemy import union
+
     hops = max(1, min(hops, 2))
-    frontier = {entity_id}
-    seen_nodes = {entity_id}
-    edges: dict[int, Edge] = {}
-    for _ in range(hops):
-        q = select(Edge).where((Edge.src.in_(frontier)) | (Edge.dst.in_(frontier)))
+
+    def edge_filter(q):
         if edge_types:
             q = q.where(Edge.type.in_(edge_types))
         if not include_rejected:
             q = q.where(Edge.status != "rejected")
-        nxt: set[int] = set()
-        for ed in s.execute(q.order_by(Edge.id)).scalars():
-            edges[ed.id] = ed
-            for n in (ed.src, ed.dst):
-                if n not in seen_nodes:
-                    nxt.add(n)
-                    seen_nodes.add(n)
-        frontier = nxt
-        if not frontier:
-            break
-    ordered_nodes = [entity_id] + sorted(seen_nodes - {entity_id})
-    total = len(ordered_nodes)
-    budget = max(1, limit // 2)
-    page_nodes = set([entity_id] + ordered_nodes[1:][offset:offset + budget - 1])
-    page_edges = [ed for ed in edges.values() if ed.src in page_nodes and ed.dst in page_nodes]
-    ents = {e.id: e for e in s.execute(select(Entity).where(Entity.id.in_(page_nodes))).scalars()}
+        return q
+
+    def adjacent(frontier):
+        return union(edge_filter(select(Edge.dst.label("id")).where(Edge.src.in_(frontier))),
+                     edge_filter(select(Edge.src.label("id")).where(Edge.dst.in_(frontier))))
+
+    hop1 = adjacent(select(literal(entity_id))).subquery("hop1")
+    reach = select(hop1.c.id)
+    if hops == 2:
+        expand = (select(hop1.c.id).join(Entity, Entity.id == hop1.c.id)
+                  .where(Entity.type.notin_(HUB_TYPES), hop1.c.id != entity_id))
+        hop2 = adjacent(expand).subquery("hop2")
+        reach = union(select(hop1.c.id), select(hop2.c.id))
+    nodes_sq = reach.subquery("reach")
+    ids_q = select(nodes_sq.c.id).distinct().where(nodes_sq.c.id != entity_id)
     if not include_rejected:  # rejected assets (hallucinated, wrong) stay out of the graph view
-        ents = {i: e for i, e in ents.items() if e.status != "rejected" or i == entity_id}
-        page_edges = [ed for ed in page_edges if ed.src in ents and ed.dst in ents]
+        ids_q = ids_q.join(Entity, Entity.id == nodes_sq.c.id).where(Entity.status != "rejected")
+    total = s.execute(select(func.count()).select_from(ids_q.subquery())).scalar_one() + 1
+    budget = max(1, limit // 2)
+    page_ids = [entity_id] + list(s.execute(ids_q.order_by(nodes_sq.c.id).offset(offset).limit(budget - 1)).scalars())
+    ents = {e.id: e for e in s.execute(select(Entity).where(Entity.id.in_(page_ids))).scalars()}
+    page_edges = list(s.execute(edge_filter(select(Edge).where(Edge.src.in_(page_ids), Edge.dst.in_(page_ids)))
+                                .order_by(Edge.id).limit(limit)).scalars())
     return {
         "center": entity_id,
         "nodes": [{"id": i, "key": ents[i].key, "type": ents[i].type, "name": ents[i].canonical_name,
-                   "status": ents[i].status} for i in page_nodes if i in ents],
+                   "status": ents[i].status} for i in page_ids if i in ents],
         "edges": [{"id": ed.id, "src": ed.src, "dst": ed.dst, "type": ed.type, "status": ed.status}
-                  for ed in page_edges][:limit],
-        "total_nodes": total, "offset": offset, "has_more": offset + budget - 1 < total - 1,
+                  for ed in page_edges if ed.src in ents and ed.dst in ents],
+        "total_nodes": total, "offset": offset, "has_more": offset + budget < total,
     }
 
 

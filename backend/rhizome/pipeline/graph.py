@@ -96,40 +96,85 @@ class _VectorCache:
     """Brute-force cosine index per (database, model).
 
     Loaded lazily from the ``embedding`` table and kept in step with in-process writes through
-    ``upsert`` / ``remove``; a cheap DB signature (row count, id sum) catches rows added by another
-    process (e.g. the CLI while the app is running). At 10^5 assets x 1024 dims this is ~400 MB
-    float32 and a few ms per query on CPU; sqlite-vec / pgvector can replace it behind ``knn``.
+    ``upsert`` / ``remove``; a cheap DB signature (row count, id sum, version) catches rows added by
+    another process (e.g. the CLI while the app is running). Rows live in preallocated buffers
+    with a logical length, so an upsert during ingest or rebuild is an O(1) append (amortised), not
+    a copy of the whole matrix; a removal swaps the last row in. The load streams rows into a
+    buffer sized from the count (no second copy at the peak) and is single-flight per key. At
+    10^5 assets x 1024 dims this is ~400 MB float32 and a few ms per query on CPU; sqlite-vec /
+    pgvector can replace it behind ``knn``.
     """
+
+    GROW = 1.5
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._data: dict[tuple[str, str], tuple[tuple[int, int, int], np.ndarray, np.ndarray, np.ndarray]] = {}
+        self._loading: dict[tuple[str, str], threading.Lock] = {}
+        # key -> [signature, ids, types, mat, n]; the arrays may be longer than n
+        self._data: dict[tuple[str, str], list] = {}
+        self.loads = 0  # for tests and diagnostics
 
     @staticmethod
     def _key(s: Session, model: str) -> tuple[str, str]:
         return str(s.get_bind().url), model
 
-    def get(self, s: Session, model: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        key = self._key(s, model)
+    def _signature(self, s: Session, model: str) -> tuple[int, int, int]:
         count, id_sum = s.execute(
             select(func.count(), func.coalesce(func.sum(Embedding.entity_id), 0)).where(Embedding.model == model)
         ).one()
-        sig = (int(count), int(id_sum), embedding_version(s))
+        return int(count), int(id_sum), embedding_version(s)
+
+    def get(self, s: Session, model: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        key = self._key(s, model)
+        sig = self._signature(s, model)
         with self._lock:
             hit = self._data.get(key)
             if hit and hit[0] == sig:
-                return hit[1], hit[2], hit[3]
-        rows = s.execute(
-            select(Embedding.entity_id, Entity.type, Embedding.vec).join(Entity, Entity.id == Embedding.entity_id)
-            .where(Embedding.model == model)
-        ).all()
-        ids = np.array([r[0] for r in rows], dtype=np.int64)
-        types = np.array([r[1] for r in rows], dtype=object)
-        mat = (np.stack([np.frombuffer(r[2], dtype=np.float32) for r in rows])
-               if rows else np.zeros((0, 1), dtype=np.float32))
-        with self._lock:
-            self._data[key] = (sig, ids, types, mat)
-        return ids, types, mat
+                return hit[1][:hit[4]], hit[2][:hit[4]], hit[3][:hit[4]]
+            flight = self._loading.setdefault(key, threading.Lock())
+        with flight:  # one loader per key; the others wait and reuse its result
+            with self._lock:
+                hit = self._data.get(key)
+                if hit and hit[0] == sig:
+                    return hit[1][:hit[4]], hit[2][:hit[4]], hit[3][:hit[4]]
+            ids, types, mat, n = self._load(s, model, sig[0])
+            with self._lock:
+                self._data[key] = [sig, ids, types, mat, n]
+            self.loads += 1
+            return ids[:n], types[:n], mat[:n]
+
+    def _load(self, s: Session, model: str, count: int):
+        q = (select(Embedding.entity_id, Entity.type, Embedding.vec, Embedding.dim)
+             .join(Entity, Entity.id == Embedding.entity_id).where(Embedding.model == model))
+        cap = max(count, 16)
+        ids = np.zeros(cap, dtype=np.int64)
+        types = np.empty(cap, dtype=object)
+        mat: np.ndarray | None = None
+        n = 0
+        for eid, etype, blob, dim in s.execute(q.execution_options(yield_per=1024)):
+            vec = np.frombuffer(blob, dtype=np.float32)
+            if mat is None:
+                mat = np.zeros((cap, vec.shape[0]), dtype=np.float32)
+            if vec.shape[0] != mat.shape[1]:
+                continue  # a row of another dimension (half-switched model): never mixed in
+            if n == cap:  # rows were added while we streamed
+                ids, types, mat = self._grown(ids, types, mat, n)
+                cap = len(ids)
+            ids[n], types[n], mat[n] = eid, etype, vec
+            n += 1
+        if mat is None:
+            mat = np.zeros((cap, 1), dtype=np.float32)
+        return ids, types, mat, n
+
+    def _grown(self, ids, types, mat, n):
+        cap = int(max(len(ids) * self.GROW, n + 16))
+        nid = np.zeros(cap, dtype=np.int64)
+        nid[:n] = ids[:n]
+        nty = np.empty(cap, dtype=object)
+        nty[:n] = types[:n]
+        nmat = np.zeros((cap, mat.shape[1]), dtype=np.float32)
+        nmat[:n] = mat[:n]
+        return nid, nty, nmat
 
     def upsert(self, s: Session, model: str, entity_id: int, etype: str, vec: np.ndarray, version: int) -> None:
         """Keep a loaded index current after an embedding is written or replaced (rename, edit)."""
@@ -138,18 +183,23 @@ class _VectorCache:
             hit = self._data.get(key)
             if hit is None:
                 return
-            _, ids, types, mat = hit
-            where = np.nonzero(ids == entity_id)[0]
+            _, ids, types, mat, n = hit
+            where = np.nonzero(ids[:n] == entity_id)[0]
             if len(where):
-                mat[where[0]] = vec
-                types[where[0]] = etype
+                i = where[0]
+                if mat.shape[1] == vec.shape[0]:
+                    mat[i] = vec
+                types[i] = etype
             else:
                 if mat.shape[1] != vec.shape[0]:
-                    mat = np.zeros((0, vec.shape[0]), dtype=np.float32)
-                ids = np.append(ids, entity_id)
-                types = np.append(types, etype)
-                mat = np.vstack([mat, vec[None, :].astype(np.float32)])
-            self._data[key] = ((int(len(ids)), int(ids.sum()), version), ids, types, mat)
+                    if n:  # vectors of another dimension: this index is for the other model
+                        return
+                    mat = np.zeros((len(ids), vec.shape[0]), dtype=np.float32)
+                if n == len(ids):
+                    ids, types, mat = self._grown(ids, types, mat, n)
+                ids[n], types[n], mat[n] = entity_id, etype, vec.astype(np.float32)
+                n += 1
+            self._data[key] = [(n, int(ids[:n].sum()), version), ids, types, mat, n]
 
     def remove(self, s: Session, model: str, entity_id: int, version: int) -> None:
         key = self._key(s, model)
@@ -157,10 +207,31 @@ class _VectorCache:
             hit = self._data.get(key)
             if hit is None:
                 return
-            _, ids, types, mat = hit
-            keep = ids != entity_id
-            ids, types, mat = ids[keep], types[keep], mat[keep]
-            self._data[key] = ((int(len(ids)), int(ids.sum()), version), ids, types, mat)
+            _, ids, types, mat, n = hit
+            where = np.nonzero(ids[:n] == entity_id)[0]
+            if len(where):
+                i, last = where[0], n - 1
+                ids[i], types[i], mat[i] = ids[last], types[last], mat[last]
+                n = last
+            self._data[key] = [(n, int(ids[:n].sum()), version), ids, types, mat, n]
+
+    def buffer_id(self, s: Session, model: str) -> int | None:
+        """Identity of the matrix buffer (tests: appends must not reallocate every time)."""
+        with self._lock:
+            hit = self._data.get(self._key(s, model))
+            return id(hit[3]) if hit else None
+
+    def preload(self, settings=None) -> int:
+        """Load the index in the background at startup so the first search does not pay for it."""
+        from ..db.session import session_scope
+
+        try:
+            with session_scope(settings, read_only=True) as s:
+                model = index_model(s) or get_embedder().name
+                return len(self.get(s, model)[0])
+        except Exception as e:  # noqa: BLE001 - best effort
+            log.info("vector index preload skipped: %s", e)
+            return 0
 
     def clear(self) -> None:
         with self._lock:
@@ -282,6 +353,22 @@ def embed_texts(s: Session, texts: list[str], persist: bool = True) -> np.ndarra
                     continue
                 s.merge(VectorCache(text_sha=shas[i], model=emb.name, vec=new[j].astype(np.float32).tobytes()))
     return np.stack([cached[h] for h in shas]) if shas else np.zeros((0, emb.dim), dtype=np.float32)
+
+
+def prune_vector_cache(s: Session, keep_texts: Iterable[str] | None = None) -> int:
+    """Drop cached vectors of other models and of texts no current entity has (every query used to
+    be cached; old models stay after a switch). Called by rebuild and `rhz gc`. Returns rows deleted."""
+    model = get_embedder().name
+    n = s.execute(delete(VectorCache).where(VectorCache.model != model)).rowcount or 0
+    if keep_texts is None:
+        keep_texts = (entity_text(e) for e in s.execute(select(Entity)).scalars())
+    keep = {sha256(t) for t in keep_texts}
+    stale = [h for h in s.execute(select(VectorCache.text_sha).where(VectorCache.model == model)).scalars()
+             if h not in keep]
+    for i in range(0, len(stale), 500):
+        n += s.execute(delete(VectorCache).where(VectorCache.model == model,
+                                                 VectorCache.text_sha.in_(stale[i:i + 500]))).rowcount or 0
+    return n
 
 
 # ---- graph -----------------------------------------------------------------------------

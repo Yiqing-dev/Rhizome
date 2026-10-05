@@ -233,8 +233,8 @@ def _nightly(s: Session, p: dict[str, Any]) -> dict[str, Any]:
 
     if p.get("force_synthesis") or not last or utcnow() - datetime.fromisoformat(last) >= timedelta(days=7):
         # catch up on everything added since the last batch (weeks without a run included)
-        days = 7 if not last else min(60, max(7, (utcnow() - datetime.fromisoformat(last)).days + 1))
-        out["synthesis_candidates"] = synthesis.generate_candidates(s, days=days)
+        out["synthesis_candidates"] = synthesis.generate_candidates(
+            s, days=7, since=datetime.fromisoformat(last) if last else None)
         _kv_set(s, "last_synthesis", {"at": utcnow().isoformat()})
     _kv_set(s, "last_nightly", {"at": utcnow().isoformat()})
     if not get_settings().offline:

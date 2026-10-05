@@ -57,13 +57,24 @@ def make_snapshot(settings: Settings, dst: Path) -> Path:
 
 
 def _finish_snapshot(path: Path, head: str | None) -> None:
-    """Stamp when/by what the snapshot was made and leave it as a plain rollback-journal file."""
+    """Strip what the remote never needs (the query/text vector cache, vectors of other models,
+    view history, job rows), stamp when/by what the snapshot was made, compact it and leave it as
+    a plain rollback-journal file. A snapshot is a fraction of the live file's size."""
     meta = {"created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "version": __version__,
             "head": head}
     with closing(sqlite3.connect(str(path))) as c:
+        c.execute("delete from vector_cache")
+        row = c.execute("select v from kv where k = 'embedding_model'").fetchone()
+        model = (json.loads(row[0]) or {}).get("model") if row else None
+        if model:
+            c.execute("delete from embedding where model != ?", (model,))
+        for table in ("access_log", "job"):
+            if c.execute("select 1 from sqlite_master where type='table' and name=?", (table,)).fetchone():
+                c.execute(f"delete from {table}")  # noqa: S608 - table name from a fixed list
         c.execute("insert or replace into kv (k, v) values (?, ?)", (META_KEY, json.dumps(meta)))
         c.commit()
         c.execute("PRAGMA journal_mode=DELETE")
+        c.execute("VACUUM")
 
 
 def snapshot_meta(path: Path) -> dict:

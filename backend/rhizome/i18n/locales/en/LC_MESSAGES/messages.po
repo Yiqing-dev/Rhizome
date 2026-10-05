@@ -315,3 +315,9 @@ msgstr "Study / project: list the runs with https://www.ebi.ac.uk/ena/portal/api
 
 msgid "dl.GEO_series"
 msgstr "GEO: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc={acc}  processed files: https://ftp.ncbi.nlm.nih.gov/geo/series/{bucket}/{acc}/suppl/  (raw reads: the linked SRA study)"
+
+msgid "cli.raw_problems"
+msgstr "Raw store check: {missing} missing file(s), {empty} empty, {tmp} leftover temporary file(s); see raw in info.json"
+
+msgid "cli.gc_done"
+msgstr "Removed {pruned} unused cached vectors; the library shrank by {mb} MB."
