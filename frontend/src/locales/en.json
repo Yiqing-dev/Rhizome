@@ -276,7 +276,7 @@
     },
     "sub": "Space shows the answer; 1–4 grades it.",
     "progress": "{{done}} / {{total}} today",
-    "done_hint": "Cards come from deep exports; new ones are limited per day in Settings.",
+    "done_hint": "Cards come from deep exports; the daily limits are under Settings → Advanced.",
     "origin": {
       "rxf": "from export",
       "template": "template",

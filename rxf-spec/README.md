@@ -42,9 +42,15 @@ All optional, defaults shown:
 | `paper.authors`, `.venue`, `.url` | — | card display when OpenAlex is unavailable |
 | `id` on topics, claims, datasets, methods, ideas, issues, user_insights, review_cards | — | in-file references from `links_to` / `about` |
 | `id`, `exported_at`, `language` at the top level | — | stored in L1; `language` will feed the alias `lang` field |
+| `assets.datasets[].public`, `assets.methods[].maintained` | — | `true` / `false` / `unknown` (`yes` / `no` from older exports are accepted) |
+| `assets.datasets[].database` | — | `GEO` `SRA` `ENA` `GSA` `CNGB` `ArrayExpress` `Zenodo` `other`; the accession is format-checked per database |
+| `assets.ideas[].transfer.to` | — | the file-local id of the target topic (a free name is still accepted) |
 
 ## Changelog
 
 - **v1** (2026-10-03) — initial version.
 - **v1, additive** (2026-10-04) — optional `id`s and in-file references, top-level `id` / `exported_at`
   / `language`. Older v1 files stay valid.
+- **v1, additive** (2026-10-05) — `public` takes `unknown` like `maintained`; `GSA` joins the database enum.
+  The export instructions were rewritten (17 numbered rules + an annotated skeleton, zh and en); the
+  skeleton of each instruction file is a contract test. Older v1 files stay valid.

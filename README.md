@@ -28,8 +28,9 @@ cloud folder (Settings → Backups, or `rhz settings set backup_dir "D:\\Backups
 
 - **Capture**: end a chat with "export RXF", save the YAML into the inbox folder (or say "save to
   Rhizome" in Claude Desktop). Invalid files go to `error/` with a report you paste back into the chat.
-- **Anchor**: DOIs resolve through OpenAlex (preprint + journal version = one node); GEO/SRA/ArrayExpress
-  accessions and GitHub repos are checked against their APIs. IDs that do not exist are not stored.
+- **Anchor**: DOIs resolve through OpenAlex (preprint + journal version = one node); GEO / SRA / ENA / GSA /
+  CNGB / ArrayExpress / Zenodo accessions are format-checked per database, GEO/SRA and GitHub repos are
+  checked against their APIs. IDs that do not exist are not stored.
 - **Canonicalise**: exact alias → vector top-5 → reranker → thresholds (≥0.9 merge, 0.6–0.9 review
   queue, <0.6 new). Claims use NLI; contradictions always go to the review queue first.
 - **Find**: hybrid search (vectors + FTS5) at asset level; every hit carries its source paper and the
@@ -47,6 +48,21 @@ See [desktop/README.md](desktop/README.md) for what goes where, portable mode an
 Behind a campus or company proxy, set `HTTPS_PROXY` before starting Rhizome (certificates installed
 in Windows are trusted); `rhz doctor` checks the path to OpenAlex, NCBI and GitHub, and `rhz enrich`
 fetches metadata for papers that were imported offline.
+
+## Around the app
+
+The main surface is small on purpose; everything else is one click away.
+
+| Where | What |
+| --- | --- |
+| **Home** | search box, asset counts, a one-line to-do (cards due, items in the review queue), the *Add a paper* drop zone; *Recall* folds out below it |
+| **Topic map** / **Review cards** | the topic layer as a graph (new topics fold out at the bottom); FSRS review session |
+| **More ▾** | the search page with filters, the review queue (its count sits on the menu), the weekly digest, the decision log |
+| **Settings** | language, chat Project setup (export instructions, vocabulary), storage folders, backups, Claude Desktop. *Advanced* holds moving the data folder, offline mode, the backup folder and restore, models and inference backend, review limits, remote snapshots |
+
+On a topic page merge / reject sit under *Manage topic*; on a paper or asset card rename / alias /
+merge sit under *Edit*. Search shows the type chips; organism, modality, year and role are under
+*More filters* and open automatically when a link carries them.
 
 ## Install & run (development)
 
