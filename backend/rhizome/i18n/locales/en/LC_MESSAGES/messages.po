@@ -282,3 +282,36 @@ msgstr "The library location is set by RHIZOME_DATA_DIR or --data-dir ({path}); 
 
 msgid "api.restart_manually"
 msgstr "This backend was not started by the desktop app; restart it by hand."
+
+msgid "cli.no_library"
+msgstr "No library at {path}. Import a paper first (rhz ingest FILE), or on a remote machine point rhz at a snapshot: rhz --snapshot FILE ... or export RHIZOME_SNAPSHOT=FILE"
+
+msgid "cli.snapshot_revision"
+msgstr "Snapshot schema {snapshot} (written by Rhizome {version}) differs from this program's {code} (Rhizome {current}); some commands may fail. Re-run rhz sync from the desktop, or install the same version here."
+
+msgid "cli.snapshot_stale"
+msgstr "This snapshot is {days} days old (made {created}); run rhz sync on the desktop for current results."
+
+msgid "cli.snapshot_model"
+msgstr "This snapshot was indexed with {model}, which this machine cannot load (missing: {module}); install rhizome[models] here for semantic search."
+
+msgid "cli.sync_controlmaster_win"
+msgstr "control_path (SSH ControlMaster) is not supported by Windows OpenSSH; the upload still works in one session but asks for your password / 2FA once."
+
+msgid "cli.sync_timeout"
+msgstr "Upload to {host} did not finish within {seconds} s (set a larger \"timeout\" on the remote in settings)."
+
+msgid "cli.sync_failed"
+msgstr "Upload to {host} failed (ssh exit {code}). The ssh output above says which step: connecting, creating the folder, writing the file, or renaming it."
+
+msgid "cli.synced_hint"
+msgstr "On the remote machine: export RHIZOME_SNAPSHOT={path}"
+
+msgid "dl.SRA_run"
+msgstr "SRA run: prefetch {acc} && fasterq-dump {acc}  (or FASTQ from ENA: https://www.ebi.ac.uk/ena/browser/view/{acc})"
+
+msgid "dl.SRA_project"
+msgstr "Study / project: list the runs with https://www.ebi.ac.uk/ena/portal/api/filereport?accession={acc}&result=read_run&fields=run_accession,fastq_ftp&format=tsv (download the fastq_ftp links or prefetch each run_accession); run selector: https://www.ncbi.nlm.nih.gov/Traces/study/?acc={acc}"
+
+msgid "dl.GEO_series"
+msgstr "GEO: https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc={acc}  processed files: https://ftp.ncbi.nlm.nih.gov/geo/series/{bucket}/{acc}/suppl/  (raw reads: the linked SRA study)"

@@ -8,7 +8,7 @@ version = "0.1.4"
 description = "Personal literature asset graph: papers split into reusable datasets, methods, ideas and claims."
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.11"
+requires-python = ">=3.10"  # cluster modules often stop at 3.10; CI tests it
 authors = [{ name = "Yiqing Wang" }]
 dependencies = [
   # Upper bounds at the next major: a new major (e.g. mcp 2, which renamed FastMCP) must be adopted

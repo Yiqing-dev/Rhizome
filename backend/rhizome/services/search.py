@@ -8,10 +8,11 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 from sqlalchemy import case, func, literal, or_, select, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from ..db.models import Edge, Entity, EntityAlias, Work
-from ..db.session import has_fts
+from ..db.session import fts_unavailable, has_fts
 from ..ml import get_reranker
 from ..text import norm, search_units
 from ..pipeline.graph import embed_texts, entity_text, knn
@@ -64,12 +65,15 @@ def keyword_ids(s: Session, q: str, types: Iterable[str], k: int = 200) -> list[
     ids: list[int] = []
     fq = _fts_query(q)
     if fq and has_fts(s):
-        rows = s.execute(text(
-            "select f.rowid from entity_fts f join entity e on e.id = f.rowid "
-            f"where entity_fts match :q and e.type in ({','.join(':t%d' % i for i in range(len(types)))}) "
-            "order by bm25(entity_fts) limit :k"),
-            {"q": fq, "k": k, **{f"t{i}": t for i, t in enumerate(types)}}).all()
-        ids = [r[0] for r in rows]
+        try:
+            rows = s.execute(text(
+                "select f.rowid from entity_fts f join entity e on e.id = f.rowid "
+                f"where entity_fts match :q and e.type in ({','.join(':t%d' % i for i in range(len(types)))}) "
+                "order by bm25(entity_fts) limit :k"),
+                {"q": fq, "k": k, **{f"t{i}": t for i, t in enumerate(types)}}).all()
+            ids = [r[0] for r in rows]
+        except OperationalError as e:  # no trigram tokenizer / no FTS5 in this libsqlite3
+            fts_unavailable(s, e)
     _units, like = search_units(q)
     if not has_fts(s):  # the Postgres backend: substring match on aliases for every term
         like = [u for u in _units if len(u) >= 2] + like

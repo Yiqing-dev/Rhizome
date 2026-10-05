@@ -146,6 +146,7 @@ class RemoteTarget(BaseModel):
     # Reuse an already-authenticated SSH connection (ControlMaster) for 2FA servers.
     control_path: str | None = None
     ssh_options: list[str] = Field(default_factory=list)
+    timeout: int = 1800  # seconds for the whole upload (one ssh session)
 
 
 class Thresholds(BaseModel):
@@ -371,6 +372,12 @@ def save_settings(settings: Settings) -> None:
 _current: Settings | None = None
 # per-process overrides (`--lang`, `serve --port`): applied in memory, never written to settings.json
 _overrides: dict[str, Any] = {}
+
+
+def snapshot_settings(path: Path) -> Settings:
+    """The current settings (language, thresholds, embedder, models dir ...) pointed at a read-only
+    snapshot file instead of the library's own database."""
+    return get_settings().model_copy(update={"database_url": f"sqlite:///{Path(path).resolve().as_posix()}"})
 
 
 def adopt_file_embedder() -> Settings:

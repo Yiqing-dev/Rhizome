@@ -93,12 +93,30 @@ Remote clusters usually cannot reach your computer, so they read a snapshot:
 ```bash
 rhz settings set remotes '[{"name": "hpc", "host": "me@login.cluster.edu", "path": "~/.rhizome/rhizome.db",
                            "control_path": "~/.ssh/cm-%r@%h:%p"}]'
-rhz sync hpc                               # consistent SQLite copy incl. vectors, via scp
-# on the cluster (after `pip install ./backend` from a clone):
-rhz --snapshot ~/.rhizome/rhizome.db search "spatial domain detection"
+rhz sync hpc                               # consistent SQLite copy incl. vectors, one ssh session
+# on the cluster:
+export RHIZOME_SNAPSHOT=~/.rhizome/rhizome.db   # or pass --snapshot FILE to every command
+rhz search "spatial domain detection"
+rhz recall --from-file analysis.py
 ```
 
-`control_path` reuses an SSH ControlMaster connection you already authenticated (2FA servers).
+The snapshot is read-only: `ingest`, `rebuild`, `sync` and the other write commands refuse to run
+against it, and `rhz` without a snapshot on a machine that has no library says so instead of
+searching a new empty one. `rhz` warns when the snapshot is older than a week, was written by a
+different schema version, or was indexed with a model the cluster cannot load.
+`control_path` reuses an SSH ControlMaster connection you already authenticated (2FA servers;
+not available with Windows' built-in OpenSSH, where the single session asks once). The upload
+time limit is the remote's `"timeout"` (seconds, default 1800).
+
+Installing on a cluster (Python ≥ 3.10; SQLite ≥ 3.34 for keyword search, older versions fall back
+to alias matching):
+
+```bash
+pipx install ./backend                     # or: uv tool install ./backend
+# or inside a conda env:  conda create -n rhz python=3.11 && conda activate rhz && pip install ./backend
+# no network on the compute side: build a wheelhouse on a connected machine and install from it
+pip wheel ./backend -w wheels && pip install --no-index --find-links wheels rhizome
+```
 
 ## Repository layout
 

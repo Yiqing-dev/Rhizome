@@ -150,6 +150,20 @@
 | 可见性 | O1 O2 F3 F4 L1 L2 C4 G3 G2 | 按角色分日志、请求编号；前端错误边界与提示；桌面壳监护后端（重启码 75、找不到资料库码 4）；迁移用临时目录；找不到资料库不新建；收件箱状态 |
 | 安全 | S11 | 快照同步 umask 077 / chmod 600 |
 
+## 远程 / HPC 组（2026-10-05）
+
+| 编号 | 修改 |
+| --- | --- |
+| A1 | FTS 查询失败（旧 libsqlite3 没有 trigram）时记录一次并退回别名匹配，不再报错；快照与程序的数据库版本不同会提示；`rhz diag` 记录并打印 SQLite 版本 |
+| A2 | 快照改为回滚日志（头字节 18/19 = 1,1），只读打开时加 `immutable=1`，不留 -wal/-shm 文件，可在只读目录和 NFS/Lustre 上使用；在线库仍按 WAL 打开 |
+| A5 | `--snapshot` 下写命令（ingest、rebuild、nightly、backup、sync、settings set、watch…）退出码 2；vocab、bench、diag 直接读快照 |
+| A6 | 读命令遇到没有资料库时报错（退出码 2）并提示 `--snapshot` / `RHIZOME_SNAPSHOT`，不再悄悄新建空库；`rhz sync` 成功后打印 export 行 |
+| A17 | `requires-python >= 3.10`，CI 增加 3.10 任务；README 写明 pipx / uv / conda / 离线 wheelhouse 安装 |
+| A18 | 快照模式沿用当前设置（语言、阈值、模型目录），并按快照的 `embedding_model` 选用嵌入模型；本机加载不了时提示 |
+| G10 | `rhz sync` 只开一个 SSH 会话（快照经 stdin 流入远端 `cat >`），带超时（远程配置 `timeout`，默认 1800 秒），失败给出本地化说明；Windows 上设置了 control_path 会提示 |
+| A19 | 下载提示区分单个 run（prefetch）与研究/项目（ENA filereport 列 run），GEO 系列给出 suppl FTP 路径，Zenodo 不再落到"检索" |
+| A20 | 快照内写入 `kv.snapshot_meta`（生成时间、版本、schema），超过 7 天提示 |
+
 ## 还需要你来做的（M0）
 
 - 定稿导出指令：`rxf-spec/instructions/` 里是按设计文档整理的版本，加了一条“含问号的文本不要写进花括号”——

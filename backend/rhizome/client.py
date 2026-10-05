@@ -149,16 +149,25 @@ class HttpClient:
         return r.json()
 
 
+class NoLibrary(FileNotFoundError):
+    """A read-only command found no library (and must not create an empty one)."""
+
+
 class LocalClient:
-    def __init__(self, settings: Settings | None = None, read_only: bool = False):
+    def __init__(self, settings: Settings | None = None, read_only: bool = False, create: bool = True):
         from .config import set_settings
         from .db.session import init_db
 
         if settings is not None:
             set_settings(settings)
         self.read_only = read_only
+        st = get_settings()
+        if not create and st.db_url.startswith("sqlite:///") and not Path(st.db_url[len("sqlite:///"):]).is_file():
+            from .i18n import _
+
+            raise NoLibrary(_("cli.no_library", path=st.db_url[len("sqlite:///"):]))
         if not read_only:
-            get_settings().ensure_dirs()
+            st.ensure_dirs()
             init_db()
 
     def _s(self):
@@ -364,13 +373,23 @@ class LocalClient:
             return jobs.job_view(s.get(Job, jid))
 
 
-def connect(settings: Settings | None = None, snapshot: Path | None = None, prefer_http: bool = True) -> Client:
-    """HTTP if a server is up, else in-process. ``snapshot`` forces read-only local mode."""
+def connect(settings: Settings | None = None, snapshot: Path | None = None, prefer_http: bool = True,
+            create: bool = True) -> Client:
+    """HTTP if a server is up, else in-process. ``snapshot`` forces read-only local mode on that
+    file, keeping the user's own settings (language, thresholds, models) and following the model the
+    snapshot was indexed with. ``create=False`` (read commands): no library means an error, not a new
+    empty one."""
     if snapshot is not None:
-        from .config import Settings as S
+        from .config import snapshot_settings
+        from .services.snapshot import snapshot_meta
 
-        st = S(data_dir=snapshot.parent, database_url=f"sqlite:///{snapshot.resolve().as_posix()}")
-        return LocalClient(st, read_only=True)
+        from .ml.registry import embedder_setting_for
+
+        st = snapshot_settings(snapshot)
+        key = embedder_setting_for(snapshot_meta(snapshot).get("index_model"))
+        if key and key != st.embedder:
+            st = st.model_copy(update={"embedder": key})
+        return LocalClient(st, read_only=True, create=False)
     st = settings or get_settings()
     if prefer_http:
         from .api.app import token_path
@@ -386,4 +405,4 @@ def connect(settings: Settings | None = None, snapshot: Path | None = None, pref
                         return HttpClient(base, tp.read_text("utf-8-sig").strip())
                 except httpx.HTTPError:
                     continue
-    return LocalClient(st)
+    return LocalClient(st, create=create)

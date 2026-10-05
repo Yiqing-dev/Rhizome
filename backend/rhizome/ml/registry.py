@@ -53,6 +53,13 @@ def _require(kind: str, model: str) -> None:
         raise ModelUnavailable(_("ml.unavailable", kind=kind, model=model, module=NEEDS[kind]))
 
 
+def embedder_setting_for(index_model: str | None) -> str | None:
+    """The ``embedder`` setting that produces vectors named ``index_model`` (None: unknown)."""
+    if index_model == "hashing-v1":
+        return "hashing"
+    return index_model if index_model in ("bge-m3",) else None
+
+
 def reset_models() -> None:
     _cache.clear()
 

@@ -282,3 +282,36 @@ msgstr "资料库位置是由 RHIZOME_DATA_DIR 或 --data-dir 指定的（{path}
 
 msgid "api.restart_manually"
 msgstr "这个后台不是由桌面应用启动的，请手动重启它。"
+
+msgid "cli.no_library"
+msgstr "{path} 下没有资料库。请先导入一篇论文（rhz ingest 文件），或者在远程机器上指定快照：rhz --snapshot 文件 ... 或 export RHIZOME_SNAPSHOT=文件"
+
+msgid "cli.snapshot_revision"
+msgstr "快照的数据库版本 {snapshot}（由 Rhizome {version} 生成）与本程序的 {code}（Rhizome {current}）不同，部分命令可能失败。请在电脑上重新 rhz sync，或在这里安装相同版本。"
+
+msgid "cli.snapshot_stale"
+msgstr "这份快照已有 {days} 天（生成于 {created}）；要看到最新内容，请在电脑上运行 rhz sync。"
+
+msgid "cli.snapshot_model"
+msgstr "这份快照是用 {model} 建立索引的，本机无法加载它（缺少 {module}）；要用语义检索请在这里安装 rhizome[models]。"
+
+msgid "cli.sync_controlmaster_win"
+msgstr "Windows 自带的 OpenSSH 不支持 control_path（SSH ControlMaster）；上传仍只用一次连接，但会要求输入一次密码 / 二次验证。"
+
+msgid "cli.sync_timeout"
+msgstr "上传到 {host} 在 {seconds} 秒内没有完成（可在设置里给这个远程加大 \"timeout\"）。"
+
+msgid "cli.sync_failed"
+msgstr "上传到 {host} 失败（ssh 退出码 {code}）。上面的 ssh 输出说明了是哪一步出错：连接、建目录、写文件还是改名。"
+
+msgid "cli.synced_hint"
+msgstr "在远程机器上执行：export RHIZOME_SNAPSHOT={path}"
+
+msgid "dl.SRA_run"
+msgstr "SRA 单个 run：prefetch {acc} && fasterq-dump {acc}（或从 ENA 直接下载 FASTQ：https://www.ebi.ac.uk/ena/browser/view/{acc}）"
+
+msgid "dl.SRA_project"
+msgstr "研究 / 项目：先列出所有 run：https://www.ebi.ac.uk/ena/portal/api/filereport?accession={acc}&result=read_run&fields=run_accession,fastq_ftp&format=tsv（下载 fastq_ftp 链接，或对每个 run_accession 用 prefetch）；NCBI 运行选择器：https://www.ncbi.nlm.nih.gov/Traces/study/?acc={acc}"
+
+msgid "dl.GEO_series"
+msgstr "GEO：https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc={acc}  处理后文件：https://ftp.ncbi.nlm.nih.gov/geo/series/{bucket}/{acc}/suppl/（原始测序数据在关联的 SRA 研究里）"

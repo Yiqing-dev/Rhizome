@@ -44,15 +44,56 @@ def main(ctx: typer.Context, data_dir: Optional[Path] = typer.Option(None, envva
     _state["snapshot"] = snapshot
     from .logging_setup import setup_logging
 
+    sub = ctx.invoked_subcommand
     if snapshot is None:
-        sub = ctx.invoked_subcommand
         setup_logging(st, role=sub if sub in ("serve", "mcp") else "cli")
+    else:
+        if sub in WRITE_COMMANDS:
+            _require_writable()
+        from .services.snapshot import snapshot_warnings
+
+        for w in snapshot_warnings(snapshot, st):
+            typer.secho(w, fg="yellow", err=True)
 
 
-def _client(prefer_http: bool = True):
-    from .client import connect
+# Commands that change the library or need it to be the real one: refused in snapshot mode.
+WRITE_COMMANDS = frozenset({"serve", "mcp", "watch", "ingest", "decide", "undo", "retract", "reject", "rename", "alias",
+                            "merge", "topic", "rebuild", "nightly", "enrich", "snapshot", "sync", "data-dir",
+                            "backups", "restore", "backup", "review"})
 
-    return connect(get_settings(), snapshot=_state["snapshot"], prefer_http=prefer_http)
+
+def _require_writable() -> None:
+    if _state["snapshot"] is not None:
+        typer.secho(_("cli.read_only"), fg="red", err=True)
+        raise typer.Exit(2)
+
+
+def _client(prefer_http: bool = True, create: bool = True):
+    """``create=False`` for read commands: no library is an error with a hint, not a new empty one
+    (on a cluster that usually means --snapshot / RHIZOME_SNAPSHOT was forgotten)."""
+    from .client import NoLibrary, connect
+
+    try:
+        return connect(get_settings(), snapshot=_state["snapshot"], prefer_http=prefer_http, create=create)
+    except NoLibrary as e:
+        typer.secho(str(e), fg="red", err=True)
+        raise typer.Exit(2) from None
+    except PermissionError as e:  # a write through a read-only snapshot
+        typer.secho(str(e), fg="red", err=True)
+        raise typer.Exit(2) from None
+
+
+def _local_session():
+    """In-process session for commands that read tables directly: the snapshot read-only, or the
+    library (upgraded first)."""
+    from .db.session import init_db, session_scope
+
+    if _state["snapshot"] is not None:
+        from .config import snapshot_settings
+
+        return session_scope(snapshot_settings(_state["snapshot"]), read_only=True)
+    init_db()
+    return session_scope()
 
 
 def _out(obj: Any) -> bool:
@@ -204,7 +245,7 @@ def search(q: str, type: Optional[str] = typer.Option(None, "--type", "-t", help
            edge_type: Optional[str] = typer.Option(None, help="e.g. proposes, produces, evaluates"),
            limit: int = 20) -> None:
     """Hybrid search over assets."""
-    hits = _client().search(q, types=type, organism=organism, modality=modality, year_min=year_min,
+    hits = _client(create=False).search(q, types=type, organism=organism, modality=modality, year_min=year_min,
                             year_max=year_max, edge_type=edge_type, limit=limit)
     if _out(hits):
         return
@@ -217,7 +258,7 @@ def search(q: str, type: Optional[str] = typer.Option(None, "--type", "-t", help
 @app.command()
 def get(ref: str) -> None:
     """Show a paper or asset card by id or key."""
-    c = _client()
+    c = _client(create=False)
     card = c.get(int(ref)) if ref.isdigit() else c.get_by_key(ref)
     if card is None:
         typer.echo(_("api.not_found"))
@@ -239,7 +280,7 @@ def get(ref: str) -> None:
 @app.command()
 def data(accession: str) -> None:
     """How to download a dataset and which papers it is linked to."""
-    info = _client().data(accession)
+    info = _client(create=False).data(accession)
     if info is None:
         typer.echo(_("api.not_found"))
         raise typer.Exit(1)
@@ -259,7 +300,7 @@ def data(accession: str) -> None:
 def recall(text: Optional[str] = typer.Argument(None), from_file: Optional[Path] = typer.Option(None),
            limit: Optional[int] = None) -> None:
     """Recall assets relevant to some text or to a script (imports + comments)."""
-    c = _client()
+    c = _client(create=False)
     if from_file:
         res = c.recall_code(from_file.read_text(encoding="utf-8", errors="replace"), limit)
         hits = res["results"]
@@ -278,7 +319,7 @@ def recall(text: Optional[str] = typer.Argument(None), from_file: Optional[Path]
 @app.command()
 def queue(kind: Optional[str] = None, limit: int = 20) -> None:
     """List the review queue."""
-    q = _client().queue(kind, limit)
+    q = _client(create=False).queue(kind, limit)
     if _out(q):
         return
     if not q["items"]:
@@ -313,7 +354,7 @@ def _decide(op: str, payload: dict[str, Any]) -> None:
 @app.command()
 def decisions(limit: int = 30) -> None:
     """Your decisions, newest first (merges, renames, rejections, ...); `rhz undo ID` reverts one."""
-    rows = _client().decisions(limit)["decisions"]
+    rows = _client(create=False).decisions(limit)["decisions"]
     if _out(rows):
         return
     for d in rows:
@@ -479,7 +520,7 @@ def doctor() -> None:
 @app.command()
 def digest(days: int = 7) -> None:
     """Weekly digest: unlinked cross-field pairs and new contradictions."""
-    d = _client().digest(days)
+    d = _client(create=False).digest(days)
     if _out(d):
         return
     for p in d["pairs"]:
@@ -491,11 +532,9 @@ def digest(days: int = 7) -> None:
 @app.command()
 def bench(spec: Path, k: int = 10) -> None:
     """Score retrieval against pre-registered benchmark questions (gate G2)."""
-    from .db.session import init_db, session_scope
     from .services.bench import run
 
-    init_db()
-    with session_scope() as s:
+    with _local_session() as s:
         res = run(s, spec.read_text(encoding="utf-8"), k)
     if not _out(res):
         for r in res["questions"]:
@@ -507,11 +546,9 @@ def bench(spec: Path, k: int = 10) -> None:
 @app.command()
 def vocab(output: Path = typer.Option(Path("rhizome-vocab.yaml"), "-o")) -> None:
     """Export rhizome-vocab.yaml for the chat Project knowledge."""
-    from .db.session import init_db, session_scope
     from .services.vocab import export_vocab
 
-    init_db()
-    with session_scope() as s:
+    with _local_session() as s:
         output.write_text(export_vocab(s), encoding="utf-8")
     typer.echo(_("cli.vocab_done", path=output))
 
@@ -527,7 +564,9 @@ def snapshot(path: Path) -> None:
 
 @app.command()
 def sync(remote: str, dry_run: bool = False) -> None:
-    """Push a snapshot to a remote configured in settings (reuses an SSH ControlMaster if set)."""
+    """Push a snapshot to a remote configured in settings, in one SSH session (one password / 2FA
+    prompt; reuses an SSH ControlMaster if set)."""
+    from .services.snapshot import SyncError, sync_warnings
     from .services.snapshot import sync as do_sync
 
     st = get_settings()
@@ -535,12 +574,19 @@ def sync(remote: str, dry_run: bool = False) -> None:
     if target is None:
         typer.echo(_("cli.unknown_remote", name=remote))
         raise typer.Exit(1)
-    cmds = do_sync(st, target, dry_run=dry_run)
+    for w in sync_warnings(target):
+        typer.secho(w, fg="yellow", err=True)
+    try:
+        cmds = do_sync(st, target, dry_run=dry_run)
+    except SyncError as e:
+        typer.secho(str(e), fg="red", err=True)
+        raise typer.Exit(1) from None
     if dry_run:
         for c in cmds:
             typer.echo(" ".join(c))
     else:
         typer.echo(_("cli.synced", remote=remote))
+        typer.echo(_("cli.synced_hint", path=target.path))
 
 
 @app.command("data-dir")
@@ -598,22 +644,24 @@ def backup() -> None:
 @app.command()
 def diag(output: Path = typer.Option(None, "-o")) -> None:
     """Export a diagnostic bundle (logs, settings without secrets, counts). No paper content."""
+    import sqlite3
+
     from . import __version__
-    from .db.session import init_db, session_scope
     from .services.views import home_stats
 
     st = get_settings()
-    init_db()
     output = output or Path(f"rhizome-diag-{datetime.now():%Y%m%d-%H%M%S}.zip")
-    with session_scope() as s:
+    with _local_session() as s:
         stats = home_stats(s)
-    info = {"version": __version__, "python": sys.version, "platform": sys.platform, "stats": stats,
+    info = {"version": __version__, "python": sys.version, "platform": sys.platform,
+            "sqlite": sqlite3.sqlite_version, "snapshot": str(_state["snapshot"] or ""), "stats": stats,
             "settings": st.model_dump(mode="json", exclude={"contact_email", "remotes"}),
             "remotes": [r.name for r in st.remotes]}
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("info.json", json.dumps(info, indent=2, ensure_ascii=False, default=str))
         for log in sorted(st.logs_dir.glob("rhizome*.log*")):
             z.write(log, f"logs/{log.name}")
+    typer.echo(f"Rhizome {__version__} · Python {sys.version.split()[0]} · SQLite {sqlite3.sqlite_version}")
     typer.echo(_("cli.diag_done", path=output))
 
 
@@ -666,6 +714,7 @@ def settings_show() -> None:
 def settings_set(key: str, value: str) -> None:
     """Set a setting, e.g. `rhz settings set language zh_CN` or `thresholds.merge_auto 0.92`.
     `rhz settings set <key> default` goes back to the built-in default."""
+    _require_writable()
     try:
         parsed: Any = json.loads(value)
     except json.JSONDecodeError:

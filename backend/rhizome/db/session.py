@@ -31,13 +31,26 @@ def is_sqlite(engine: Engine) -> bool:
 
 def sqlite_ro_uri(path: Path) -> str:
     """file: URI for a read-only connection. Absolute Windows paths need file:///C:/..., and
-    '%', '?', '#' and spaces in folder names must be percent-encoded."""
+    '%', '?', '#' and spaces in folder names must be percent-encoded. A rollback-journal file
+    (snapshots) is opened ``immutable``: no -wal/-shm files are created next to it, so it works
+    from a read-only folder and on NFS/Lustre. The live WAL library never is: immutable would
+    hide other processes' writes."""
     from urllib.parse import quote
 
     p = path.as_posix()
     if not p.startswith("/"):
         p = "/" + p  # C:/x -> /C:/x
-    return f"file://{quote(p, safe='/:')}?mode=ro"
+    return f"file://{quote(p, safe='/:')}?mode=ro" + ("&immutable=1" if not is_wal_file(path) else "")
+
+
+def is_wal_file(path: Path) -> bool:
+    """Header bytes 18/19 are the read/write format: 2 = WAL, 1 = rollback journal."""
+    try:
+        with open(path, "rb") as f:
+            head = f.read(20)
+    except OSError:
+        return True
+    return len(head) < 20 or head[18] == 2 or head[19] == 2
 
 
 def _enable_wal(cur, wait: float = 30.0) -> None:
@@ -64,7 +77,8 @@ def make_engine(url: str, read_only: bool = False) -> Engine:
         if read_only:
             path = Path(url.split("sqlite:///", 1)[1]).resolve()
             uri = sqlite_ro_uri(path)
-            engine = create_engine("sqlite://", creator=lambda: sqlite3.connect(uri, uri=True, check_same_thread=False))
+            engine = create_engine("sqlite://", creator=lambda: sqlite3.connect(uri, uri=True, check_same_thread=False,
+                                                                                   timeout=30))
         else:
             engine = create_engine(url, connect_args={"check_same_thread": False, "timeout": 30})
 
@@ -418,10 +432,26 @@ def init_db(settings: Settings | None = None) -> Engine:
     return engine
 
 
+_fts_broken: set[str] = set()
+
+
 def has_fts(session: Session) -> bool:
-    if session.get_bind().dialect.name != "sqlite":
+    """The FTS5 trigram table exists *and* this SQLite can query it. An old libsqlite3 (< 3.34,
+    common on cluster login nodes) has no trigram tokenizer: the first query fails and keyword
+    search falls back to alias substring matching for the rest of the process."""
+    bind = session.get_bind()
+    if bind.dialect.name != "sqlite" or str(bind.url) in _fts_broken:
         return False
     row = session.execute(
         text("select 1 from sqlite_master where type='table' and name='entity_fts'")
     ).first()
     return row is not None
+
+
+def fts_unavailable(session: Session, error: Exception) -> None:
+    """Remember that FTS queries fail on this connection's SQLite (called from the except branch)."""
+    url = str(session.get_bind().url)
+    if url not in _fts_broken:
+        _fts_broken.add(url)
+        log.warning("full-text search unavailable (SQLite %s, need >= 3.34 with FTS5 trigram): %s; "
+                    "keyword search uses alias matching only", sqlite3.sqlite_version, error)
