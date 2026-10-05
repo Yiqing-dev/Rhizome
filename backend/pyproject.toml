@@ -28,6 +28,8 @@ dependencies = [
   "babel>=2.14,<3",
   "fsrs>=5.0,<7",
   "mcp>=1.2,<2",
+  # TLS through the OS certificate store (campus / corporate proxies re-signing HTTPS); MIT
+  "truststore>=0.9,<1",
 ]
 
 [project.optional-dependencies]

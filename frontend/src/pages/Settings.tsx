@@ -162,6 +162,18 @@ export default function SettingsPage() {
             {dirMsg && <div className={`notice ${dirMsg.ok ? "ok" : "error"}`}><pre>{dirMsg.text}</pre></div>}
             <label className="check"><input type="checkbox" checked={s.offline} onChange={(e) => patch({ offline: e.target.checked })} />
               {t("settings.offline")}</label>
+            {!s.offline && (
+              <div className="stack-sm">
+                <label>{t("settings.contact_email")}
+                  <input type="email" defaultValue={s.contact_email ?? ""} placeholder="name@university.edu"
+                    onBlur={(e) => patch({ contact_email: e.target.value.trim() || null })} /></label>
+                <p className="hint">{t("settings.contact_email_hint")}</p>
+                {si && Object.entries(si.network.hosts).filter(([, h]) => h.failed > 0).map(([host, h]) => (
+                  <div key={host} className="notice warn small">{t("settings.network_failing", { host, failed: h.failed, ok: h.ok })}
+                    {h.last_error ? <div className="mono small">{h.last_error}</div> : null}</div>
+                ))}
+              </div>
+            )}
           </section>
           <section className="panel">
             <h2>{t("settings.backups")}</h2>

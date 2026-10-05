@@ -28,6 +28,18 @@ REGENERATED_REVIEW_KINDS = ("merge", "topic_relation", "contradiction")
 PREWARM_BATCH = 256
 
 
+def _known_taxa(s: Session) -> dict[str, str]:
+    """Organism alias -> taxid as resolved so far (rebuild must not look them up online again)."""
+    from ..text import norm
+
+    out: dict[str, str] = {}
+    rows = s.execute(select(EntityAlias.alias, Entity.external_id).join(Entity, Entity.id == EntityAlias.entity_id)
+                     .where(Entity.type == "organism", Entity.external_id.like("taxon:%"))).all()
+    for alias, ext in rows:
+        out[norm(alias)] = ext.split(":", 1)[1]
+    return out
+
+
 def _restamp(s: Session, ex: Extraction, work: Entity) -> None:
     """L0/L1 rows follow the paper they materialise into *now*: a merge moved them to the merge
     target, and after that merge is revoked they must come back to their own paper."""
@@ -81,6 +93,7 @@ def rebuild(s: Session, backup: bool = True) -> dict:
     # ids are handles (UI URLs, CLI, MCP, review items): remember them so the same key gets the same
     # id back, and a new entity never inherits the id of one that is gone
     id_plan = dict(s.execute(select(Entity.key, Entity.id)).all())
+    taxa_fallback = _known_taxa(s)
     item_plan = dict(s.execute(select(ReviewItem.dedupe_key, ReviewItem.id).where(
         ReviewItem.status == "pending", ReviewItem.kind.in_(REGENERATED_REVIEW_KINDS))).all())
     high = s.get(KV, "id_high_water")
@@ -100,6 +113,7 @@ def rebuild(s: Session, backup: bool = True) -> dict:
     s.info["index_model_checked"] = True
     g = Graph(s)
     g.id_plan, g.next_id, g.item_plan, g.next_item_id = id_plan, next_id, item_plan, next_item
+    g.taxa_fallback = taxa_fallback
     n = 0
     current = s.execute(select(Extraction).where(Extraction.is_current).order_by(Extraction.id)).scalars().all()
     # pass 1: paper-level extractions; pass 2 (after decisions, which may create topics): retro tags

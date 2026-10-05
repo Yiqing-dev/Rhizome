@@ -22,7 +22,8 @@ datas += collect_data_files("jsonschema_specifications")   # JSON Schema meta-sc
 datas += collect_data_files("fsrs")
 
 hidden = []
-for pkg in ("rhizome", "uvicorn", "mcp", "alembic", "watchdog", "sqlalchemy.dialects.sqlite", "pydantic_settings"):
+for pkg in ("rhizome", "uvicorn", "mcp", "alembic", "watchdog", "sqlalchemy.dialects.sqlite", "pydantic_settings",
+            "truststore"):
     hidden += collect_submodules(pkg)
 
 # heavy optional extras are never bundled (models download at runtime only when installed separately)

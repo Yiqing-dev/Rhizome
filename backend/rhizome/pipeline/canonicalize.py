@@ -22,7 +22,6 @@ import yaml
 from ..config import get_settings
 from ..db.models import Entity
 from ..external.organisms import SCIENTIFIC
-from ..external.verify import taxonomy_id
 from ..ml import get_nli, get_reranker
 from ..text import norm, sha256
 from .graph import Graph, embed_texts, entity_text, knn
@@ -216,11 +215,17 @@ def resolve_modality(g: Graph, name: str) -> Entity:
     return g.by_key(f"modality:{n}") or g.create("modality", f"modality:{n}", name.strip(), embed=False)
 
 
-def resolve_organism(g: Graph, name: str) -> Entity:
+def resolve_organism(g: Graph, name: str, taxa: dict[str, str] | None = None) -> Entity:
+    """Never goes online: the taxid comes from the extraction (resolved at ingest), the built-in
+    table, or what the library knew before a rebuild (older extractions without taxa)."""
+    from ..external.organisms import lookup_builtin
+
     hit = g.by_alias("organism", name)
     if hit:
         return hit
-    tid = taxonomy_id(name)
+    tid = (taxa or {}).get(name)
+    if not (tid and tid.isdigit()):
+        tid = lookup_builtin(name) or g.taxa_fallback.get(norm(name))
     if tid:
         key = f"organism:taxon:{tid}"
         e = g.by_key(key)

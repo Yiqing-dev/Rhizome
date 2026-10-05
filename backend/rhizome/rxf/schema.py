@@ -71,7 +71,7 @@ class Claim(_Item):
 
 class Dataset(_Item):
     accession: str | None = None
-    database: Literal["GEO", "SRA", "CNGB", "ArrayExpress", "ENA", "Zenodo", "other"] | None = None
+    database: Literal["GEO", "SRA", "ENA", "GSA", "CNGB", "ArrayExpress", "Zenodo", "other"] | None = None
     name: str | None = None
     organism: str | None = None
     tissue: str | None = None

@@ -33,7 +33,7 @@ def handler(kind: str):
 
 # Kinds whose result only depends on the library state: a second request while one is still
 # queued is the same work, so it is coalesced instead of running the whole thing twice.
-COALESCE = ("rebuild", "nightly")
+COALESCE = ("rebuild", "nightly", "enrich")
 
 
 def enqueue(s: Session, kind: str, payload: dict[str, Any] | None = None) -> Job:
@@ -237,7 +237,16 @@ def _nightly(s: Session, p: dict[str, Any]) -> dict[str, Any]:
         out["synthesis_candidates"] = synthesis.generate_candidates(s, days=days)
         _kv_set(s, "last_synthesis", {"at": utcnow().isoformat()})
     _kv_set(s, "last_nightly", {"at": utcnow().isoformat()})
+    if not get_settings().offline:
+        enqueue(s, "enrich", {})  # metadata that failed at ingest time (separate job: goes online)
     return out
+
+
+@handler("enrich")
+def _enrich(s: Session, p: dict[str, Any]) -> dict[str, Any]:
+    from .pipeline.ingest import enrich_missing
+
+    return enrich_missing(s, limit=int(p.get("limit", 50)))
 
 
 @handler("sync")

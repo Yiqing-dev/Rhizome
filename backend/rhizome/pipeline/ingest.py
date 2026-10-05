@@ -18,8 +18,8 @@ from .. import rawstore
 from ..config import get_settings
 from ..db.models import Entity, Extraction, RawObject
 from ..external import openalex
-from ..external.ids import accession_format_ok, guess_database, normalize_doi, normalize_repo
-from ..external.verify import check_accession, check_repo
+from ..external.ids import accession_format_ok, is_url, normalize_doi, normalize_repo
+from ..external.verify import check_accession, check_repo, taxonomy_lookup
 from ..rxf.loader import ValidationProblem, load_rxf, report_for
 from ..rxf.schema import RxfDocument
 from .graph import Graph
@@ -55,19 +55,30 @@ class IngestResult:
         }
 
 
+def _check_taxa(doc: RxfDocument) -> dict[str, str]:
+    """Organism name -> NCBI taxid (or 'not_found' / 'unverified'), resolved here, before anything
+    is written, and stored in the extraction: materialisation and rebuild never go online."""
+    names = list(dict.fromkeys([*doc.paper.organisms, *(d.organism for d in doc.assets.datasets if d.organism)]))
+    out: dict[str, str] = {}
+    for name in names:
+        tid, status = taxonomy_lookup(name)
+        out[name] = tid or status
+    return out
+
+
 def _check_ids(doc: RxfDocument) -> tuple[dict[str, str], list[str]]:
     checks: dict[str, str] = {}
     for d in doc.assets.datasets:
         if not d.accession:
             continue
         acc = d.accession.strip()
-        db = d.database or guess_database(acc)
-        checks[acc] = check_accession(acc, db) if accession_format_ok(acc, d.database) else "bad_format"
+        checks[acc] = check_accession(acc, d.database) if accession_format_ok(acc, d.database) else "bad_format"
     for m in doc.assets.methods:
         if m.repo:
             repo = normalize_repo(m.repo)
             if repo is None:
-                checks[m.repo] = "bad_format"
+                # a URL on another host (a lab site, Hugging Face, ...) is kept as a link, not anchored
+                checks[m.repo] = "unanchored" if is_url(m.repo) else "bad_format"
             else:
                 checks[repo] = check_repo(repo)
     suspect = [k for k, v in checks.items() if v in ("not_found", "bad_format")]
@@ -96,10 +107,10 @@ def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes
     max_before = s.execute(select(func.coalesce(func.max(Entity.id), 0))).scalar_one()
 
     # resolve canonical work id (T0) and verify external ids before anything enters the graph
-    oa = openalex.fetch_work(doi=doc.paper.doi) if doc.paper.doi else None
+    oa, oa_status = openalex.fetch(doi=doc.paper.doi) if doc.paper.doi else (None, "no_doi")
     checks, suspect = _check_ids(doc)
     meta = {"openalex_id": oa["id"] if oa else None, "checks": checks, "suspect": suspect,
-            "filename": filename}
+            "filename": filename, "taxa": _check_taxa(doc), "openalex": oa_status}
     if res.repairs:
         meta["repairs"] = res.repairs
     wkey = work_key(meta["openalex_id"], doc.paper.doi, doc.paper.title)
@@ -108,21 +119,7 @@ def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes
     if pdf:
         hashes.append(rawstore.put(s, pdf, "pdf", Path(filename).with_suffix(".pdf").name, wkey))
 
-    ex_oa = None
-    if oa:
-        # the work may already exist under its DOI key (ingested offline earlier) or the OpenAlex key
-        known = {wkey, f"work:openalex:{oa['id']}"} | ({f"work:doi:{normalize_doi(doc.paper.doi)}"} if doc.paper.doi else set())
-        existing_work = next((g.by_key(k) for k in known if g.by_key(k) is not None), None)
-        if existing_work is not None:
-            known.add(existing_work.key)
-        have = s.execute(select(Extraction.id).where(Extraction.kind == "openalex", Extraction.is_current,
-                                                     Extraction.work_key.in_(known))).first()
-        if not have:
-            ex_oa = Extraction(kind="openalex", work_key=wkey, tier=0, model="openalex", prompt_version=None,
-                               schema_version="openalex-v1", input_hashes=[], output=oa, meta={})
-            s.add(ex_oa)
-            s.flush()
-            materialize_openalex(g, ex_oa)
+    ex_oa = attach_openalex(g, wkey, oa, doc.paper.doi) if oa else None
 
     ex = Extraction(kind="rxf", work_key=wkey, tier=2 if pdf and doc.depth == "deep" else 1,
                     model="chat-export", prompt_version=doc.prompt_version,
@@ -171,6 +168,58 @@ def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes
 
         result.related = related_to_work(s, out.work.id)
     return result
+
+
+def attach_openalex(g: Graph, wkey: str, oa: dict, doi: str | None) -> Extraction | None:
+    """Store an OpenAlex record as an L1 extraction of the paper and materialise it, unless the
+    paper already has one (it may exist under its DOI key or its OpenAlex key)."""
+    s = g.s
+    known = {wkey, f"work:openalex:{oa['id']}"} | ({f"work:doi:{normalize_doi(doi)}"} if doi else set())
+    existing_work = next((g.by_key(k) for k in known if g.by_key(k) is not None), None)
+    if existing_work is not None:
+        known.add(existing_work.key)
+    have = s.execute(select(Extraction.id).where(Extraction.kind == "openalex", Extraction.is_current,
+                                                 Extraction.work_key.in_(known))).first()
+    if have:
+        return None
+    ex_oa = Extraction(kind="openalex", work_key=existing_work.key if existing_work else wkey, tier=0,
+                       model="openalex", prompt_version=None, schema_version="openalex-v1", input_hashes=[],
+                       output=oa, meta={})
+    s.add(ex_oa)
+    s.flush()
+    materialize_openalex(g, ex_oa)
+    return ex_oa
+
+
+def enrich_missing(s: Session, limit: int = 50) -> dict[str, Any]:
+    """Backfill OpenAlex metadata (abstract, venue, references -> cites edges) for papers whose
+    lookup failed at ingest (offline, rate limit, outage). Lookups happen first, without holding
+    the write lock; then the found records are stored."""
+    from ..db.models import Work
+
+    if get_settings().offline:
+        return {"offline": True}
+    have = set(s.execute(select(Extraction.work_key).where(Extraction.kind == "openalex", Extraction.is_current)).scalars())
+    todo = [(e.key, (w.dois or [None])[0]) for e, w in s.execute(
+        select(Entity, Work).join(Work, Work.entity_id == Entity.id).where(Entity.type == "work")).all()
+        if e.key not in have and w.dois]
+    missing = len(todo)
+    s.commit()  # read done: release before going online
+    found: list[tuple[str, str, dict]] = []
+    counts = {"ok": 0, "not_found": 0, "transient": 0, "invalid": 0, "offline": 0}
+    for key, doi in todo[:limit]:
+        rec, status = openalex.fetch(doi=doi)
+        counts[status] = counts.get(status, 0) + 1
+        if rec:
+            found.append((key, doi, rec))
+    g = Graph(s)
+    ids = set()
+    for key, doi, rec in found:
+        ex = attach_openalex(g, key, rec, doi)
+        if ex is not None:
+            ids.add(g.by_key(ex.work_key).id)
+    cites = link_citations(g, only_work_ids=ids) if ids else 0
+    return {"missing_before": missing, "checked": min(limit, missing), **counts, "cites": cites}
 
 
 def read_inbox_file(path: Path) -> tuple[str, bytes | None]:

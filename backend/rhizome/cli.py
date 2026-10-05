@@ -422,6 +422,47 @@ def nightly(force_synthesis: bool = False) -> None:
 
 
 @app.command()
+def enrich(limit: int = 200) -> None:
+    """Fetch OpenAlex metadata (abstract, venue, references) for papers whose lookup failed at
+    ingest time (offline, rate limit, outage)."""
+    j = _client(prefer_http=True).run_job("enrich", {"limit": limit})
+    _out(j) or typer.echo(json.dumps(j.get("result") if j.get("status") == "done" else j, ensure_ascii=False))
+
+
+@app.command()
+def doctor() -> None:
+    """Check the network path to OpenAlex, NCBI and GitHub (proxy, certificates, rate limits)."""
+    import os
+
+    from .external.verify import get
+
+    rows = []
+    for name, url in (("OpenAlex", "https://api.openalex.org/works?per-page=1"),
+                      ("NCBI E-utilities", "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/einfo.fcgi?retmode=json"),
+                      ("GitHub API", "https://api.github.com/rate_limit"),
+                      ("BioStudies", "https://www.ebi.ac.uk/biostudies/api/v1/search?pageSize=1")):
+        try:
+            r = get(url, retries=0)
+            rows.append({"service": name, "ok": r.status_code < 400, "status": r.status_code})
+        except Exception as e:  # noqa: BLE001
+            rows.append({"service": name, "ok": False, "error": f"{type(e).__name__}: {e}"[:200]})
+    proxy = {k: v for k, v in os.environ.items() if k.lower() in ("https_proxy", "http_proxy", "no_proxy")}
+    try:
+        import truststore  # noqa: F401
+
+        certs = "system certificate store"
+    except ImportError:
+        certs = "certifi bundle"
+    out = {"offline_setting": get_settings().offline, "proxy": proxy, "certificates": certs, "checks": rows}
+    if _out(out):
+        return
+    typer.echo(f"offline: {out['offline_setting']}   proxy: {proxy or '-'}   certificates: {certs}")
+    for r in rows:
+        typer.secho(f"  {'OK ' if r['ok'] else 'FAIL'} {r['service']:<18} {r.get('status') or r.get('error')}",
+                    fg="green" if r["ok"] else "red")
+
+
+@app.command()
 def digest(days: int = 7) -> None:
     """Weekly digest: unlinked cross-field pairs and new contradictions."""
     d = _client().digest(days)

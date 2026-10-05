@@ -196,6 +196,12 @@ msgstr "ENA: https://www.ebi.ac.uk/ena/browser/view/{acc}"
 msgid "dl.ArrayExpress"
 msgstr "ArrayExpress: https://www.ebi.ac.uk/biostudies/arrayexpress/studies/{acc}"
 
+msgid "dl.GSA"
+msgstr "GSA / NGDC: https://ngdc.cncb.ac.cn/search/?dbId=&q={acc} (human data, HRA, needs an access request in GSA-Human)"
+
+msgid "dl.Zenodo"
+msgstr "Zenodo: https://zenodo.org/records/{acc}"
+
 msgid "dl.CNGB"
 msgstr "CNGB: https://db.cngb.org/search/?q={acc}"
 

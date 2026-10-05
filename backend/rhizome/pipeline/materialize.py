@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 
 from ..config import get_settings
 from ..db.models import Edge, Entity, Extraction, ReviewCard, Work
-from ..external.ids import normalize_doi, normalize_repo
+from ..external.ids import effective_database, normalize_doi, normalize_repo, normalize_zenodo
 from ..i18n import _
 from ..inference import get_backend
 from ..rxf.schema import RxfDocument, uses_ids
@@ -134,7 +134,7 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
         return g.upsert_edge(src, dst, etype, extraction_id=eid, **kw)
 
     for name in p.organisms:
-        edge(work, resolve_organism(g, name), "of_organism")
+        edge(work, resolve_organism(g, name, meta.get("taxa")), "of_organism")
     for name in p.modalities:
         edge(work, resolve_modality(g, name), "of_modality")
 
@@ -170,7 +170,7 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
             continue
         edge(work, ent, d.role, evidence=d.evidence)
         if d.organism:
-            edge(ent, resolve_organism(g, d.organism), "of_organism")
+            edge(ent, resolve_organism(g, d.organism, meta.get("taxa")), "of_organism")
         if d.modality:
             edge(ent, resolve_modality(g, d.modality), "of_modality")
         out.assets.append(ent)
@@ -234,9 +234,14 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
 def _dataset(g: Graph, d, checks: dict[str, str]) -> Entity | None:
     attrs = {k: v for k, v in d.model_dump().items() if k not in ("role", "evidence") and v is not None}
     if d.accession:
-        acc = d.accession.strip()
-        if checks.get(acc) in ("not_found", "bad_format"):
+        raw_acc = d.accession.strip()
+        if checks.get(raw_acc) in ("not_found", "bad_format"):
             return None
+        db = effective_database(raw_acc, d.database)  # a mislabelled real id keeps its own database
+        acc = f"zenodo.{normalize_zenodo(raw_acc)}" if db == "Zenodo" else raw_acc
+        if db:
+            attrs["database"] = db
+        checks = {**checks, acc: checks.get(raw_acc, "unverified")}
         key = f"dataset:{acc}"
         e = g.by_key(key) or g.by_external_id("dataset", acc) or (g.by_alias("dataset", d.name) if d.name else None)
         if e is None:
@@ -259,8 +264,11 @@ def _method(g: Graph, m, checks: dict[str, str]) -> Entity | None:
              if k not in ("role", "evidence", "extends") and v not in (None, [])}
     repo = normalize_repo(m.repo) if m.repo else None
     if m.repo and (repo is None or checks.get(repo) == "not_found"):
-        repo = None  # unverifiable repo -> treat as free concept, keep the URL out of the anchor
-        attrs.pop("repo", None)
+        # not a forge repository (a lab site, Hugging Face, ...) -> a free concept that keeps the
+        # link; a repository the forge says does not exist -> the URL is dropped
+        if repo is not None or checks.get(m.repo) != "unanchored":
+            attrs.pop("repo", None)
+        repo = None
     if repo:
         key = f"method:repo:{repo}"
         e = g.by_key(key) or g.by_external_id("method", repo) or g.by_alias("method", m.name)

@@ -299,6 +299,9 @@ class Graph:
         self.next_id = 0
         self.item_plan: dict[str, int] | None = None
         self.next_item_id = 0
+        # organism name (normalised) -> taxid known before a rebuild, for extractions made before
+        # taxa were stored in their metadata
+        self.taxa_fallback: dict[str, str] = {}
 
     def _planned(self, model, plan: dict[str, int] | None, key: str, attr: str) -> int | None:
         if plan is None:

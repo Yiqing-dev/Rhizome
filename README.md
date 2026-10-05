@@ -44,6 +44,9 @@ cloud folder (Settings → Backups, or `rhz settings set backup_dir "D:\\Backups
 Download `Rhizome_x.y.z_x64-setup.exe` (or `…-offline-setup.exe` for machines without internet) from the GitHub Actions run
 *Windows app* / a release, run it, and start Rhizome from the Start menu. Everything is bundled.
 See [desktop/README.md](desktop/README.md) for what goes where, portable mode and Claude Desktop setup.
+Behind a campus or company proxy, set `HTTPS_PROXY` before starting Rhizome (certificates installed
+in Windows are trusted); `rhz doctor` checks the path to OpenAlex, NCBI and GitHub, and `rhz enrich`
+fetches metadata for papers that were imported offline.
 
 ## Install & run (development)
 

@@ -335,7 +335,10 @@
     "copied": "Copied",
     "restore_title": "How to restore a backup",
     "restore_hint": "Close Rhizome and Claude Desktop, then run these in a terminal: the first lists the backups, the second replaces the library with the one you pick. The state before the restore is saved first, so you can go back.",
-    "restore_file": "backup file"
+    "restore_file": "backup file",
+    "contact_email": "Contact e-mail (optional)",
+    "contact_email_hint": "With an address, OpenAlex and NCBI put requests in their more reliable 'polite pool' with fewer rate limits. It is only sent to those two services. Behind a campus or company proxy, set HTTPS_PROXY and restart the app; `rhz doctor` checks the network.",
+    "network_failing": "{{host}}: {{failed}} recent requests failed ({{ok}} succeeded). Affected ids are kept as 'unverified', never dropped, and checked again later."
   },
   "lang": {
     "short_en": "EN",

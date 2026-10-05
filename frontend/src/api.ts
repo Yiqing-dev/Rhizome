@@ -107,6 +107,7 @@ export interface SystemInfo {
   backups: BackupStatus;
   model_problems: { kind: string; model: string; missing: string }[];
   index: { model: string | null; current: string | null; stale: boolean };
+  network: { offline: boolean; hosts: Record<string, { ok: number; failed: number; last_error?: string }> };
 }
 export interface BackupStatus { dir: string; count: number; bytes: number; last: string | null; last_daily: string | null; error?: string }
 

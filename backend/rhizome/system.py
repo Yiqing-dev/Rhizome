@@ -96,7 +96,14 @@ def info() -> dict[str, Any]:
         "backups": _backups(st),
         "model_problems": _model_problems(st),
         "index": _index_state(),
+        "network": _network(),
     }
+
+
+def _network() -> dict[str, Any]:
+    from .external.http import network_status
+
+    return {"offline": get_settings().offline, "hosts": network_status()}
 
 
 def _index_state() -> dict[str, Any]:

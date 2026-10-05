@@ -131,9 +131,10 @@
               "enum": [
                 "GEO",
                 "SRA",
+                "ENA",
+                "GSA",
                 "CNGB",
                 "ArrayExpress",
-                "ENA",
                 "Zenodo",
                 "other"
               ],

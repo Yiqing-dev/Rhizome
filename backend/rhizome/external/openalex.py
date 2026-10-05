@@ -8,7 +8,6 @@ import logging
 import httpx
 
 from ..config import get_settings
-from .http import client
 
 log = logging.getLogger(__name__)
 API = "https://api.openalex.org"
@@ -27,20 +26,43 @@ def short_id(openalex_url: str) -> str:
 
 def fetch_work(doi: str | None = None, openalex_id: str | None = None) -> dict | None:
     """Return a trimmed record (stored verbatim as an L1 ``openalex`` extraction) or None."""
+    return fetch(doi, openalex_id)[0]
+
+
+def fetch(doi: str | None = None, openalex_id: str | None = None) -> tuple[dict | None, str]:
+    """(record, status) with status ok | not_found | transient | offline | invalid. A transient
+    failure (rate limit, 5xx, network) is retried once here and later by the `enrich` job, never
+    treated as 'this paper has no metadata'."""
+    from urllib.parse import quote
+
+    from .ids import doi_ok, normalize_doi
+    from .verify import get
+
     s = get_settings()
-    if s.offline or not (doi or openalex_id):
-        return None
-    ref = openalex_id or f"doi:{doi}"
+    if s.offline:
+        return None, "offline"
+    if openalex_id:
+        ref = openalex_id
+    elif doi and doi_ok(doi):
+        ref = "doi:" + quote(normalize_doi(doi), safe="/()")  # '#' or '?' in a DOI must not cut the URL
+    else:
+        return None, "invalid"
     params = {"mailto": s.contact_email} if s.contact_email else {}
     try:
-        with client() as c:
-            r = c.get(f"{API}/works/{ref}", params=params)
+        r = get(f"{API}/works/{ref}", params)
+        if r.status_code == 404:
+            return None, "not_found"
         if r.status_code != 200:
-            return None
+            log.warning("OpenAlex lookup for %s: HTTP %s", ref, r.status_code)
+            return None, "transient"
         w = r.json()
     except (httpx.HTTPError, ValueError) as e:
         log.warning("OpenAlex lookup failed for %s: %s", ref, e)
-        return None
+        return None, "transient"
+    return _trim(w), "ok"
+
+
+def _trim(w: dict) -> dict:
     return {
         "id": short_id(w["id"]),
         "doi": (w.get("doi") or "").replace("https://doi.org/", "") or None,
