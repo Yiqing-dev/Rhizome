@@ -5,6 +5,7 @@ machines such as HPC login nodes) a read-only snapshot via --snapshot."""
 from __future__ import annotations
 
 import json
+import os
 import sys
 import zipfile
 from datetime import datetime
@@ -42,6 +43,13 @@ def main(ctx: typer.Context, data_dir: Optional[Path] = typer.Option(None, envva
         st = set_overrides(language=lang)
     _state["json"] = as_json
     _state["snapshot"] = snapshot
+    import faulthandler
+
+    if sys.stderr is not None:  # a native crash (a model library, SQLite) leaves a stack in the console log
+        try:
+            faulthandler.enable(all_threads=True)
+        except (ValueError, OSError):
+            pass
     from .logging_setup import setup_logging
 
     sub = ctx.invoked_subcommand
@@ -704,6 +712,10 @@ def diag(output: Path = typer.Option(None, "-o")) -> None:
         z.writestr("info.json", json.dumps(info, indent=2, ensure_ascii=False, default=str))
         for log in sorted(st.logs_dir.glob("rhizome*.log*")):
             z.write(log, f"logs/{log.name}")
+        console = os.environ.get("RHIZOME_CONSOLE_LOG")  # the desktop shell's capture of stdout/stderr
+        for name in ([console, console.replace(".log", ".prev.log")] if console else []):
+            if name and Path(name).is_file():
+                z.write(name, f"logs/{Path(name).name}")
     typer.echo(f"Rhizome {__version__} · Python {sys.version.split()[0]} · SQLite {sqlite3.sqlite_version}")
     if raw and not raw["ok"]:
         typer.secho(_("cli.raw_problems", missing=len(raw["missing"]), empty=len(raw["empty"]),
@@ -843,14 +855,21 @@ def settings_set(key: str, value: str) -> None:
 @models_app.command("download")
 def models_download(name: str = typer.Argument(..., help="bge-m3 | bge-reranker-v2-m3 | mdeberta")) -> None:
     """Download an optional model into the data directory (never bundled with the installer)."""
-    from .ml.hf import MODEL_IDS
+    from .ml.hf import MODEL_IDS, ModelFilesMissing, snapshot_path
 
+    if name not in MODEL_IDS:
+        typer.secho(f"unknown model {name}; one of: {', '.join(MODEL_IDS)}", fg="red", err=True)
+        raise typer.Exit(2)
     try:
-        from huggingface_hub import snapshot_download
+        import huggingface_hub  # noqa: F401
     except ImportError:
         typer.echo(_("cli.download_hint"))
         raise typer.Exit(1)
-    path = snapshot_download(MODEL_IDS[name], cache_dir=str(get_settings().models_dir))
+    try:
+        path = snapshot_path(name, get_settings().models_dir, download=True)
+    except ModelFilesMissing as e:
+        typer.secho(str(e), fg="red", err=True)
+        raise typer.Exit(1)
     typer.echo(path)
 
 

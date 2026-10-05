@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { lazy, Suspense, useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { api, errorText } from "./api";
+import { api, errorText, type Stats } from "./api";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { showToast, Toasts } from "./components/Toast";
 import { Logo, SearchIcon } from "./components/icons";
@@ -139,6 +139,21 @@ function ModeBanner() {
   return <div className="notice warn banner">{t("mode.read_only")}</div>;
 }
 
+/** "A newer version exists" once a day from the worker's check; dismissed per version. */
+function UpdateBanner({ update }: { update: Stats["update"] }) {
+  const { t } = useTranslation();
+  const key = "rhizome.update.dismissed";
+  const [dismissed, setDismissed] = useState<string | null>(() => { try { return localStorage.getItem(key); } catch { return null; } });
+  if (!update || dismissed === update.latest) return null;
+  return (
+    <div className="notice banner row wrap">
+      <span className="grow">{t("update.available", { latest: update.latest, current: update.current })}</span>
+      {update.url && <a className="button" href={update.url} target="_blank" rel="noreferrer">{t("update.open")}</a>}
+      <button className="ghost small" onClick={() => { try { localStorage.setItem(key, update.latest); } catch { /* ignore */ } setDismissed(update.latest); }}>{t("update.later")}</button>
+    </div>
+  );
+}
+
 export default function App() {
   const { t, i18n } = useTranslation();
   useEffect(() => {
@@ -155,11 +170,12 @@ export default function App() {
   const route = useRoute();
   const [head, id] = route.path;
   const [queue, setQueue] = useState<number>(0);
+  const [update, setUpdate] = useState<Stats["update"]>(null);
   useEffect(() => {
     document.documentElement.lang = i18n.language;
   }, [i18n.language]);
   const refreshQueue = useCallback(() => {
-    api.stats().then((s) => setQueue(s.review_queue + 0)).catch(() => undefined);
+    api.stats().then((s) => { setQueue(s.review_queue + 0); setUpdate(s.update ?? null); }).catch(() => undefined);
   }, []);
   useEffect(refreshQueue, [route.path.join("/"), refreshQueue]);
   useRefreshOnFocus(refreshQueue);
@@ -198,6 +214,7 @@ export default function App() {
       </header>
       <main>
         <ModeBanner />
+        <UpdateBanner update={update} />
         <ModelBanner />
         <JobBanner />
         <ErrorBoundary resetKey={route.path.join("/")}

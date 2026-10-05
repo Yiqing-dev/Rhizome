@@ -272,6 +272,38 @@ def exit_for_restart(delay: float = 0.5) -> None:
     threading.Timer(delay, go).start()
 
 
+def secure_dir(path: Path) -> bool:
+    """Windows: a library outside the user profile (D:\研究) inherits the drive's ACL, often readable
+    by every account. Give a *new, empty* folder an ACL of the current user plus SYSTEM only; never
+    touch an existing non-empty folder or a drive root. Returns whether it was applied."""
+    if sys.platform != "win32":
+        return False
+    path = Path(path)
+    if path.parent == path or (path.exists() and any(path.iterdir())):
+        return False
+    path.mkdir(parents=True, exist_ok=True)
+    user = os.environ.get("USERNAME")
+    if not user:
+        return False
+    import subprocess
+
+    try:
+        subprocess.run(["icacls", str(path), "/inheritance:r", "/grant:r", f"{user}:(OI)(CI)F",
+                        "/grant:r", "*S-1-5-18:(OI)(CI)F"], check=True, capture_output=True, timeout=30)
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def outside_profile(path: Path) -> bool:
+    home = Path(os.environ.get("USERPROFILE") or Path.home()).resolve()
+    try:
+        Path(path).resolve().relative_to(home)
+        return False
+    except ValueError:
+        return True
+
+
 def move_data_dir(path: str | None, copy: bool = True) -> dict[str, Any]:
     """Point the app at another data directory (None = default). Existing data is copied when the
     target is empty; nothing is deleted. Takes effect after restarting the app.
@@ -292,6 +324,7 @@ def move_data_dir(path: str | None, copy: bool = True) -> dict[str, Any]:
     if not target.is_absolute():
         raise ValueError("an absolute path is required")
     target = target.resolve()
+    warnings: list[str] = []
     if target == st.data_dir.resolve():
         return {"data_dir": str(target), "copied": False, "restart_required": False}
     if target.exists() and any(target.iterdir()):
@@ -300,6 +333,8 @@ def move_data_dir(path: str | None, copy: bool = True) -> dict[str, Any]:
         copied = False  # switch to an existing library
     else:
         copied = False
+        if outside_profile(target) and sys.platform == "win32":
+            warnings.append(_("api.move_outside_profile", path=str(target)))
         if copy and st.data_dir.exists():
             from .db.session import copy_sqlite
 
@@ -307,6 +342,7 @@ def move_data_dir(path: str | None, copy: bool = True) -> dict[str, Any]:
             if staging.exists():
                 shutil.rmtree(staging)  # left by an interrupted earlier attempt
             staging.mkdir(parents=True)
+            secure_dir(staging)
             try:
                 for item in st.data_dir.iterdir():
                     if item.name in _SKIP or item.name.startswith("rhizome.db"):
@@ -326,11 +362,12 @@ def move_data_dir(path: str | None, copy: bool = True) -> dict[str, Any]:
                 raise
             copied = True
         else:
+            secure_dir(target)
             target.mkdir(parents=True, exist_ok=True)
     set_data_dir_pointer(None if target == platform_data_dir().resolve() else target)
     claude = unpin_claude_configs(st.data_dir)
     return {"data_dir": str(target), "copied": copied, "restart_required": True,
-            "claude_config_updated": claude}
+            "claude_config_updated": claude, "warnings": warnings}
 
 
 # ---- parent watchdog ---------------------------------------------------------------------------
@@ -365,9 +402,25 @@ def watch_parent(pid: int, interval: float = 2.0) -> None:
     import threading
     import time
 
+    handle = None
+    if sys.platform == "win32":
+        # hold a SYNCHRONIZE handle: the pid cannot be recycled while we own it, and the wait
+        # returns the moment the shell exits instead of on the next poll
+        import ctypes
+
+        handle = ctypes.windll.kernel32.OpenProcess(0x00100000, False, pid) or None  # SYNCHRONIZE
+
+    def gone() -> bool:
+        if handle:
+            import ctypes
+
+            return ctypes.windll.kernel32.WaitForSingleObject(handle, int(interval * 1000)) == 0  # WAIT_OBJECT_0
+        time.sleep(interval)
+        return not pid_alive(pid)
+
     def loop() -> None:
-        while pid_alive(pid):
-            time.sleep(interval)
+        while not gone():
+            pass
         import logging
 
         logging.getLogger("rhizome.serve").warning("desktop shell (pid %s) is gone: exiting", pid)

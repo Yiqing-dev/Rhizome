@@ -252,6 +252,25 @@
 | F16 | 实体标题下显示界面语言对应的别名（中英互补） |
 | M19 | 评为"重来"的卡在学习步骤到期后回到本次复习，页面显示等待张数与时间 |
 
+## low 组（三）：桌面与运维（2026-10-05）
+
+| 编号 | 修改 |
+| --- | --- |
+| O3 | 桌面壳每次启动把 `backend-console.log` 轮转为 `.prev.log`；通过 `RHIZOME_CONSOLE_LOG` 告知后端，`rhz diag` 打包这两份；README 与 CI 的日志路径改为 `%LOCALAPPDATA%` |
+| O4 | CLI 回调与 MCP 入口启用 `faulthandler`（全线程），本机崩溃在控制台日志里留下栈 |
+| L3 | Windows 下父进程监视改为持有 SYNCHRONIZE 句柄并 `WaitForSingleObject`，pid 复用不再留下孤儿后端 |
+| L4 | 安装器钩子：检测到 Rhizome 在运行时先弹双语 确定/取消，取消则中止安装；确认后再结束 Rhizome.exe 与 rhz.exe |
+| L5 | 默认窗口 1200×800、最小 800×480、`preventOverflow`，小屏笔记本不再溢出 |
+| L6 | 工作线程每天向 GitHub 查询最新 release（`check_updates` 设置，离线不查），结果存 KV；首页统计附带 `update`，界面显示可按版本关闭的横幅 |
+| S4 | Windows 上新建的资料库目录（含迁移目标）用 icacls 设为仅本账户 + SYSTEM；用户目录之外的位置给出提示；不改动已有非空目录和盘符根 |
+| S10 M8 | 模型从解析后的快照目录加载并命名为 `<key>@<commit7>`（不同权重的向量不混用）；`REVISIONS` / `RHIZOME_MODEL_REVISION_*` 可固定 commit；只下载 safetensors/tokenizer；离线只用本地文件，缺失时提示 `rhz models download`；网络失败提示 HTTPS_PROXY / HF_ENDPOINT；去掉 ONNX 路径与 onnxruntime 依赖 |
+| S1 | tauri.conf.json 设置 CSP |
+| T13 | 发布流程重新定位离线安装包并断言它比标准版大 100 MB 以上且哈希不同（此前复制的是标准版） |
+| T7 | CI 增加按 `desktop/constraints.txt` 安装的 Windows 单元；constraints 固定 PyInstaller |
+| T12 | `check_licenses.py` 把许可证列表视为可选项、空输入报错、忽略构建工具；发布时在受约束环境运行 pip-licenses |
+| H3 | README / 设计文档：NSIS 而非 MSI、14 类边；`scripts/check_version.py` 进 CI；安装后校验 `/health.version` 与安装包版本一致 |
+| H5 | `scripts/gen_third_party_notices.py` 汇总 Python / npm / Rust 依赖与字体许可，生成 `THIRD-PARTY-NOTICES.txt` 随安装包发布 |
+
 ## 还需要你来做的（M0）
 
 - 定稿导出指令：`rxf-spec/instructions/` 里是按设计文档整理的版本，加了一条“含问号的文本不要写进花括号”——

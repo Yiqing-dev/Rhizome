@@ -7,7 +7,7 @@ import logging
 import os
 import threading
 import traceback
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, Callable
 
 from sqlalchemy import select, update
@@ -198,6 +198,10 @@ class Worker(threading.Thread):
             self._daily_backup()
             with session_scope() as s:
                 maybe_schedule_nightly(s)
+            try:
+                maybe_check_updates()
+            except Exception:  # noqa: BLE001 - never more than a log line
+                log.exception("update check failed")
         return run_next() is not None
 
     def run(self) -> None:  # pragma: no cover - the loop glue; step() is what the tests run
@@ -277,3 +281,60 @@ def _kv_set(s: Session, k: str, v: Any) -> None:
         s.add(KV(k=k, v=v))
     else:
         row.v = v
+
+
+# ---- update notice -------------------------------------------------------------------------
+
+RELEASES_URL = "https://api.github.com/repos/Yiqing-dev/Rhizome/releases/latest"
+UPDATE_KEY = "update_check"
+UPDATE_EVERY = timedelta(hours=24)
+
+
+def version_tuple(v: str) -> tuple[int, ...]:
+    out = []
+    for part in str(v).lstrip("vV").split("."):
+        digits = "".join(ch for ch in part if ch.isdigit())
+        out.append(int(digits) if digits else 0)
+    return tuple(out)
+
+
+def maybe_check_updates(force: bool = False) -> dict[str, Any] | None:
+    """Once a day (settings.check_updates, never offline): the newest published release, kept in
+    KV so the home page can say a fixed version exists. Returns the stored record."""
+    from . import __version__
+    from .external.verify import get
+
+    st = get_settings()
+    with session_scope() as s:
+        row = s.get(KV, UPDATE_KEY)
+        rec = dict(row.v or {}) if row else {}
+    if not st.check_updates or st.offline:
+        return rec or None
+    last = rec.get("checked_at")
+    if not force and last and utcnow() - datetime.fromisoformat(last) < UPDATE_EVERY:
+        return rec
+    try:
+        r = get(RELEASES_URL, retries=0)
+        if r.status_code != 200:
+            return rec or None
+        body = r.json()
+    except Exception as e:  # noqa: BLE001 - offline laptops, rate limits: try again tomorrow
+        log.info("update check skipped: %s", e)
+        return rec or None
+    latest = str(body.get("tag_name") or "").lstrip("v")
+    rec = {"checked_at": utcnow().isoformat(), "latest": latest, "url": body.get("html_url"),
+           "newer": bool(latest) and version_tuple(latest) > version_tuple(__version__)}
+    with session_scope() as s:
+        _kv_set(s, UPDATE_KEY, rec)
+    return rec
+
+
+def update_notice(s: Session) -> dict[str, Any] | None:
+    """{latest, url} when a newer release is known, else None (read by the home page)."""
+    from . import __version__
+
+    row = s.get(KV, UPDATE_KEY)
+    rec = (row.v or {}) if row else {}
+    if rec.get("latest") and version_tuple(rec["latest"]) > version_tuple(__version__):
+        return {"latest": rec["latest"], "url": rec.get("url"), "current": __version__}
+    return None

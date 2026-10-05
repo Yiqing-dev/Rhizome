@@ -118,7 +118,8 @@ export interface ReviewItem {
 }
 export interface DueCard { id: string; q: string; a: string; entity_key: string; entity_name: string | null; origin: string; new: boolean }
 export interface Stats { entities: Record<string, number>; edges: number; review_queue: number; review_queue_by_kind: Record<string, number>; cards_due: number;
-  inbox?: { watching: boolean; last_scan: string | null; pending: string[]; ignored: string[] } }
+  inbox?: { watching: boolean; last_scan: string | null; pending: string[]; ignored: string[] };
+  update?: { latest: string; url: string | null; current: string } | null }
 
 export interface Decision { id: number; op: string; payload: Record<string, unknown>; created_at: string; revoked_at: string | null }
 export interface JobView {

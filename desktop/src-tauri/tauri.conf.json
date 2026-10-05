@@ -12,17 +12,18 @@
       {
         "label": "main",
         "title": "Rhizome",
-        "width": 1320,
-        "height": 880,
-        "minWidth": 900,
-        "minHeight": 600,
+        "width": 1200,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 480,
         "url": "index.html",
         "center": true,
-        "dragDropEnabled": false
+        "dragDropEnabled": false,
+        "preventOverflow": true
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' http://127.0.0.1:* http://localhost:*"
     }
   },
   "bundle": {
@@ -46,7 +47,8 @@
     "resources": {
       "../build/server/": "server/",
       "windows/rhz.cmd": "rhz.cmd",
-      "../../NOTICE": "NOTICE.txt"
+      "../../NOTICE": "NOTICE.txt",
+      "../THIRD-PARTY-NOTICES.txt": "THIRD-PARTY-NOTICES.txt"
     },
     "windows": {
       "allowDowngrades": false,

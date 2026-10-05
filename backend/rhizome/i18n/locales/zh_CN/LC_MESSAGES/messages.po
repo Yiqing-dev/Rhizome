@@ -381,3 +381,12 @@ msgstr "这些是已知的导出偏差（{fixes}）：请加 repair=true 再次�
 
 msgid "rxf.repair.rxf_version_type"
 msgstr "把带引号的 rxf_version 当作数字读取"
+
+msgid "ml.files_missing"
+msgstr "模型 {model} 尚未下载（处于离线模式，或从未获取过）。请运行：{command}"
+
+msgid "ml.download_failed"
+msgstr "下载 {model} 失败：{error}。如经代理请设置 HTTPS_PROXY；在中国大陆可设置 HF_ENDPOINT=https://hf-mirror.com 后再运行 rhz models download {model}。"
+
+msgid "api.move_outside_profile"
+msgstr "{path} 在你的用户目录之外：新建的文件夹已设为仅本账户可读；如果这台电脑还有其他账户，请检查其权限。"

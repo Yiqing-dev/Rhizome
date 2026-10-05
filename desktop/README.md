@@ -20,7 +20,8 @@ Uninstalling or upgrading never touches the data folder. **Portable mode:** put 
 `Rhizome.exe` picks a free localhost port, generates an access token, starts `server\rhz.exe serve`
 without a console window, waits until it accepts connections and opens the UI. Closing the window
 stops the backend. If the window process dies, the backend notices (`RHIZOME_PARENT_PID`) and exits.
-A second launch focuses the existing window. Backend output: `%APPDATA%\dev.rhizome.desktop\logs\`.
+A second launch focuses the existing window. Backend output: `%LOCALAPPDATA%\dev.rhizome.desktop\logs\`
+(`backend-console.log`, the previous run in `backend-console.prev.log`, the shell's own `shell.log`; `rhz diag` bundles them).
 
 The same `rhz.exe` is the command-line tool (`rhz.cmd search …`; add the install folder to PATH to
 use `rhz` anywhere) and the MCP server for Claude Desktop (Settings → *Connect to Claude Desktop*

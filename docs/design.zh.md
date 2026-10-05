@@ -63,7 +63,7 @@ Rhizome 是一个个人文献资产图谱。它把论文拆成数据、方法、
 
 ## 数据模型
 
-数据模型是一张异构图：8 类实体，13 类边。“GRN 下的算法”不需要存成子主题，它是一次查询：取指向 GRN 的边，再按起点的实体类型或边的类型筛选。
+数据模型是一张异构图：8 类实体，14 类边。“GRN 下的算法”不需要存成子主题，它是一次查询：取指向 GRN 的边，再按起点的实体类型或边的类型筛选。
 
 **实体**
 
@@ -344,12 +344,12 @@ RXF 里的 user\_insights，也就是你在讨论中说出的判断和联想，�
 | 任务队列 | 数据库内的任务表 + 后台 worker | 不额外引入 Redis；两种存储后端都适用 |
 | LLM | 内核不调用任何 LLM API；需要推理的工作通过 RXF 和 MCP 交给聊天里的 Claude / ChatGPT | 没有 API key，也没有运行成本；API 模式作为可选插件保留，默认关闭 |
 | Embedding | bge-m3（1024 维） | 中英混合；同时提供稠密和稀疏向量；本机 CPU 就能跑 |
-| 本地判定模型 | bge-reranker-v2-m3（规范化、检索重排）；mDeBERTa-v3-base-xnli（论断关系） | 用 ONNX Runtime 在 CPU 上运行；比生成式 LLM 更小、更快、输出更稳定 |
+| 本地判定模型 | bge-reranker-v2-m3（规范化、检索重排）；mDeBERTa-v3-base-xnli（论断关系） | 在 CPU 上用 PyTorch 运行（固定到某个模型版本，向量索引按版本命名）；比生成式 LLM 更小、更快、输出更稳定 |
 | 本地小 LLM（可选） | Qwen3.5-2B，Q4\_K\_M 量化的 GGUF，约 1.3 GB | 用 llama.cpp 运行，开启 JSON schema 约束解码；只负责上下位判定、about / applicable\_to 分类和补题 |
 | 图算法 | graspologic（Leiden 算法） | 社区划分，在夜间批任务里运行；MIT 许可。不用 igraph 和 leidenalg，因为它们是 GPL 许可 |
 | 外部数据源 | OpenAlex、Unpaywall、Europe PMC、NCBI E-utilities、GitHub API | 元数据、引用、开放获取全文、accession 校验 |
 | 前端 | React + sigma.js + Cytoscape.js + react-i18next | WebGL 全景、局部图、中英双语 |
-| 桌面外壳 | Tauri + Python sidecar（PyInstaller 打包） | 生成 Windows MSI 安装包 |
+| 桌面外壳 | Tauri + Python sidecar（PyInstaller 打包） | 生成 Windows NSIS 安装包 |
 | MCP | Python MCP SDK | 对 REST API 的薄封装，以本地 stdio 方式接入 Claude Desktop |
 | 复习调度 | FSRS（py-fsrs） |  |
 
@@ -387,7 +387,7 @@ Rhizome 按通用软件来开发：单用户，Windows 优先，macOS 和 Linux 
 
 **打包与分发**
 
-- 后端用 PyInstaller 打成单个可执行文件，作为 Tauri 桌面外壳的 sidecar；Windows 安装包为 MSI。
+- 后端用 PyInstaller 打成单个可执行文件，作为 Tauri 桌面外壳的 sidecar；Windows 安装包为 NSIS（exe）。
 - 所有模型（bge-m3、reranker、NLI、Qwen3.5-2B）都不打进安装包，用到对应功能时才下载，每个都可以单独关闭，以控制安装包体积。
 - 更新通过 Tauri 自带的更新机制完成，更新前自动备份数据目录。
 

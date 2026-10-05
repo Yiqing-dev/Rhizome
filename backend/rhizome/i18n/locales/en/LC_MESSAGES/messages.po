@@ -381,3 +381,12 @@ msgstr "These are known export drifts ({fixes}): call rhz_ingest again with repa
 
 msgid "rxf.repair.rxf_version_type"
 msgstr "read a quoted rxf_version as a number"
+
+msgid "ml.files_missing"
+msgstr "The model {model} is not downloaded yet (offline mode, or never fetched). Run: {command}"
+
+msgid "ml.download_failed"
+msgstr "Downloading {model} failed: {error}. Behind a proxy set HTTPS_PROXY; in mainland China set HF_ENDPOINT=https://hf-mirror.com and run rhz models download {model} again."
+
+msgid "api.move_outside_profile"
+msgstr "{path} is outside your user profile: the folder was created readable by this account only; check its permissions if other accounts use this computer."

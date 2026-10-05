@@ -217,6 +217,7 @@ class Settings(BaseSettings):
     api_url: str | None = None  # used by MCP/CLI clients; default http://host:port
 
     offline: bool = False  # no OpenAlex / NCBI / GitHub calls
+    check_updates: bool = True  # once a day, ask GitHub whether a newer release exists (off when offline)
     contact_email: str | None = None  # OpenAlex polite pool
 
     embedder: Literal["hashing", "bge-m3"] = "hashing"
@@ -298,6 +299,10 @@ class Settings(BaseSettings):
         return self.api_url or f"http://{self.host}:{self.port}"
 
     def ensure_dirs(self) -> None:
+        if not self.data_dir.exists():
+            from .system import secure_dir  # a new library folder is readable by this user only (Windows)
+
+            secure_dir(self.data_dir)
         for p in (self.data_dir, self.raw_dir, self.inbox, self.inbox / "done", self.inbox / "error",
                   self.logs_dir, self.backups_dir, self.models_dir):
             p.mkdir(parents=True, exist_ok=True)

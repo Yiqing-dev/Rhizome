@@ -19,6 +19,9 @@ jobs:
         include:
           - os: ubuntu-latest   # the oldest supported interpreter (HPC modules)
             python: "3.10"
+          - os: windows-latest  # the exact versions frozen into the installer
+            python: "3.11"
+            constraints: "-c desktop/constraints.txt"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -27,7 +30,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install
-        run: pip install -e "./backend[dev]"
+        run: pip install ${{ matrix.constraints }} -e "./backend[dev]"
       - name: Unit, RXF contract and retrieval tests
         run: python -m pytest backend/tests -q
         env:
@@ -53,6 +56,8 @@ jobs:
         run: python scripts/check_i18n.py
       - name: SPDX headers
         run: python scripts/check_spdx.py
+      - name: Version written the same everywhere
+        run: python scripts/check_version.py
       - name: Secret scan
         uses: gitleaks/gitleaks-action@v2
         env:

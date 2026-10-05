@@ -17,7 +17,7 @@ works with built-in lightweight fallbacks before any model is downloaded.
 L0 raw      RXF exports + PDFs, content-addressed (sha256), append-only
 L1 extract  versioned rows (model, prompt version, schema version)        ← recompute starts here
 L2 entities Work · Dataset · Method · Idea · Claim · Topic · Organism · Modality
-L3 graph    13 typed edges + per-asset vectors
+L3 graph    14 typed edges + per-asset vectors
 human_decision  merges / rejections / confirmations — applied last on every rebuild, never lost
 ```
 
@@ -124,7 +124,7 @@ pip wheel ./backend -w wheels && pip install --no-index --find-links wheels rhiz
 | --- | --- |
 | `backend/` | FastAPI app, pipeline, CLI (`rhz`), MCP server, Alembic migrations, tests |
 | `frontend/` | React + sigma.js + Cytoscape.js + react-i18next UI |
-| `desktop/` | Tauri v2 shell + PyInstaller sidecar spec → Windows MSI |
+| `desktop/` | Tauri v2 shell + PyInstaller sidecar spec → Windows NSIS installer |
 | `rxf-spec/` | RXF JSON Schema, examples (synthetic), export instructions (zh / en) |
 | `docs/` | Design document and implementation notes |
 | `scripts/` | CI gates: i18n key alignment, SPDX headers, dependency licenses |

@@ -93,10 +93,14 @@ fn shell_log(app: &AppHandle, msg: &str) {
 
 fn spawn_backend(exe: &Path, port: u16, token: &str, log_dir: &Path) -> std::io::Result<Child> {
     fs::create_dir_all(log_dir)?;
-    let log = File::create(log_dir.join("backend-console.log"))?;
+    let console = log_dir.join("backend-console.log");
+    // keep the previous run's output (a crash is usually diagnosed from the launch before)
+    let _ = fs::rename(&console, log_dir.join("backend-console.prev.log"));
+    let log = File::create(&console)?;
     let mut cmd = Command::new(exe);
     cmd.args(["serve", "--host", "127.0.0.1", "--port", &port.to_string()])
         .env("RHIZOME_API_TOKEN", token)
+        .env("RHIZOME_CONSOLE_LOG", &console) // rhz diag bundles it
         .env("PYTHONUTF8", "1")
         // the backend exits by itself if this process disappears without a clean shutdown
         .env("RHIZOME_PARENT_PID", std::process::id().to_string())

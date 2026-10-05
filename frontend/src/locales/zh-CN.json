@@ -465,5 +465,10 @@
     "benchmark": "基准测试",
     "review": "综述",
     "protocol": "实验方案"
+  },
+  "update": {
+    "available": "Rhizome {{latest}} 已发布（当前 {{current}}）。",
+    "open": "去下载",
+    "later": "以后再说"
   }
 }

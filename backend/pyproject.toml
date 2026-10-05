@@ -34,7 +34,7 @@ dependencies = [
 
 [project.optional-dependencies]
 # Local judgement models (downloaded on demand, never bundled).
-models = ["sentence-transformers>=3.2", "onnxruntime>=1.17", "transformers>=4.40", "huggingface_hub>=0.23"]
+models = ["sentence-transformers>=3.2", "transformers>=4.44", "torch>=2.2", "huggingface_hub>=0.25"]
 llm = ["llama-cpp-python>=0.2.80"]
 graph = ["graspologic>=3.4"]
 # psycopg is LGPL-3.0 (compatible with Apache-2.0 distribution as a dynamically used library).

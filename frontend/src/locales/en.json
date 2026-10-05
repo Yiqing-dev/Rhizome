@@ -465,5 +465,10 @@
     "benchmark": "benchmark",
     "review": "review",
     "protocol": "protocol"
+  },
+  "update": {
+    "available": "Rhizome {{latest}} is available (you have {{current}}).",
+    "open": "Download",
+    "later": "Later"
   }
 }

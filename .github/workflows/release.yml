@@ -142,6 +142,25 @@ jobs:
           $env:RHIZOME_HANG_DUMP = "40"
           python desktop\ci\mcp_smoke.py $env:RHZ_SMOKE
 
+      - name: Licences of what ships and third-party notices
+        shell: pwsh
+        run: |
+          # the constrained environment is exactly what PyInstaller froze
+          python -m pip install -c desktop/constraints.txt pip-licenses
+          pip-licenses --format=json --with-urls --ignore-packages pip setuptools wheel pyinstaller pyinstaller-hooks-contrib | Out-File -Encoding utf8 $env:RUNNER_TEMP\pip.json
+          Get-Content $env:RUNNER_TEMP\pip.json | python scripts/check_licenses.py pip
+          if ($LASTEXITCODE) { exit 1 }
+          Push-Location frontend
+          npx license-checker --production --json | Out-File -Encoding utf8 $env:RUNNER_TEMP\npm.json
+          Pop-Location
+          Push-Location desktop\src-tauri
+          cargo metadata --format-version 1 --locked | Out-File -Encoding utf8 $env:RUNNER_TEMP\cargo.json
+          Pop-Location
+          python scripts/gen_third_party_notices.py --pip $env:RUNNER_TEMP\pip.json --npm $env:RUNNER_TEMP\npm.json --cargo $env:RUNNER_TEMP\cargo.json -o desktop\THIRD-PARTY-NOTICES.txt
+          if ($LASTEXITCODE) { exit 1 }
+          python scripts/check_version.py
+          if ($LASTEXITCODE) { exit 1 }
+
       - name: Build installers (Tauri)
         working-directory: desktop
         run: |
@@ -155,8 +174,15 @@ jobs:
           # offline: the full WebView2 runtime embedded, for machines without internet access
           npx tauri build --bundles nsis --config src-tauri/offline.conf.json
           if ($LASTEXITCODE) { exit 1 }
+          # the offline build overwrote the bundle folder: resolve it freshly, and prove it is the
+          # variant with the runtime inside (>100 MB larger, different hash) before publishing it
+          $off = Get-ChildItem src-tauri\target\release\bundle\nsis\*-setup.exe | Select-Object -First 1
           $offlineName = ($std.BaseName -replace '-setup$', '-offline-setup') + '.exe'
-          Copy-Item $std.FullName (Join-Path ..\dist $offlineName)
+          Copy-Item $off.FullName (Join-Path ..\dist $offlineName)
+          $stdOut = Get-Item (Join-Path ..\dist $std.Name)
+          $offOut = Get-Item (Join-Path ..\dist $offlineName)
+          if ($offOut.Length -lt $stdOut.Length + 100MB) { Write-Error "offline installer is not larger than the standard one ($($offOut.Length) vs $($stdOut.Length))"; exit 1 }
+          if ((Get-FileHash $offOut.FullName).Hash -eq (Get-FileHash $stdOut.FullName).Hash) { Write-Error "offline installer is identical to the standard one"; exit 1 }
           # checksums next to the (unsigned) installers, so a download can be verified
           $sums = Get-ChildItem ..\dist\*.exe | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name }
           Set-Content -Path ..\dist\SHA256SUMS.txt -Value $sums -Encoding ascii
@@ -198,10 +224,13 @@ jobs:
             Start-Sleep -Milliseconds 500
             if (Test-Path $marker) { $url = (Get-Content $marker -Encoding utf8 | ConvertFrom-Json).url }
           }
-          if (-not $url) { Write-Error "backend did not start"; Get-ChildItem "$env:APPDATA\dev.rhizome.desktop\logs" -ErrorAction SilentlyContinue | Get-Content; exit 1 }
-          $h = Invoke-RestMethod "$url/health"
-          Write-Host "backend up at $url, version $($h.version)"
+          if (-not $url) { Write-Error "backend did not start"; Get-ChildItem "$env:LOCALAPPDATA\dev.rhizome.desktop\logs" -ErrorAction SilentlyContinue | Get-Content; exit 1 }
           $auth = @{ Authorization = "Bearer " + (Get-Content (Join-Path $dataDir "token") -Encoding utf8).Trim() }
+          $h = Invoke-RestMethod -Headers $auth "$url/health"
+          Write-Host "backend up at $url, version $($h.version)"
+          $ver = (Get-Content desktop\src-tauri\tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ($h.version -ne $ver) { Write-Error "installed backend reports $($h.version), installer is $ver"; exit 1 }
+          if (-not (Test-Path (Join-Path $installDir "THIRD-PARTY-NOTICES.txt"))) { Write-Error "third-party notices missing from the install"; exit 1 }
           $sys = Invoke-RestMethod -Headers $auth "$url/system"
           if ($sys.data_dir -ne $dataDir) { Write-Error "data dir is $($sys.data_dir), expected $dataDir"; exit 1 }
           if (-not $sys.app_dir.StartsWith($installDir)) { Write-Error "app dir is $($sys.app_dir)"; exit 1 }

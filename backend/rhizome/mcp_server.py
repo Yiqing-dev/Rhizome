@@ -238,6 +238,13 @@ def main() -> None:
     from .db.session import SchemaTooNew
     from .logging_setup import setup_logging
 
+    if sys.stderr is not None:
+        import faulthandler
+
+        try:
+            faulthandler.enable(all_threads=True)  # Claude Desktop keeps the server's stderr in its MCP log
+        except (ValueError, OSError):
+            pass
     try:
         setup_logging(get_settings(), role="mcp")
         warm_up()
