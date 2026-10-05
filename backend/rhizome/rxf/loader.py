@@ -88,6 +88,7 @@ def decode_rxf(data: bytes) -> str:
 def strip_fences(text: str) -> str:
     """The RXF document inside the text: the first fenced block that contains rxf_version, else
     (no fences) the text from its rxf_version line on, so prose around an export is ignored."""
+    text = text.replace("\r\n", "\n").replace("\r", "\n")  # Windows editors and chat clients: CRLF
     for m in _FENCE_BLOCK.finditer(text):
         if _RXF_LINE.search(m.group(2)):
             return m.group(2)

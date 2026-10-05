@@ -26,6 +26,7 @@ def test_export_is_found_inside_prose_and_fences(tmp_path):
     two = "First a note:\n```\nnot: rxf\n```\nThen:\n```yaml\n" + body + "\n```\n"
     assert load_rxf(two).ok
     assert load_rxf("Sure! Below is the document.\n\n" + body).ok  # prose, no fence
+    assert load_rxf(wrapped.replace("\n", "\r\n")).ok  # saved by Notepad: CRLF everywhere
     from rhizome.inbox import looks_like_rxf
 
     f = tmp_path / "chat.txt"
