@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..db.models import KV, ReviewItem, utcnow
+from ..db.models import ReviewItem, utcnow
 from ..pipeline import decisions
 from ..pipeline.graph import Graph
 

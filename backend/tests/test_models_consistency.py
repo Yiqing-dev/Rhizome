@@ -2,7 +2,6 @@
 """The embedder belongs to the library; claims are not merged blindly without NLI; the synthesis
 bar is bounded and resettable."""
 
-import json
 
 import pytest
 from fastapi.testclient import TestClient
