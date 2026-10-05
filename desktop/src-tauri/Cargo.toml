@@ -1,6 +1,6 @@
 [package]
 name = "rhizome-desktop"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 license = "Apache-2.0"
 description = "Rhizome desktop shell (Tauri) around the bundled Python backend"

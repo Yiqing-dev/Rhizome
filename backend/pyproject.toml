@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rhizome"
-version = "0.1.5"
+version = "0.1.6"
 description = "Personal literature asset graph: papers split into reusable datasets, methods, ideas and claims."
 readme = "README.md"
 license = "Apache-2.0"
