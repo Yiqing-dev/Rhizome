@@ -105,6 +105,7 @@ export interface SystemInfo {
   cli: string[]; claude_desktop: Record<string, unknown>; claude_config_paths: string[];
   backups: BackupStatus;
   model_problems: { kind: string; model: string; missing: string }[];
+  index: { model: string | null; current: string | null; stale: boolean };
 }
 export interface BackupStatus { dir: string; count: number; bytes: number; last: string | null; last_daily: string | null; error?: string }
 
@@ -151,7 +152,8 @@ export const api = {
   connectClaude: () => req<{ written: string[]; entry: Record<string, unknown> }>("POST", "/system/claude-desktop"),
   moveDataDir: (path: string | null, copy = true) =>
     req<{ data_dir: string; copied: boolean; restart_required: boolean; claude_config_updated?: string[] }>("POST", "/system/data-dir", { path, copy }),
-  runJob: (kind: string) => req<JobView>("POST", "/jobs", { kind, payload: {} }),
+  runJob: (kind: string, payload: Record<string, unknown> = {}) => req<JobView>("POST", "/jobs", { kind, payload }),
+  resetSynthesisThreshold: () => req<{ threshold: number }>("DELETE", "/synthesis/threshold"),
   job: (id: number) => req<JobView>("GET", `/jobs/${id}`),
   activeJobs: () => req<{ jobs: JobView[]; last_failed: JobView | null }>("GET", "/jobs", undefined, { active: true }),
 };

@@ -23,6 +23,11 @@ class ModelUnavailable(RuntimeError):
     pass
 
 
+class IndexStale(ModelUnavailable):
+    """The library's vectors were made with another embedder than the one configured: a rebuild is
+    needed (searching or adding with mixed vectors would silently find nothing or the wrong thing)."""
+
+
 def _importable(module: str) -> bool:
     try:
         return find_spec(module) is not None

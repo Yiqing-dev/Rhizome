@@ -95,7 +95,22 @@ def info() -> dict[str, Any]:
         "claude_config_paths": [str(p) for p in claude_config_paths()],
         "backups": _backups(st),
         "model_problems": _model_problems(st),
+        "index": _index_state(),
     }
+
+
+def _index_state() -> dict[str, Any]:
+    from .db.session import session_scope
+    from .ml import get_embedder
+    from .pipeline.graph import index_model
+
+    try:
+        with session_scope(read_only=False) as s:
+            im = index_model(s)
+        cur = get_embedder().name
+    except Exception as e:  # noqa: BLE001 - a missing model is reported by model_problems
+        return {"model": None, "current": None, "stale": False, "error": str(e)}
+    return {"model": im, "current": cur, "stale": im is not None and im != cur}
 
 
 def _model_problems(st) -> list[dict[str, str]]:

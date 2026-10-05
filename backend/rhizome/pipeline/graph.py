@@ -170,6 +170,43 @@ class _VectorCache:
 VECTORS = _VectorCache()
 
 EMB_VERSION_KEY = "embedding_version"
+INDEX_MODEL_KEY = "embedding_model"  # which embedder the library's vectors belong to
+
+
+def index_model(s: Session) -> str | None:
+    """The embedder the stored vectors were made with (older libraries: inferred from the rows)."""
+    row = s.get(KV, INDEX_MODEL_KEY)
+    if row and row.v and row.v.get("model"):
+        return row.v["model"]
+    models = set(s.execute(select(Embedding.model).distinct()).scalars())
+    return next(iter(models)) if len(models) == 1 else (None if not models else "mixed")
+
+
+def set_index_model(s: Session, model: str) -> None:
+    row = s.get(KV, INDEX_MODEL_KEY)
+    if row is None:
+        s.add(KV(k=INDEX_MODEL_KEY, v={"model": model}))
+    else:
+        row.v = {"model": model}
+
+
+def check_index_model(s: Session) -> str:
+    """The configured embedder must be the one the library is indexed with. Another process may
+    have switched it (settings.json): reload once; if they still differ, a rebuild is needed."""
+    from ..ml import IndexStale, reset_models
+
+    im = index_model(s)
+    if im is None or im == get_embedder().name:
+        return get_embedder().name
+    from ..config import reload_settings
+
+    reload_settings()
+    reset_models()
+    if im == get_embedder().name:
+        return im
+    from ..i18n import _
+
+    raise IndexStale(_("ml.index_stale", index=im, current=get_embedder().name))
 
 
 def embedding_version(s: Session) -> int:
@@ -190,7 +227,7 @@ def bump_embedding_version(s: Session) -> int:
 
 def knn(s: Session, query_vec: np.ndarray, types: Iterable[str] | None = None, k: int = 10,
         exclude: set[int] | None = None) -> list[tuple[int, float]]:
-    model = get_embedder().name
+    model = check_index_model(s)  # never search a library indexed with another model
     ids, etypes, mat = VECTORS.get(s, model)
     if len(ids) == 0 or mat.shape[1] != query_vec.shape[0]:
         return []
@@ -372,6 +409,11 @@ class Graph:
         """Refresh full-text row and embedding of one entity."""
         self._refresh_fts(e)
         if embed and e.type not in ("organism", "modality"):
+            if not self.s.info.get("index_model_checked"):
+                check_index_model(self.s)
+                if self.s.get(KV, INDEX_MODEL_KEY) is None:
+                    set_index_model(self.s, get_embedder().name)
+                self.s.info["index_model_checked"] = True
             vec = embed_texts(self.s, [entity_text(e)])[0]
             model = get_embedder().name
             self.s.merge(Embedding(entity_id=e.id, model=model, dim=int(vec.shape[0]),

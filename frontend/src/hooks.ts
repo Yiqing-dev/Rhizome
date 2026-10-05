@@ -40,7 +40,7 @@ export function useKeys(handler: (e: KeyboardEvent) => void, deps: unknown[]): v
 
 /** Start a background job and follow it until it is done or failed (the button stays disabled
  * meanwhile, so repeated clicks don't queue the same work again). */
-export function useJob(kind: string, onDone?: (j: JobView) => void): {
+export function useJob(kind: string, onDone?: (j: JobView) => void, payload?: Record<string, unknown>): {
   job: JobView | null; running: boolean; start: () => Promise<void>;
 } {
   const [job, setJob] = useState<JobView | null>(null);
@@ -56,6 +56,7 @@ export function useJob(kind: string, onDone?: (j: JobView) => void): {
       done.current?.(j);
     }
   }, []);
-  const start = useCallback(async () => follow(await api.runJob(kind)), [kind, follow]);
+  const body = JSON.stringify(payload ?? {});
+  const start = useCallback(async () => follow(await api.runJob(kind, JSON.parse(body))), [kind, body, follow]);
   return { job, running: !!job && (job.status === "queued" || job.status === "running"), start };
 }

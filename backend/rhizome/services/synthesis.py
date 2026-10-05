@@ -36,9 +36,46 @@ def _two_hop(s: Session, entity_id: int) -> set[int]:
     return seen
 
 
+DELTA_KEY = "synthesis_delta"   # {embedder: learned offset} on top of thresholds.synthesis_sim
+MAX_DELTA = 0.15
+TARGET_USEFUL = 0.2             # the bar settles where about 1 in 5 suggested pairs is useful
+STEP = 0.02
+
+
+def _delta(s: Session) -> float:
+    row = s.get(KV, DELTA_KEY)
+    d = ((row.v or {}) if row else {}).get(get_embedder().name, 0.0)
+    return max(-MAX_DELTA, min(MAX_DELTA, float(d or 0.0)))
+
+
 def current_threshold(s: Session) -> float:
-    row = s.get(KV, "synthesis_sim")
-    return (row.v or {}).get("value") if row and row.v else get_settings().thresholds.synthesis_sim
+    """The configured similarity bar plus what feedback has taught it, per embedder (scores of two
+    models are not comparable) and bounded, so it can neither drift to 0.95 nor hide the setting."""
+    return round(get_settings().thresholds.synthesis_sim + _delta(s), 4)
+
+
+def tune_threshold(s: Session, useful: bool) -> float:
+    """Feedback on a suggested pair: useful lowers the bar, useless raises it, weighted so the
+    bar is stable when TARGET_USEFUL of the suggestions are useful."""
+    d = _delta(s) + (-STEP * (1 - TARGET_USEFUL) if useful else STEP * TARGET_USEFUL)
+    d = max(-MAX_DELTA, min(MAX_DELTA, d))
+    row = s.get(KV, DELTA_KEY)
+    v = dict(row.v or {}) if row else {}
+    v[get_embedder().name] = round(d, 4)
+    if row is None:
+        s.add(KV(k=DELTA_KEY, v=v))
+    else:
+        row.v = v
+    return current_threshold(s)
+
+
+def reset_threshold(s: Session) -> float:
+    row = s.get(KV, DELTA_KEY)
+    if row is not None:
+        v = dict(row.v or {})
+        v.pop(get_embedder().name, None)
+        row.v = v
+    return current_threshold(s)
 
 
 def generate_candidates(s: Session, days: int = 7, max_items: int = 20) -> int:
@@ -93,6 +130,9 @@ def weekly_digest(s: Session, days: int = 7) -> dict[str, Any]:
         w, c = g.by_id(ed.src), g.by_id(ed.dst)
         if w and c:
             contested.append({"work": summarize(w), "claim": summarize(c), "evidence": ed.evidence})
-    return {"since": since.isoformat(), "threshold": current_threshold(s), "pairs": pairs_out,
+    last = s.get(KV, "last_synthesis")
+    return {"since": since.isoformat(), "threshold": current_threshold(s),
+            "threshold_default": get_settings().thresholds.synthesis_sim,
+            "last_synthesis": (last.v or {}).get("at") if last else None, "pairs": pairs_out,
             "contradictions": contested,
             "contradictions_pending_review": [{"item_id": i.id, **i.payload} for i in pending_contra]}

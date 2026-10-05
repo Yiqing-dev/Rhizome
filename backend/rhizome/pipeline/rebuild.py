@@ -17,7 +17,7 @@ from ..db.models import KV, Edge, Embedding, Entity, EntityAlias, Extraction, Re
 from ..db.session import backup_database, has_fts, recent_backup
 from ..config import get_settings
 from .decisions import apply_all
-from .graph import VECTORS, Graph
+from .graph import VECTORS, Graph, set_index_model
 from .materialize import link_citations, materialize, promote_topics
 
 log = logging.getLogger(__name__)
@@ -58,6 +58,13 @@ def rebuild(s: Session, backup: bool = True) -> dict:
             except Exception as e:  # noqa: BLE001
                 log.warning("pre-rebuild backup failed: %s", e)
                 warnings.append(f"pre-rebuild backup failed: {e}")
+    # adopt the embedder in settings.json now (another process may have switched it): a rebuild is
+    # what re-indexes the library for it
+    from ..config import reload_settings
+    from ..ml import get_embedder, reset_models
+
+    reload_settings()
+    reset_models()
     prewarmed = _prewarm_embeddings(s)
     # ids are handles (UI URLs, CLI, MCP, review items): remember them so the same key gets the same
     # id back, and a new entity never inherits the id of one that is gone
@@ -77,6 +84,8 @@ def rebuild(s: Session, backup: bool = True) -> dict:
                                        ReviewItem.kind.in_(REGENERATED_REVIEW_KINDS)))
     s.flush()
     VECTORS.clear()
+    set_index_model(s, get_embedder().name)  # same transaction as the vectors it describes
+    s.info["index_model_checked"] = True
     g = Graph(s)
     g.id_plan, g.next_id, g.item_plan, g.next_item_id = id_plan, next_id, item_plan, next_item
     n = 0

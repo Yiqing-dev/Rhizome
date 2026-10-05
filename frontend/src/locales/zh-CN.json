@@ -259,7 +259,12 @@
     "contested": "争议清单",
     "no_contested": "没有新的矛盾。",
     "similarity": "相似度",
-    "no_pairs_hint": "运行批任务，或等待每周综合。"
+    "no_pairs_hint": "运行批任务，或等待每周综合。",
+    "last_batch": "上次生成",
+    "never": "还没有",
+    "threshold": "相似度门槛",
+    "threshold_default": "默认 {{v}}，已按你的反馈调整",
+    "threshold_reset": "恢复默认"
   },
   "settings": {
     "title": "设置",
@@ -360,7 +365,8 @@
   "models": {
     "unavailable": "设置里选的模型（{{models}}）在这个程序里无法加载，导入和检索会失败。安装版桌面应用只能用内置模型。",
     "use_builtin": "改用内置模型并重算",
-    "switched": "已改用内置模型，正在后台重算。"
+    "switched": "已改用内置模型，正在后台重算。",
+    "index_stale": "资料库的向量是用 {{index}} 生成的，当前模型是 {{current}}。重算一次之后检索和导入才能继续。"
   },
   "jobs": {
     "running": "进行中…",

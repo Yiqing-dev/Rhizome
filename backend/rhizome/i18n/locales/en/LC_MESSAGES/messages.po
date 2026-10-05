@@ -237,3 +237,6 @@ msgstr "{key} was written to settings.json; the running app uses it after a rest
 
 msgid "api.rebuilding"
 msgstr "The library is being rebuilt and cannot be changed right now; this clears by itself when the rebuild finishes (usually within minutes)."
+
+msgid "ml.index_stale"
+msgstr "The library's vectors were made with {index}, but the configured model is {current}. A rebuild is needed (Settings → Local models → Rebuild now, or rhz rebuild); searching and importing are paused until then."

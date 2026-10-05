@@ -259,7 +259,12 @@
     "contested": "Contested claims",
     "no_contested": "No new contradictions.",
     "similarity": "similarity",
-    "no_pairs_hint": "Run the batch, or wait for the weekly synthesis."
+    "no_pairs_hint": "Run the batch, or wait for the weekly synthesis.",
+    "last_batch": "Last batch",
+    "never": "never",
+    "threshold": "Similarity bar",
+    "threshold_default": "default {{v}}, adjusted by your feedback",
+    "threshold_reset": "reset"
   },
   "settings": {
     "title": "Settings",
@@ -360,7 +365,8 @@
   "models": {
     "unavailable": "The models chosen in settings ({{models}}) cannot be loaded by this program, so importing and searching will fail. The installed desktop app runs the built-in models only.",
     "use_builtin": "Use built-in models and rebuild",
-    "switched": "Switched to the built-in models; rebuilding in the background."
+    "switched": "Switched to the built-in models; rebuilding in the background.",
+    "index_stale": "The library's vectors were made with {{index}}; the current model is {{current}}. Rebuild once to resume searching and importing."
   },
   "jobs": {
     "running": "Running…",

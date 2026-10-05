@@ -116,6 +116,7 @@ def run_all() -> int:
 
 
 STALE_RUNNING = timedelta(hours=6)
+CHECK_EVERY = 300.0  # seconds between nightly / daily-backup checks
 
 
 def recover_stale_jobs(s: Session) -> int:
@@ -173,7 +174,9 @@ class Worker(threading.Thread):
             log.exception("daily backup failed")
 
     def run(self) -> None:  # pragma: no cover - exercised by the app, not unit tests
-        ticks = 0
+        import time
+
+        last_check = 0.0
         try:
             with session_scope() as s:
                 recover_stale_jobs(s)
@@ -185,12 +188,14 @@ class Worker(threading.Thread):
                 from .services.recall import flush_seen
 
                 flush_seen()
+                # by wall clock, at start and every 5 minutes, busy or not: short desktop sessions
+                # must still get their nightly batch and backup
+                if time.monotonic() - last_check > CHECK_EVERY or last_check == 0.0:
+                    last_check = time.monotonic()
+                    self._daily_backup()
+                    with session_scope() as s:
+                        maybe_schedule_nightly(s)
                 if run_next() is None:
-                    ticks += 1
-                    if ticks % 900 == 0:  # roughly every 30 minutes
-                        self._daily_backup()
-                        with session_scope() as s:
-                            maybe_schedule_nightly(s)
                     self._stop.wait(self.interval)
             except Exception:
                 log.exception("worker loop error")
@@ -227,7 +232,9 @@ def _nightly(s: Session, p: dict[str, Any]) -> dict[str, Any]:
     from datetime import datetime
 
     if p.get("force_synthesis") or not last or utcnow() - datetime.fromisoformat(last) >= timedelta(days=7):
-        out["synthesis_candidates"] = synthesis.generate_candidates(s)
+        # catch up on everything added since the last batch (weeks without a run included)
+        days = 7 if not last else min(60, max(7, (utcnow() - datetime.fromisoformat(last)).days + 1))
+        out["synthesis_candidates"] = synthesis.generate_candidates(s, days=days)
         _kv_set(s, "last_synthesis", {"at": utcnow().isoformat()})
     _kv_set(s, "last_nightly", {"at": utcnow().isoformat()})
     return out

@@ -103,7 +103,9 @@ def resolve(s: Session, item_id: int, action: str, note: str | None = None) -> d
             rel = action if p.get("type") == "work" else "applicable_to"
             made = decisions.record(g, "add_edge", {"src": p["key"], "dst": p["topic"], "type": rel})
     elif it.kind == "synthesis":
-        _tune_synthesis(s, useful=action == "useful")
+        from .synthesis import tune_threshold
+
+        tune_threshold(s, useful=action == "useful")
         if action == "useful":
             text = note or f"{p.get('a_name')} ↔ {p.get('b_name')}"
             made = decisions.record(g, "create_idea", {"text": text, "links": [p["a"], p["b"]]})
@@ -111,17 +113,3 @@ def resolve(s: Session, item_id: int, action: str, note: str | None = None) -> d
         it.status = "resolved"
     it.resolved_at = utcnow()
     return {"id": it.id, "status": it.status, "decision_id": made.id if made else None}
-
-
-def _tune_synthesis(s: Session, useful: bool) -> None:
-    """User feedback nudges the similarity bar for future candidates."""
-    from ..config import get_settings
-
-    row = s.get(KV, "synthesis_sim")
-    cur = (row.v or {}).get("value") if row else None
-    cur = cur if cur is not None else get_settings().thresholds.synthesis_sim
-    cur = min(0.95, max(0.2, cur + (-0.01 if useful else 0.01)))
-    if row is None:
-        s.add(KV(k="synthesis_sim", v={"value": cur}))
-    else:
-        row.v = {"value": cur}

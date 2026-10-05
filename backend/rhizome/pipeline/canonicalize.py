@@ -11,6 +11,7 @@ review queue, never auto-written until calibrated).
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from importlib import resources
@@ -42,7 +43,9 @@ def free_key(etype: str, name: str) -> str:
 
 
 def resolve_free(g: Graph, etype: str, name: str, *, attrs: dict[str, Any] | None = None,
-                 status: str = "active", aliases: tuple[str, ...] = ()) -> Resolution:
+                 status: str = "active", aliases: tuple[str, ...] = (), auto_merge: bool = True) -> Resolution:
+    """``auto_merge=False``: even a very close neighbour only produces a merge *review* item (used
+    for claims without NLI, where similar wording can still mean the opposite)."""
     th = get_settings().thresholds
     hit = g.by_alias(etype, name)
     if hit is None:
@@ -71,7 +74,7 @@ def resolve_free(g: Graph, etype: str, name: str, *, attrs: dict[str, Any] | Non
         scores = get_reranker().score(probe_text, [entity_text(c) for c in cands])
         j = max(range(len(cands)), key=lambda i: scores[i])
         best = (cands[j], scores[j])
-    if best and best[1] >= th.merge_auto:
+    if best and best[1] >= th.merge_auto and auto_merge:
         g.add_alias(best[0], name, source="auto-merge")
         for a in aliases:
             g.add_alias(best[0], a)
@@ -96,27 +99,68 @@ class ClaimResolution:
     contradicts: list[tuple[Entity, float]]
 
 
-_NEGATIONS = {"not", "no", "never", "none", "cannot", "without", "fails", "fail", "neither", "nor",
-              "不", "没有", "无", "未", "并非", "不能"}
+_NEGATIONS = {"not", "no", "never", "none", "cannot", "without", "fails", "fail", "neither", "nor"}
+# Chinese has no spaces: match negation words leftmost-longest, after removing words that only
+# look negative (不同 "different", 无监督 "unsupervised", 非常 "very", ...).
+_ZH_NEG = re.compile(r"并非|并不|并未|没有|不是|不能|不会|不再|未能|未曾|无法|从未|从不|毫无|不|没|未|无|非|勿")
+_ZH_NOT_NEG = ("不同", "不仅", "不断", "不久", "不少", "不同于", "不论", "不管", "无论", "无监督", "无标记",
+               "无偏", "非常", "非编码", "非线性", "非参数", "非模式", "非洲", "未来", "无线", "不对称")
+# opposite directions that keep almost the same wording (and so the same embedding)
+_ANTONYMS = [("increase", "decrease"), ("increases", "decreases"), ("increased", "decreased"),
+             ("higher", "lower"), ("up-regulates", "down-regulates"), ("upregulates", "downregulates"),
+             ("upregulated", "downregulated"), ("activates", "represses"), ("activates", "inhibits"),
+             ("promotes", "inhibits"), ("promotes", "suppresses"), ("enhances", "reduces"),
+             ("precede", "follow"), ("precedes", "follows"), ("before", "after"), ("positive", "negative"),
+             ("gain", "loss"), ("more", "less"),
+             ("增加", "减少"), ("升高", "降低"), ("上调", "下调"), ("促进", "抑制"), ("激活", "抑制"),
+             ("先于", "晚于"), ("早于", "晚于"), ("高于", "低于"), ("正相关", "负相关"), ("增强", "减弱")]
 
 
 def _negated(text: str) -> bool:
     from ..text import tokens
 
     t = tokens(text.replace("n't", " not"))
-    return sum(1 for x in t if x in _NEGATIONS) % 2 == 1
+    en = sum(1 for x in t if x in _NEGATIONS)
+    zh_text = text
+    for w in _ZH_NOT_NEG:
+        zh_text = zh_text.replace(w, " ")
+    return (en + len(_ZH_NEG.findall(zh_text))) % 2 == 1
+
+
+def _words(text: str) -> set[str]:
+    from ..text import tokens
+
+    return set(tokens(text.lower()))
+
+
+def _has(text: str, words: set[str], w: str) -> bool:
+    return w in words if w.isascii() else w in text
+
+
+def opposite_polarity(a: str, b: str) -> bool:
+    """Near-identical claims that likely say the opposite: negation parity differs, or one uses a
+    direction word whose antonym the other uses."""
+    if _negated(a) != _negated(b):
+        return True
+    wa, wb = _words(a), _words(b)
+    for x, y in _ANTONYMS:
+        ax, ay, bx, by = _has(a, wa, x), _has(a, wa, y), _has(b, wb, x), _has(b, wb, y)
+        if (ax and not ay and by and not bx) or (ay and not ax and bx and not by):
+            return True
+    return False
 
 
 def resolve_claim(g: Graph, text: str, attrs: dict[str, Any]) -> ClaimResolution:
     nli = get_nli()
     if nli is None:
-        # Fallback without NLI: a near-identical claim with opposite negation is a contradiction
-        # candidate (review queue), never a merge candidate.
+        # Fallback without NLI: a near-identical claim with opposite polarity is a contradiction
+        # candidate (review queue), never a merge candidate; other close claims are never merged
+        # automatically either (similar wording can still mean something else), only queued.
         th = get_settings().thresholds
         if g.by_alias("claim", text) is None:
             qvec = embed_texts(g.s, [text])[0]
             cands = [g.by_id(i) for i, _ in knn(g.s, qvec, types=["claim"], k=5)]
-            cands = [c for c in cands if c is not None and _negated(c.canonical_name) != _negated(text)]
+            cands = [c for c in cands if c is not None and opposite_polarity(c.canonical_name, text)]
             if cands:
                 scores = get_reranker().score(text, [c.canonical_name for c in cands])
                 flagged = [(c, sc) for c, sc in zip(cands, scores) if sc >= th.merge_review]
@@ -124,7 +168,7 @@ def resolve_claim(g: Graph, text: str, attrs: dict[str, Any]) -> ClaimResolution
                     e = g.by_key(free_key("claim", text)) or g.create("claim", free_key("claim", text), text,
                                                                       attrs=attrs)
                     return ClaimResolution(e, True, [], flagged)
-        r = resolve_free(g, "claim", text, attrs=attrs)
+        r = resolve_free(g, "claim", text, attrs=attrs, auto_merge=False)
         return ClaimResolution(r.entity, r.created, [], [])
     hit = g.by_alias("claim", text) or g.by_key(free_key("claim", text))
     if hit:

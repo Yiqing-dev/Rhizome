@@ -237,3 +237,6 @@ msgstr "{key} 已写入 settings.json；正在运行的应用要重启后才会�
 
 msgid "api.rebuilding"
 msgstr "正在重算资料库，暂时不能修改；完成后会自动恢复（通常不超过几分钟）。"
+
+msgid "ml.index_stale"
+msgstr "资料库的向量是用 {index} 生成的，当前设置的模型是 {current}。需要重算一次（设置 → 本地模型 → 立即重算，或 rhz rebuild），在此之前检索和导入会暂停。"

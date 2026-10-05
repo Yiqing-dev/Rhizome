@@ -4,12 +4,14 @@ import { api } from "../api";
 import { EmptyState, EntityLink, Loading, TypeBadge } from "../components/common";
 import { LinkIcon } from "../components/icons";
 import { useJob, useLoad } from "../hooks";
+import { fmtDate } from "../i18n";
 
 /** Weekly digest: two asset cards side by side; explanations are written by Claude via MCP. */
 export default function DigestPage() {
   const { t } = useTranslation();
   const d = useLoad(() => api.digest(), []);
-  const nightly = useJob("nightly", () => d.reload());
+  const nightly = useJob("nightly", () => d.reload(), { force_synthesis: true });
+  const { i18n } = useTranslation();
   async function mark(id: number, useful: boolean) {
     await api.resolve(id, useful ? "useful" : "useless");
     d.reload();
@@ -24,6 +26,16 @@ export default function DigestPage() {
         <button onClick={nightly.start} disabled={nightly.running}>{nightly.running ? t("jobs.running") : t("digest.run_now")}</button>
       </div>
       {nightly.job?.status === "failed" && <div className="notice error"><pre>{nightly.job.error}</pre></div>}
+      {d.data && (
+        <p className="hint row wrap">
+          <span>{t("digest.last_batch")}: {d.data.last_synthesis ? fmtDate(d.data.last_synthesis, i18n.language) : t("digest.never")}</span>
+          <span>· {t("digest.threshold")}: <span className="mono">{d.data.threshold.toFixed(2)}</span>
+            {Math.abs(d.data.threshold - d.data.threshold_default) > 0.001 && (
+              <> ({t("digest.threshold_default", { v: d.data.threshold_default.toFixed(2) })}){" "}
+                <button className="link" onClick={() => api.resetSynthesisThreshold().then(d.reload)}>{t("digest.threshold_reset")}</button></>
+            )}</span>
+        </p>
+      )}
       <Loading error={d.error} loading={d.loading && !d.data} />
       {d.data && (
         <>

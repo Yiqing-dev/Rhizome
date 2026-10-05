@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "./api";
 import { Logo, SearchIcon } from "./components/icons";
+import { useJob } from "./hooks";
 import { backendLang, setLanguage } from "./i18n";
 import { go, href, useRoute } from "./router";
 import Home from "./pages/Home";
@@ -54,10 +55,26 @@ function LangToggle() {
 function ModelBanner() {
   const { t } = useTranslation();
   const [problems, setProblems] = useState<{ kind: string; model: string }[]>([]);
+  const [stale, setStale] = useState<{ model: string | null; current: string | null } | null>(null);
   const [done, setDone] = useState(false);
+  const rebuild = useJob("rebuild", () => setStale(null));
   useEffect(() => {
-    api.system().then((s) => setProblems(s.model_problems ?? [])).catch(() => undefined);
+    api.system().then((s) => {
+      setProblems(s.model_problems ?? []);
+      setStale(s.index?.stale ? s.index : null);
+    }).catch(() => undefined);
   }, []);
+  if (!problems.length && stale) {
+    return (
+      <div className="notice warn banner">
+        <div className="row wrap">
+          <span className="grow">{t("models.index_stale", { index: stale.model, current: stale.current })}</span>
+          <button className="primary" onClick={rebuild.start} disabled={rebuild.running}>
+            {rebuild.running ? t("jobs.running") : t("settings.rebuild")}</button>
+        </div>
+      </div>
+    );
+  }
   if (!problems.length) return null;
   const useBuiltin = async () => {
     await api.patchSettings({ embedder: null, reranker: null, nli: null });

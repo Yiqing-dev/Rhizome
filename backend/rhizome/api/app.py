@@ -463,6 +463,12 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         except ValueError as e:
             raise HTTPException(422, str(e))
 
+    @app.delete("/synthesis/threshold", dependencies=W)
+    def reset_synthesis_threshold(s: Session = Depends(db)) -> dict[str, Any]:
+        from ..services.synthesis import reset_threshold
+
+        return {"threshold": reset_threshold(s)}
+
     @app.get("/jobs", dependencies=A)
     def list_jobs(active: bool = False, limit: int = Query(20, le=200), s: Session = Depends(db)) -> dict[str, Any]:
         """Active jobs (queued / running), or the most recent ones; plus the last failure."""
@@ -500,16 +506,21 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         for kind in BUILTIN:
             if patch.get(kind) not in (None, BUILTIN[kind]) and not _importable(NEEDS[kind]):
                 raise HTTPException(422, _("ml.unavailable", kind=kind, model=patch[kind], module=NEEDS[kind]))
+        old_embedder = get_settings().embedder
         try:
             update_settings(patch)
         except ValueError as e:
             raise HTTPException(422, str(e))
+        rebuild_job = None
+        if get_settings().embedder != old_embedder:  # new vectors for everything: rebuild now
+            with session_scope() as s:
+                rebuild_job = jobs.enqueue(s, "rebuild", {}).id
         from ..inference import reset_backend
         from ..ml import reset_models
 
         reset_models()
         reset_backend()
-        return get_settings_ep()
+        return {**get_settings_ep(), "rebuild_job": rebuild_job}
 
     # ---- desktop integration ----
     from .. import system as sysint

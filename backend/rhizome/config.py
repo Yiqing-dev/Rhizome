@@ -346,6 +346,13 @@ _current: Settings | None = None
 _overrides: dict[str, Any] = {}
 
 
+def reload_settings() -> Settings:
+    """Re-read settings.json (another process may have changed it), keeping per-process overrides."""
+    st = load_settings(get_settings().data_dir).model_copy(update=_overrides)
+    set_settings(st)
+    return st
+
+
 def set_overrides(**values: Any) -> Settings:
     _overrides.update({k: v for k, v in values.items() if v is not None})
     st = get_settings().model_copy(update=_overrides)
