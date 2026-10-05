@@ -55,11 +55,13 @@ def resolve_free(g: Graph, etype: str, name: str, *, attrs: dict[str, Any] | Non
     if hit is not None:
         for a in aliases:
             g.add_alias(hit, a)
+        g.fill_attrs(hit, attrs)
         return Resolution(hit, False, 1.0)
     key = free_key(etype, name)
     existing = g.by_key(key)  # may follow a human merge redirect
     if existing is not None:
         g.add_alias(existing, name, source="redirect" if existing.key != key else "extraction")
+        g.fill_attrs(existing, attrs)
         return Resolution(existing, False, 1.0)
 
     probe = Entity(type=etype, key=key, canonical_name=name, attrs=attrs or {})
@@ -77,6 +79,7 @@ def resolve_free(g: Graph, etype: str, name: str, *, attrs: dict[str, Any] | Non
         g.add_alias(best[0], name, source="auto-merge")
         for a in aliases:
             g.add_alias(best[0], a)
+        g.fill_attrs(best[0], attrs)
         return Resolution(best[0], False, best[1])
 
     e = g.create(etype, key, name, status=status, attrs=attrs, aliases=aliases)

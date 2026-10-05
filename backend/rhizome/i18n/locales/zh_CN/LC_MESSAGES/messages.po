@@ -97,6 +97,9 @@ msgstr "《{title}》里哪个方法做的是：{io}？"
 msgid "card.user_idea_q"
 msgstr "讨论《{title}》时你提出了什么想法？"
 
+msgid "card.linked_idea_q"
+msgstr "你把这几项联系起来时想到了什么？{items}"
+
 msgid "card.idea_q"
 msgstr "《{title}》里有什么可迁移的思路？"
 

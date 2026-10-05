@@ -69,7 +69,6 @@ def resolve(s: Session, item_id: int, action: str, note: str | None = None) -> d
         raise ValueError(f"action {action} not valid for {it.kind}")
     g = Graph(s)
     p = dict(it.payload)
-    made = None
     # keys in the payload may have been merged since the item was queued: follow redirects, and
     # drop the item if both sides already ended up as one entity
     for k in ("a", "b", "key", "topic", "claim", "work"):
@@ -78,6 +77,23 @@ def resolve(s: Session, item_id: int, action: str, note: str | None = None) -> d
     if it.kind in ("merge", "topic_relation") and p["a"] == p["b"]:
         it.status, it.resolved_at = "obsolete", utcnow()
         return {"id": it.id, "status": it.status, "decision_id": None}
+    try:
+        made = _apply(s, g, it, p, action, note)
+    except decisions.DecisionError as e:
+        if "not found" not in str(e):
+            raise
+        # an entity of this item no longer exists (merged away, rejected, rebuilt differently):
+        # the question is moot, not an error for the user
+        it.status, it.resolved_at = "obsolete", utcnow()
+        return {"id": it.id, "status": it.status, "decision_id": None}
+    if it.status == "pending":
+        it.status = "resolved"
+    it.resolved_at = utcnow()
+    return {"id": it.id, "status": it.status, "decision_id": made.id if made else None}
+
+
+def _apply(s: Session, g: Graph, it: ReviewItem, p: dict[str, Any], action: str, note: str | None):
+    made = None
     if action == "skip":
         it.status = "skipped"
     elif it.kind == "merge":
@@ -109,7 +125,4 @@ def resolve(s: Session, item_id: int, action: str, note: str | None = None) -> d
         if action == "useful":
             text = note or f"{p.get('a_name')} ↔ {p.get('b_name')}"
             made = decisions.record(g, "create_idea", {"text": text, "links": [p["a"], p["b"]]})
-    if it.status == "pending":
-        it.status = "resolved"
-    it.resolved_at = utcnow()
-    return {"id": it.id, "status": it.status, "decision_id": made.id if made else None}
+    return made

@@ -346,11 +346,15 @@ _current: Settings | None = None
 _overrides: dict[str, Any] = {}
 
 
-def reload_settings() -> Settings:
-    """Re-read settings.json (another process may have changed it), keeping per-process overrides."""
-    st = load_settings(get_settings().data_dir).model_copy(update=_overrides)
-    set_settings(st)
-    return st
+def adopt_file_embedder() -> Settings:
+    """Take the embedder from settings.json (another process may have switched it) without
+    touching anything else this process holds in memory."""
+    cur = get_settings()
+    fresh = load_settings(cur.data_dir)
+    if fresh.embedder != cur.embedder:
+        cur = cur.model_copy(update={"embedder": fresh.embedder})
+        set_settings(cur)
+    return cur
 
 
 def set_overrides(**values: Any) -> Settings:

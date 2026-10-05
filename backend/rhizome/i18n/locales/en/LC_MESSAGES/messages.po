@@ -97,6 +97,9 @@ msgstr "Which method from “{title}” does this: {io}?"
 msgid "card.user_idea_q"
 msgstr "What idea did you note while discussing “{title}”?"
 
+msgid "card.linked_idea_q"
+msgstr "What did you see when you connected these? {items}"
+
 msgid "card.idea_q"
 msgstr "Which transferable idea came out of “{title}”?"
 

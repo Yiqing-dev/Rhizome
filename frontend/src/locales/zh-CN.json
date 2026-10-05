@@ -266,7 +266,8 @@
     "never": "还没有",
     "threshold": "相似度门槛",
     "threshold_default": "默认 {{v}}，已按你的反馈调整",
-    "threshold_reset": "恢复默认"
+    "threshold_reset": "恢复默认",
+    "note_placeholder": "这两项之间是什么联系？可能帮到什么问题？（标为有用时保存为你的思路）"
   },
   "settings": {
     "title": "设置",

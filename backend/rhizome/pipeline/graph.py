@@ -198,9 +198,9 @@ def check_index_model(s: Session) -> str:
     im = index_model(s)
     if im is None or im == get_embedder().name:
         return get_embedder().name
-    from ..config import reload_settings
+    from ..config import adopt_file_embedder
 
-    reload_settings()
+    adopt_file_embedder()
     reset_models()
     if im == get_embedder().name:
         return im
@@ -403,6 +403,20 @@ class Graph:
         self.s.execute(text("insert into entity_fts(rowid, text) values (:i, :t)"),
                        {"i": e.id, "t": fts_body(e, aliases)})
 
+    def fill_attrs(self, e: Entity, attrs: dict[str, Any] | None, skip: tuple[str, ...] = ("origin", "weight")) -> bool:
+        """Add attributes the entity does not have yet (a later paper describing a known method's
+        input/output, a dataset's tissue, ...); existing values are never overwritten. Reindexes
+        when something was added, since attributes are part of the indexed text."""
+        cur = dict(e.attrs or {})
+        new = {k: v for k, v in (attrs or {}).items()
+               if k not in skip and v not in (None, [], "", {}) and cur.get(k) in (None, [], "", {})}
+        if not new:
+            return False
+        cur.update(new)
+        e.attrs = cur
+        self.reindex(e)
+        return True
+
     def update_attrs(self, e: Entity, **attrs: Any) -> None:
         merged = dict(e.attrs or {})
         merged.update({k: v for k, v in attrs.items() if v not in (None, [], "")})
@@ -502,7 +516,10 @@ class Graph:
         into.attrs = merged_attrs
         if src.status == "active" and into.status == "candidate":
             into.status = "active"
-        self.s.execute(update(ReviewCard).where(ReviewCard.entity_key == src.key).values(entity_key=into.key))
+        from .materialize import rekey_card  # cards keep their history under the surviving entity
+
+        for card in self.s.execute(select(ReviewCard).where(ReviewCard.entity_key == src.key)).scalars().all():
+            rekey_card(self.s, card, into.key)
         acc = self.s.get(AccessLog, src.key)
         if acc is not None:
             if self.s.get(AccessLog, into.key) is None:

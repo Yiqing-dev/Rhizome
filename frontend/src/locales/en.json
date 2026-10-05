@@ -266,7 +266,8 @@
     "never": "never",
     "threshold": "Similarity bar",
     "threshold_default": "default {{v}}, adjusted by your feedback",
-    "threshold_reset": "reset"
+    "threshold_reset": "reset",
+    "note_placeholder": "What connects them, and which problem might it help? (saved as your idea when marked useful)"
   },
   "settings": {
     "title": "Settings",

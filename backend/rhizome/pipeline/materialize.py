@@ -7,10 +7,10 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from ..config import get_settings
-from ..db.models import Edge, Entity, Extraction, ReviewCard, Work
+from ..db.models import Edge, Entity, Extraction, ReviewCard, Work, utcnow
 from ..external.ids import effective_database, normalize_doi, normalize_repo, normalize_zenodo
 from ..i18n import _
 from ..inference import get_backend
@@ -312,18 +312,116 @@ def _topic_relation_candidates(g: Graph, topic: Entity) -> None:
 
 # ---- review cards ---------------------------------------------------------------------
 
-def card_id(entity_key: str, q: str) -> str:
+GENERATED = ("template", "local_llm")
+
+
+def card_id(entity_key: str, q: str, origin: str | None = None) -> str:
+    """Cards written in an export are identified by their question. Generated cards (template,
+    local model) have one slot per entity: their wording follows the interface language and the
+    model, and a new wording must update the card, not start a second one with no history."""
+    if origin in GENERATED:
+        return sha256(entity_key + "\ngenerated")[:32]
     return sha256(entity_key + "\n" + q)[:32]
 
 
 def upsert_card(g: Graph, entity_key: str, q: str, a: str, origin: str, priority: int = 0) -> None:
-    cid = card_id(entity_key, q)
+    cid = card_id(entity_key, q, origin)
     card = g.s.get(ReviewCard, cid)
     if card is None:
         g.s.add(ReviewCard(id=cid, entity_key=entity_key, q=q, a=a, origin=origin, priority=priority))
+        g.s.flush()
     else:
+        if origin in GENERATED:
+            card.q, card.origin = q, origin
         card.a = a
         card.priority = max(card.priority, priority)
+
+
+# ---- card identity across merges and rebuilds ------------------------------------------------
+
+def _history(s, card: ReviewCard) -> int:
+    from ..db.models import ReviewLog
+
+    return s.execute(select(func.count()).select_from(ReviewLog).where(ReviewLog.card_id == card.id)).scalar_one()
+
+
+def merge_cards(s, keep: ReviewCard, drop: ReviewCard) -> None:
+    """One card for one question: keep the scheduling state of the one reviewed more, move the
+    review history over, then delete the other."""
+    from ..db.models import ReviewLog
+
+    if keep.id == drop.id:
+        return
+    if _history(s, drop) > _history(s, keep):
+        keep.state, keep.due, keep.introduced_at = drop.state, drop.due, drop.introduced_at
+    keep.introduced_at = keep.introduced_at or drop.introduced_at
+    keep.priority = max(keep.priority or 0, drop.priority or 0)
+    keep.suspended = bool(keep.suspended and drop.suspended)
+    s.execute(update(ReviewLog).where(ReviewLog.card_id == drop.id).values(card_id=keep.id))
+    s.delete(drop)
+    s.flush()
+
+
+def rekey_card(s, card: ReviewCard, entity_key: str) -> ReviewCard:
+    """Move a card to another entity (a merge) under the id it would have there."""
+    from ..db.models import ReviewLog
+
+    new_id = card_id(entity_key, card.q, card.origin)
+    if new_id == card.id and card.entity_key == entity_key:
+        return card
+    target = s.get(ReviewCard, new_id)
+    if target is not None and target is not card:
+        merge_cards(s, target, card)
+        return target
+    clone = ReviewCard(id=new_id, entity_key=entity_key, q=card.q, a=card.a, origin=card.origin,
+                       priority=card.priority, state=card.state, due=card.due, introduced_at=card.introduced_at,
+                       suspended=card.suspended)
+    s.execute(update(ReviewLog).where(ReviewLog.card_id == card.id).values(card_id=new_id))
+    s.delete(card)
+    s.flush()
+    s.add(clone)
+    s.flush()
+    return clone
+
+
+def reconcile_cards(g: Graph) -> dict[str, int]:
+    """After a rebuild: cards follow merges, duplicates (older ids, language switches) collapse
+    into one, cards whose entity disappeared (e.g. an auto-merge under different thresholds) join
+    a live card with the same question or are suspended. Views of vanished keys are dropped and
+    pending queue items whose entities are gone become obsolete."""
+    from ..db.models import AccessLog, ReviewItem
+
+    s = g.s
+    live = set(s.execute(select(Entity.key)).scalars())
+    out = {"rekeyed": 0, "merged": 0, "suspended": 0}
+    by_q: dict[str, ReviewCard] = {}
+    cards = list(s.execute(select(ReviewCard).order_by(ReviewCard.id)).scalars())
+    for c in cards:
+        key = g.resolve_key(c.entity_key)
+        if key in live and (key != c.entity_key or c.id != card_id(key, c.q, c.origin)):
+            c = rekey_card(s, c, key)
+            out["rekeyed"] += 1
+        if c.entity_key in live:
+            by_q.setdefault(c.q, c)
+    for c in list(s.execute(select(ReviewCard).order_by(ReviewCard.id)).scalars()):
+        if c.entity_key in live:
+            continue
+        sibling = by_q.get(c.q)
+        if sibling is not None and sibling.id != c.id:
+            merge_cards(s, sibling, c)
+            out["merged"] += 1
+        elif not c.suspended:
+            c.suspended = True
+            out["suspended"] += 1
+    for row in s.execute(select(AccessLog)).scalars().all():
+        if g.resolve_key(row.entity_key) not in live:
+            s.delete(row)
+    for it in s.execute(select(ReviewItem).where(ReviewItem.status == "pending")).scalars():
+        keys = [it.payload.get(k) for k in ("a", "b", "key", "topic") if isinstance(it.payload.get(k), str)]
+        if keys and any(g.resolve_key(k) not in live for k in keys):
+            it.status, it.resolved_at = "obsolete", utcnow()
+    s.flush()
+    return out
 
 
 def _make_cards(g: Graph, doc: RxfDocument, work: Entity, assets: list[Entity], lookup) -> None:

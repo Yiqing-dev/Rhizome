@@ -280,12 +280,28 @@ def _op_reject_entity(g: Graph, p):
 
 
 def _op_create_idea(g: Graph, p):
+    """The user's own idea connecting entities (often a useful weekly-synthesis pair): linked in
+    the graph like a user insight from an export (applicable_to a topic, relates_to anything
+    else), so it is not an orphan the next synthesis proposes again, and given a review card."""
+    from ..i18n import _
+    from .materialize import upsert_card
+
     r = resolve_free(g, "idea", p["text"], attrs={"origin": "user", "weight": 2.0, "links": p.get("links", [])})
-    g.update_attrs(r.entity, origin="user", links=p.get("links", []))
+    g.update_attrs(r.entity, origin="user", weight=2.0)
+    linked, unresolved, names = [], [], []
     for k in p.get("links", []):
         t = g.by_key(k)
-        if t is not None and t.type == "topic":
-            g.upsert_edge(r.entity, t, "applicable_to", status="confirmed", attrs={"origin": "user"})
+        if t is None or t.id == r.entity.id:
+            unresolved.append(k)
+            continue
+        g.upsert_edge(r.entity, t, "applicable_to" if t.type == "topic" else "relates_to",
+                      status="confirmed", attrs={"origin": "user"})
+        linked.append(t.key)
+        names.append(t.canonical_name)
+    g.update_attrs(r.entity, links=linked, links_unresolved=unresolved)
+    if names:
+        upsert_card(g, r.entity.key, _("card.linked_idea_q", items=" ↔ ".join(n[:80] for n in names)),
+                    r.entity.canonical_name, "user", priority=10)
     return True
 
 

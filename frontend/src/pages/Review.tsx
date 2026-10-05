@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, type ReviewItem } from "../api";
+import { api, ApiError, type ReviewItem } from "../api";
 import { EmptyState, Loading, TypeBadge } from "../components/common";
 import { CheckIcon } from "../components/icons";
 import { useKeys, useLoad } from "../hooks";
@@ -36,9 +36,15 @@ export default function ReviewPage() {
   const items = q.data?.items ?? [];
   const item = items[Math.min(cur, Math.max(0, items.length - 1))];
 
+  const [err, setErr] = useState<string | null>(null);
   async function act(action: string) {
     if (!item) return;
-    await api.resolve(item.id, action, note || undefined);
+    try {
+      await api.resolve(item.id, action, note || undefined);
+      setErr(null);
+    } catch (e) {
+      setErr(String((e as ApiError).detail ?? e));
+    }
     setNote("");
     q.reload();
   }
@@ -69,6 +75,7 @@ export default function ReviewPage() {
         </div>
       </div>
       <Loading error={q.error} loading={q.loading && !q.data} />
+      {err && <div className="notice error">{err}</div>}
       {q.data && !items.length && <EmptyState icon={<CheckIcon />} title={t("review.empty")} hint={t("review.empty_hint")} />}
       {items.length > 0 && (
         <div className="review-layout">

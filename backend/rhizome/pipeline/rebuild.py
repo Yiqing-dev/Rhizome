@@ -84,10 +84,10 @@ def rebuild(s: Session, backup: bool = True) -> dict:
                 warnings.append(f"pre-rebuild backup failed: {e}")
     # adopt the embedder in settings.json now (another process may have switched it): a rebuild is
     # what re-indexes the library for it
-    from ..config import reload_settings
+    from ..config import adopt_file_embedder
     from ..ml import get_embedder, reset_models
 
-    reload_settings()
+    adopt_file_embedder()
     reset_models()
     prewarmed = _prewarm_embeddings(s)
     # ids are handles (UI URLs, CLI, MCP, review items): remember them so the same key gets the same
@@ -138,6 +138,9 @@ def rebuild(s: Session, backup: bool = True) -> dict:
                         + ", ".join(f"#{x['id']} {x['op']}" for x in skipped))
     promoted = promote_topics(g)
     s.flush()
+    from .materialize import reconcile_cards
+
+    cards = reconcile_cards(g)
     hv = {"entity": max(g.next_id - 1, s.execute(select(func.coalesce(func.max(Entity.id), 0))).scalar_one()),
           "review_item": max(g.next_item_id - 1,
                              s.execute(select(func.coalesce(func.max(ReviewItem.id), 0))).scalar_one())}
@@ -148,5 +151,5 @@ def rebuild(s: Session, backup: bool = True) -> dict:
     g.id_plan = g.item_plan = None
     return {"extractions": n, "cites": cites, "decisions_applied": applied, "topics_promoted": promoted,
             "entities": s.query(Entity).count(), "edges": s.query(Edge).count(),
-            "seconds": round(time.time() - t0, 2), "prewarmed": prewarmed, "decisions_skipped": skipped,
+            "seconds": round(time.time() - t0, 2), "prewarmed": prewarmed, "cards": cards, "decisions_skipped": skipped,
             "warnings": warnings}

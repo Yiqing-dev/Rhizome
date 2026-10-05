@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { EmptyState, EntityLink, Loading, TypeBadge } from "../components/common";
@@ -12,8 +13,9 @@ export default function DigestPage() {
   const d = useLoad(() => api.digest(), []);
   const nightly = useJob("nightly", () => d.reload(), { force_synthesis: true });
   const { i18n } = useTranslation();
+  const [notes, setNotes] = useState<Record<number, string>>({});
   async function mark(id: number, useful: boolean) {
-    await api.resolve(id, useful ? "useful" : "useless");
+    await api.resolve(id, useful ? "useful" : "useless", useful ? notes[id]?.trim() || undefined : undefined);
     d.reload();
   }
   return (
@@ -48,6 +50,8 @@ export default function DigestPage() {
                 <div className="link-mark"><b>⇄</b><span>{t("digest.similarity")}</span><span className="mono">{p.score.toFixed(2)}</span></div>
                 <div className="side"><div className="lbl"><TypeBadge type={p.b.type} /></div><div className="name"><EntityLink e={p.b} /></div></div>
                 <div className="pair-actions">
+                  <input className="grow" value={notes[p.item_id] ?? ""} placeholder={t("digest.note_placeholder")}
+                    onChange={(e) => setNotes({ ...notes, [p.item_id]: e.target.value })} />
                   <button className="primary" onClick={() => mark(p.item_id, true)}>{t("review.action.useful")}</button>
                   <button onClick={() => mark(p.item_id, false)}>{t("review.action.useless")}</button>
                 </div>
