@@ -310,7 +310,16 @@
     "claude_connect": "接入 Claude Desktop",
     "claude_done": "已写入：\n{{files}}\n重启 Claude Desktop 后生效。",
     "claude_manual": "手动配置",
-    "models_not_installed": "此版本只内置轻量模型。bge-m3、重排模型和 NLI 依赖体积很大的 Python 模型包，未随安装包分发。"
+    "models_not_installed": "此版本只内置轻量模型。bge-m3、重排模型和 NLI 依赖体积很大的 Python 模型包，未随安装包分发。",
+    "backups": "备份",
+    "backups_hint": "每天自动备份一次资料库（离上次超过 20 小时就补做），每日备份保留最近 14 份，手动备份不会被删除。建议把备份文件夹设到另一块硬盘或网盘同步文件夹：备份是关闭状态的完整副本，可以安全同步；资料库目录本身在运行时不要同步。",
+    "backups_dir": "备份文件夹",
+    "backups_last": "上次每日备份",
+    "backups_never": "还没有",
+    "backups_count": "共 {{n}} 份，{{size}} MB",
+    "backups_dir_placeholder": "例如 D:\\备份\\Rhizome 或网盘里的文件夹（留空 = 资料库目录下的 backups）",
+    "backup_now": "立即备份",
+    "backup_done": "已备份到 {{path}}"
   },
   "lang": {
     "short_en": "EN",

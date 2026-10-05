@@ -93,7 +93,18 @@ def info() -> dict[str, Any]:
         "cli": cli_command(),
         "claude_desktop": claude_desktop_snippet(),
         "claude_config_paths": [str(p) for p in claude_config_paths()],
+        "backups": _backups(st),
     }
+
+
+def _backups(st) -> dict[str, Any]:
+    from .db.session import backup_status
+
+    try:
+        return backup_status(st)
+    except OSError as e:  # e.g. a backup folder on a disconnected drive
+        return {"dir": str(st.backups_dir), "count": 0, "bytes": 0, "last": None, "last_daily": None,
+                "error": str(e)}
 
 
 def _folder(target: str) -> Path:

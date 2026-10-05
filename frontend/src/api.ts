@@ -99,7 +99,9 @@ export interface SystemInfo {
   frozen: boolean; platform: string; app_dir: string | null; portable: boolean; data_dir: string; default_data_dir: string;
   inbox: string; logs: string; models_dir: string; models_available: boolean; local_llm_available: boolean;
   cli: string[]; claude_desktop: Record<string, unknown>; claude_config_paths: string[];
+  backups: BackupStatus;
 }
+export interface BackupStatus { dir: string; count: number; bytes: number; last: string | null; last_daily: string | null; error?: string }
 
 export const api = {
   health: () => req<{ ok: boolean; version: string; read_only: boolean; language: string }>("GET", "/health"),
@@ -139,6 +141,7 @@ export const api = {
   vocab: () => req<string>("GET", "/vocab"),
   system: () => req<SystemInfo>("GET", "/system"),
   openFolder: (target: "data" | "inbox" | "logs" | "models" | "backups") => req<{ opened: string }>("POST", `/system/open/${target}`),
+  backupNow: () => req<BackupStatus & { path: string | null }>("POST", "/system/backup"),
   connectClaude: () => req<{ written: string[]; entry: Record<string, unknown> }>("POST", "/system/claude-desktop"),
   moveDataDir: (path: string | null, copy = true) =>
     req<{ data_dir: string; copied: boolean; restart_required: boolean }>("POST", "/system/data-dir", { path, copy }),

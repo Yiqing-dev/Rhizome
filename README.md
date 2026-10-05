@@ -21,6 +21,11 @@ L3 graph    13 typed edges + per-asset vectors
 human_decision  merges / rejections / confirmations — applied last on every rebuild, never lost
 ```
 
+L2/L3 are recomputed from L1 (`rhz rebuild`). Human decisions, your own topics and review history live
+only in `rhizome.db`, so `raw/` alone is **not** a full backup: Rhizome writes a consistent copy of the
+database once a day (newest 14 kept) into a backup folder you can put on another disk or a synced
+cloud folder (Settings → Backups, or `rhz settings set backup_dir "D:\\Backups\\Rhizome"`).
+
 - **Capture**: end a chat with "export RXF", save the YAML into the inbox folder (or say "save to
   Rhizome" in Claude Desktop). Invalid files go to `error/` with a report you paste back into the chat.
 - **Anchor**: DOIs resolve through OpenAlex (preprint + journal version = one node); GEO/SRA/ArrayExpress

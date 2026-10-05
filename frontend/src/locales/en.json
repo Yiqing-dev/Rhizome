@@ -310,7 +310,16 @@
     "claude_connect": "Connect to Claude Desktop",
     "claude_done": "Written to:\n{{files}}\nRestart Claude Desktop to load it.",
     "claude_manual": "Manual configuration",
-    "models_not_installed": "This build ships with the built-in lightweight models only. bge-m3, the reranker and NLI need the Python model packages, which are too large to bundle."
+    "models_not_installed": "This build ships with the built-in lightweight models only. bge-m3, the reranker and NLI need the Python model packages, which are too large to bundle.",
+    "backups": "Backups",
+    "backups_hint": "The library is backed up once a day (whenever the last daily backup is older than 20 hours); the newest 14 daily backups are kept and manual backups are never deleted. Point the backup folder at another disk or a synced cloud folder: backups are closed, complete copies and safe to sync, unlike the live data folder.",
+    "backups_dir": "Backup folder",
+    "backups_last": "Last daily backup",
+    "backups_never": "none yet",
+    "backups_count": "{{n}} files, {{size}} MB",
+    "backups_dir_placeholder": "e.g. D:\\Backups\\Rhizome or a folder in your cloud drive (empty = backups inside the data folder)",
+    "backup_now": "Back up now",
+    "backup_done": "Backed up to {{path}}"
   },
   "lang": {
     "short_en": "EN",

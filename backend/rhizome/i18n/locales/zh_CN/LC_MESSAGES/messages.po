@@ -201,3 +201,6 @@ msgstr "CNGB：https://db.cngb.org/search/?q={acc}"
 
 msgid "dl.other"
 msgstr "检索：{acc}"
+
+msgid "api.backup_failed"
+msgstr "备份失败：{error}"

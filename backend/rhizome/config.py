@@ -23,7 +23,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 log = logging.getLogger(__name__)
@@ -141,6 +141,10 @@ class Settings(BaseSettings):
     database_url: str | None = None
     language: Literal["auto", "en", "zh_CN"] = "auto"
     inbox_dir: Path | None = None
+    # None -> <data_dir>/backups. Point it at another disk or a synced folder: backups are closed,
+    # consistent copies, unlike the live database (never sync the data dir itself while it runs).
+    backup_dir: Path | None = None
+    backup_keep_daily: int = Field(14, ge=1)
     host: str = "127.0.0.1"
     port: int = 8765
     api_url: str | None = None  # used by MCP/CLI clients; default http://host:port
@@ -159,6 +163,15 @@ class Settings(BaseSettings):
     review_daily_new: int = 20
     review_daily_max: int = 100
     remotes: list[RemoteTarget] = Field(default_factory=list)
+
+    @field_validator("backup_dir", "inbox_dir", "local_llm_path", mode="before")
+    @classmethod
+    def _absolute(cls, v: Any) -> Any:
+        if v in (None, ""):
+            return None
+        if not Path(str(v)).expanduser().is_absolute():
+            raise ValueError("must be an absolute path")
+        return Path(str(v)).expanduser()
 
     @classmethod
     def settings_customise_sources(
@@ -190,7 +203,7 @@ class Settings(BaseSettings):
 
     @property
     def backups_dir(self) -> Path:
-        return self.data_dir / "backups"
+        return self.backup_dir or (self.data_dir / "backups")
 
     @property
     def models_dir(self) -> Path:

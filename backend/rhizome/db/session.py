@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 import os
 import sqlite3
+import time
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -126,7 +127,7 @@ def head_revision(engine: Engine) -> str | None:
 
 
 def backup_database(settings: Settings, tag: str = "backup") -> Path | None:
-    """Consistent copy of the SQLite database (uses the online backup API)."""
+    """Consistent copy of the SQLite database (uses the online backup API), then prune old ones."""
     engine = get_engine(settings)
     if not is_sqlite(engine):
         return None
@@ -136,7 +137,75 @@ def backup_database(settings: Settings, tag: str = "backup") -> Path | None:
     settings.backups_dir.mkdir(parents=True, exist_ok=True)
     dst = settings.backups_dir / f"rhizome-{tag}-{datetime.now():%Y%m%d-%H%M%S}.db"
     copy_sqlite(src, dst)
+    try:
+        prune_backups(settings)
+    except OSError:
+        log.warning("could not prune old backups in %s", settings.backups_dir, exc_info=True)
     return dst
+
+
+# How many backups of each kind are kept; manual backups are never deleted.
+KEEP = {"pre-rebuild": 3, "pre-migration": 5, "other": 5}
+
+
+def _backup_kind(p: Path) -> str:
+    tag = p.stem[len("rhizome-"):].rsplit("-", 2)[0]  # rhizome-<tag>-YYYYmmdd-HHMMSS
+    if tag in ("manual", "daily", "pre-rebuild"):
+        return tag
+    return "pre-migration" if tag.startswith("pre-") else "other"
+
+
+def list_backups(settings: Settings) -> list[Path]:
+    """Newest first."""
+    d = settings.backups_dir
+    files = [p for p in d.glob("rhizome-*.db") if p.is_file()] if d.is_dir() else []
+    return sorted(files, key=lambda p: p.stat().st_mtime, reverse=True)
+
+
+def prune_backups(settings: Settings) -> list[Path]:
+    """Keep the newest N of each kind (daily: settings.backup_keep_daily; manual: all) and remove
+    temporary files left by an interrupted copy. Returns what was deleted."""
+    keep = {**KEEP, "daily": settings.backup_keep_daily, "manual": None}
+    seen: dict[str, int] = {}
+    removed: list[Path] = []
+    for p in list_backups(settings):
+        kind = _backup_kind(p)
+        seen[kind] = seen.get(kind, 0) + 1
+        limit = keep.get(kind)
+        if limit is not None and seen[kind] > limit:
+            p.unlink()
+            removed.append(p)
+    cutoff = time.time() - 3600
+    for tmp in settings.backups_dir.glob("*.tmp") if settings.backups_dir.is_dir() else []:
+        if tmp.stat().st_mtime < cutoff:
+            tmp.unlink()
+            removed.append(tmp)
+    return removed
+
+
+def backup_status(settings: Settings) -> dict:
+    files = list_backups(settings)
+    return {"dir": str(settings.backups_dir), "count": len(files),
+            "bytes": sum(p.stat().st_size for p in files),
+            "last": datetime.fromtimestamp(files[0].stat().st_mtime).isoformat(timespec="seconds") if files else None,
+            "last_daily": next((datetime.fromtimestamp(p.stat().st_mtime).isoformat(timespec="seconds")
+                                for p in files if _backup_kind(p) == "daily"), None)}
+
+
+DAILY_EVERY = 20 * 3600
+
+
+def maybe_daily_backup(settings: Settings) -> Path | None:
+    """Called at startup and periodically by the worker: one daily backup when the newest is older
+    than 20 h (so a laptop that is only open in the evening still gets one per day)."""
+    daily = [p for p in list_backups(settings) if _backup_kind(p) == "daily"]
+    if daily and time.time() - daily[0].stat().st_mtime < DAILY_EVERY:
+        return None
+    return backup_database(settings, tag="daily")
+
+
+def recent_backup(settings: Settings, tag: str, within: float) -> bool:
+    return any(_backup_kind(p) == tag and time.time() - p.stat().st_mtime < within for p in list_backups(settings))
 
 
 def copy_sqlite(src: Path, dst: Path) -> None:

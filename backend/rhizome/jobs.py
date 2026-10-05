@@ -113,6 +113,17 @@ class Worker(threading.Thread):
     def stop(self) -> None:
         self._stop.set()
 
+    @staticmethod
+    def _daily_backup() -> None:
+        from .db.session import maybe_daily_backup
+
+        try:
+            path = maybe_daily_backup(get_settings())
+            if path:
+                log.info("daily backup written to %s", path)
+        except Exception:  # a missing backup folder must not stop the worker
+            log.exception("daily backup failed")
+
     def run(self) -> None:  # pragma: no cover - exercised by the app, not unit tests
         ticks = 0
         try:
@@ -120,11 +131,13 @@ class Worker(threading.Thread):
                 recover_stale_jobs(s)
         except Exception:
             log.exception("could not recover stale jobs")
+        self._daily_backup()
         while not self._stop.is_set():
             try:
                 if run_next() is None:
                     ticks += 1
                     if ticks % 900 == 0:  # roughly every 30 minutes
+                        self._daily_backup()
                         with session_scope() as s:
                             maybe_schedule_nightly(s)
                     self._stop.wait(self.interval)

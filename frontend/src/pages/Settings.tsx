@@ -5,7 +5,7 @@ import { api, ApiError } from "../api";
 import { Loading } from "../components/common";
 import { SettingsIcon } from "../components/icons";
 import { useLoad } from "../hooks";
-import { backendLang, setLanguage } from "../i18n";
+import { backendLang, fmtDate, setLanguage } from "../i18n";
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
@@ -17,6 +17,8 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [remotes, setRemotes] = useState<string | null>(null);
   const [remotesErr, setRemotesErr] = useState(false);
+  const [backupDirEdit, setBackupDir] = useState<string | null>(null);
+  const [backupMsg, setBackupMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   async function patch(b: Record<string, unknown>) {
     await api.patchSettings(b);
@@ -60,6 +62,26 @@ export default function SettingsPage() {
     }
   }
 
+  async function patchChecked(b: Record<string, unknown>) {
+    try {
+      await patch(b);
+      sys.reload();
+      setBackupMsg(null);
+    } catch (e) {
+      setBackupMsg({ ok: false, text: String((e as ApiError).detail ?? e) });
+    }
+  }
+
+  async function backupNow() {
+    try {
+      const r = await api.backupNow();
+      setBackupMsg({ ok: true, text: t("settings.backup_done", { path: r.path ?? "" }) });
+      sys.reload();
+    } catch (e) {
+      setBackupMsg({ ok: false, text: String((e as ApiError).detail ?? e) });
+    }
+  }
+
   async function connectClaude() {
     try {
       const r = await api.connectClaude();
@@ -71,6 +93,7 @@ export default function SettingsPage() {
 
   const s = st.data;
   const si = sys.data;
+  const backupDir = backupDirEdit ?? (s?.backup_dir ?? "");
   const cur = i18n.language.startsWith("zh") ? "zh-CN" : "en";
   return (
     <div className="stack narrow">
@@ -117,6 +140,28 @@ export default function SettingsPage() {
             {dirMsg && <div className={`notice ${dirMsg.ok ? "ok" : "error"}`}><pre>{dirMsg.text}</pre></div>}
             <label className="check"><input type="checkbox" checked={s.offline} onChange={(e) => patch({ offline: e.target.checked })} />
               {t("settings.offline")}</label>
+          </section>
+          <section className="panel">
+            <h2>{t("settings.backups")}</h2>
+            <p className="hint">{t("settings.backups_hint")}</p>
+            {si && (
+              <dl className="attrs">
+                <dt>{t("settings.backups_dir")}</dt>
+                <dd className="row wrap"><code className="mono">{si.backups.dir}</code>
+                  <button className="link" onClick={() => api.openFolder("backups")}>{t("settings.open")}</button></dd>
+                <dt>{t("settings.backups_last")}</dt>
+                <dd>{si.backups.last_daily ? fmtDate(si.backups.last_daily, i18n.language) : t("settings.backups_never")}
+                  {" · "}{t("settings.backups_count", { n: si.backups.count, size: (si.backups.bytes / 1048576).toFixed(1) })}</dd>
+              </dl>
+            )}
+            {si?.backups.error && <div className="notice error">{si.backups.error}</div>}
+            <div className="row wrap">
+              <input className="grow" value={backupDir} onChange={(e) => setBackupDir(e.target.value)} placeholder={t("settings.backups_dir_placeholder")} />
+              <button onClick={() => patchChecked({ backup_dir: backupDir.trim() || null })}>{t("settings.save")}</button>
+              {s.backup_dir && <button className="ghost" onClick={() => { setBackupDir(""); patchChecked({ backup_dir: null }); }}>{t("settings.move_default")}</button>}
+              <button className="primary" onClick={backupNow}>{t("settings.backup_now")}</button>
+            </div>
+            {backupMsg && <div className={`notice ${backupMsg.ok ? "ok" : "error"}`}><pre>{backupMsg.text}</pre></div>}
           </section>
           <section className="panel">
             <h2>{t("settings.claude")}</h2>

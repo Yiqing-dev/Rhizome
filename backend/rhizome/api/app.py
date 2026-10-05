@@ -110,6 +110,8 @@ class SettingsPatch(BaseModel):
     nli: str | None = None
     inference_backend: str | None = None
     local_llm_path: str | None = None
+    backup_dir: str | None = None
+    backup_keep_daily: int | None = None
     review_daily_new: int | None = None
     review_daily_max: int | None = None
     remotes: list[dict[str, Any]] | None = None
@@ -480,6 +482,16 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
             return {"opened": str(sysint.open_folder(target))}
         except ValueError as e:
             raise HTTPException(422, str(e)) from e
+
+    @app.post("/system/backup", dependencies=W)
+    def system_backup() -> dict[str, Any]:
+        from ..db.session import backup_database, backup_status
+
+        try:
+            path = backup_database(get_settings(), tag="manual")
+        except OSError as e:
+            raise HTTPException(500, _("api.backup_failed", error=str(e))) from e
+        return {"path": str(path) if path else None, **backup_status(get_settings())}
 
     @app.post("/system/claude-desktop", dependencies=W)
     def system_claude() -> dict[str, Any]:
