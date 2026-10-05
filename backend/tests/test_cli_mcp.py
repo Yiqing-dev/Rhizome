@@ -75,8 +75,14 @@ def test_mcp_tools_local(settings):
     q = json.loads(m.rhz_queue())
     assert "items" in q
     assert "pairs" in json.loads(m.rhz_digest())
+    guide = m.rhz_rxf_guide("zh_CN")
+    assert "rxf_version: 1" in guide and "rhizome-vocab.yaml" in guide and "GRN inference" in guide
+    assert "rxf_version: 1" in m.rhz_rxf_guide("en")
+    rel = json.loads(m.rhz_related("work:doi:10.5555/rhz.example.0001"))
+    assert isinstance(rel, list) and json.loads(m.rhz_related(str(card["id"]))) is not None
     tools = {t.name for t in m.mcp._tool_manager.list_tools()}
-    assert {"rhz_ingest", "rhz_recall", "rhz_search", "rhz_get", "rhz_related", "rhz_queue", "rhz_decide"} <= tools
+    assert {"rhz_ingest", "rhz_recall", "rhz_search", "rhz_get", "rhz_related", "rhz_queue", "rhz_decide",
+            "rhz_rxf_guide"} <= tools
     m._client = None
 
 

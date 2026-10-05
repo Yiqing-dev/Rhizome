@@ -80,7 +80,7 @@
     "tagline": "你读过的哪些东西，现在用得上？",
     "tagline_sub": "把讨论过的论文拆成数据、方法、思路和论断：可检索、可连接，并在用得上的时候主动回来。",
     "step1_t": "讨论一篇论文",
-    "step1": "在 Claude 或 ChatGPT 里讨论，Project 指令里放好 Rhizome 导出指令。",
+    "step1": "在 Claude 或 ChatGPT 里讨论。Project 指令里放好 Rhizome 导出指令（设置 → 聊天 Project 设置，可一键复制）。",
     "step2_t": "说一句“导出 RXF”",
     "step2": "把 YAML 存进收件箱目录或拖到这里。校验失败的文件会带一份报告，贴回聊天即可修正。",
     "step3_t": "再次找回",
@@ -320,7 +320,12 @@
     "backups_dir_placeholder": "例如 D:\\备份\\Rhizome 或网盘里的文件夹（留空 = 资料库目录下的 backups）",
     "backup_now": "立即备份",
     "backup_done": "已备份到 {{path}}",
-    "dir_claude_updated": "Claude Desktop 的配置也已改为跟随新位置，请重启 Claude Desktop。"
+    "dir_claude_updated": "Claude Desktop 的配置也已改为跟随新位置，请重启 Claude Desktop。",
+    "project": "聊天 Project 设置",
+    "project_hint": "在 Claude 或 ChatGPT 里建一个 Project：把导出指令粘贴进 Project 指令，把主题词表 rhizome-vocab.yaml 放进 Project 知识。之后每次讨论完说一句“导出 RXF”。在 Claude Desktop 里连接了 Rhizome 时，Claude 也能自己调用 rhz_rxf_guide 拿到这份指令。",
+    "project_copy": "复制导出指令",
+    "project_download": "下载导出指令 (.md)",
+    "copied": "已复制"
   },
   "lang": {
     "short_en": "EN",

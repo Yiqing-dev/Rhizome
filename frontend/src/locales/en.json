@@ -80,7 +80,7 @@
     "tagline": "What have you already read that helps right now?",
     "tagline_sub": "Papers you discussed, split into datasets, methods, ideas and claims — searchable, linked, and brought back when they matter.",
     "step1_t": "Discuss a paper",
-    "step1": "In Claude or ChatGPT, with the Rhizome export instructions in the Project.",
+    "step1": "Discuss a paper in Claude or ChatGPT, with the Rhizome export instructions in the Project (Settings → Chat Project setup copies them in one click).",
     "step2_t": "Say “export RXF”",
     "step2": "Save the YAML into the inbox folder or drop it here. Invalid files come back with a report to paste into the chat.",
     "step3_t": "Find it again",
@@ -320,7 +320,12 @@
     "backups_dir_placeholder": "e.g. D:\\Backups\\Rhizome or a folder in your cloud drive (empty = backups inside the data folder)",
     "backup_now": "Back up now",
     "backup_done": "Backed up to {{path}}",
-    "dir_claude_updated": "The Claude Desktop config now follows the new location too; restart Claude Desktop."
+    "dir_claude_updated": "The Claude Desktop config now follows the new location too; restart Claude Desktop.",
+    "project": "Chat Project setup",
+    "project_hint": "Create a Project in Claude or ChatGPT: paste the export instructions into the Project instructions and add the topic vocabulary rhizome-vocab.yaml to the Project knowledge. Then say \"export RXF\" after each discussion. When Rhizome is connected to Claude Desktop, Claude can also fetch the instructions itself with rhz_rxf_guide.",
+    "project_copy": "Copy export instructions",
+    "project_download": "Download instructions (.md)",
+    "copied": "Copied"
   },
   "lang": {
     "short_en": "EN",

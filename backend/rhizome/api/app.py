@@ -326,6 +326,12 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         job = jobs.enqueue(s, "retro_tag", {"topic": topic.key, "k": body.k}) if body.retro_tag else None
         return {"topic_id": topic.id, "key": topic.key, "decision_id": d.id, "job_id": job.id if job else None}
 
+    @app.get("/rxf/instructions", dependencies=A, response_class=PlainTextResponse)
+    def rxf_instructions(lang: str | None = None) -> str:
+        from ..rxf.guide import instructions
+
+        return instructions(lang)
+
     @app.get("/vocab", dependencies=A, response_class=PlainTextResponse)
     def vocab(include_candidates: bool = False, s: Session = Depends(db)) -> str:
         from ..services.vocab import export_vocab

@@ -19,6 +19,7 @@ export default function SettingsPage() {
   const [remotesErr, setRemotesErr] = useState(false);
   const [backupDirEdit, setBackupDir] = useState<string | null>(null);
   const [backupMsg, setBackupMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   async function patch(b: Record<string, unknown>) {
     await api.patchSettings(b);
@@ -32,14 +33,34 @@ export default function SettingsPage() {
     await patch({ language: backendLang(l) });
   }
 
-  async function downloadVocab() {
-    const text = await api.vocab();
-    const url = URL.createObjectURL(new Blob([text], { type: "text/yaml" }));
+  function save(text: string, name: string, type: string) {
+    const url = URL.createObjectURL(new Blob([text], { type }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = "rhizome-vocab.yaml";
+    a.download = name;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function downloadVocab() {
+    save(await api.vocab(), "rhizome-vocab.yaml", "text/yaml");
+  }
+
+  const instrLang = () => (i18n.language.startsWith("zh") ? "zh_CN" : "en");
+
+  async function downloadInstructions() {
+    save(await api.rxfInstructions(instrLang()), `rhizome-export-instructions.${instrLang()}.md`, "text/markdown");
+  }
+
+  async function copyInstructions() {
+    const text = await api.rxfInstructions(instrLang());
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      save(text, `rhizome-export-instructions.${instrLang()}.md`, "text/markdown");  // clipboard blocked
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
   }
 
   function saveRemotes() {
@@ -220,10 +241,15 @@ export default function SettingsPage() {
             {remotesErr && <div className="notice error">{t("settings.remotes_invalid")}</div>}
             <div className="row"><button onClick={saveRemotes} disabled={remotes === null}>{t("settings.save")}</button></div>
           </section>
-          <section className="panel">
-            <h2>{t("settings.vocab")}</h2>
+          <section className="panel" id="project-setup">
+            <h2>{t("settings.project")}</h2>
+            <p className="hint">{t("settings.project_hint")}</p>
+            <div className="row wrap">
+              <button className="primary" onClick={copyInstructions}>{copied ? t("settings.copied") : t("settings.project_copy")}</button>
+              <button onClick={downloadInstructions}>{t("settings.project_download")}</button>
+              <button onClick={downloadVocab}>{t("settings.vocab_download")}</button>
+            </div>
             <p className="hint">{t("settings.vocab_hint")}</p>
-            <div className="row"><button onClick={downloadVocab}>{t("settings.vocab_download")}</button></div>
           </section>
         </>
       )}

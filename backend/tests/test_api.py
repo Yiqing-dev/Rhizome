@@ -15,6 +15,12 @@ def api(settings):
     return c
 
 
+def test_rxf_instructions_endpoint(api):
+    zh = api.get("/rxf/instructions", params={"lang": "zh_CN"})
+    assert zh.status_code == 200 and "rxf_version: 1" in zh.text and "规则" in zh.text
+    assert "Rules" in api.get("/rxf/instructions", params={"lang": "en"}).text
+
+
 def test_auth_required(settings):
     from rhizome.api.app import create_app
 

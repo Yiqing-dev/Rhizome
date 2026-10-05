@@ -28,7 +28,8 @@ INSTRUCTIONS = """Rhizome is the user's personal literature asset graph (papers 
 ideas and claims). Use rhz_recall before discussing an analysis plan or when the user pastes a draft
 paragraph; prefer citing returned assets with their source paper and evidence location.
 After discussing a paper, when the user says "save to Rhizome" / "存入 Rhizome", produce an RXF v1
-YAML document following the Project instructions and call rhz_ingest. If validation fails, fix the
+YAML document following the Project instructions (if this conversation has none, call rhz_rxf_guide
+first: it returns the RXF skeleton, the rules and the user's topic vocabulary) and call rhz_ingest. If validation fails, fix the
 listed fields and call rhz_ingest again. For maintenance ("work through this week's review queue"),
 page through rhz_queue, propose a decision per item with a one-line reason, and only call
 rhz_decide after the user confirms."""
@@ -85,6 +86,17 @@ def rhz_ingest(rxf_yaml: str, filename: str = "claude-desktop.yaml") -> str:
     Returns the work key, suspected hallucinated IDs, and related papers the user has read;
     on validation failure returns the error report to fix and resubmit."""
     return _j(_call(lambda c: c.ingest(rxf_yaml, filename)))
+
+
+@mcp.tool()
+def rhz_rxf_guide(lang: str | None = None) -> str:
+    """The RXF export instructions (skeleton + rules) and the user's current topic vocabulary.
+    Call it before writing an RXF document when the conversation has no Rhizome Project
+    instructions. `lang`: zh_CN or en (default: the user's interface language)."""
+    from .rxf.guide import instructions
+
+    vocab = _call(lambda c: c.vocab())
+    return instructions(lang) + "\n\n## rhizome-vocab.yaml\n\n```yaml\n" + vocab.strip() + "\n```\n"
 
 
 @mcp.tool()

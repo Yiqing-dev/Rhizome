@@ -93,7 +93,8 @@ export default function Home() {
       <Loading error={stats.error} loading={stats.loading && !s} />
       {s && total === 0 && (
         <section className="steps">
-          <div className="step"><strong>{t("home.step1_t")}</strong>{t("home.step1")}</div>
+          <div className="step"><strong>{t("home.step1_t")}</strong>{t("home.step1")}{" "}
+            <a href={href("settings")}>{t("settings.project")} →</a></div>
           <div className="step"><strong>{t("home.step2_t")}</strong>{t("home.step2")}</div>
           <div className="step"><strong>{t("home.step3_t")}</strong>{t("home.step3")}</div>
         </section>

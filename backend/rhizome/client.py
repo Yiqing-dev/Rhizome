@@ -34,6 +34,7 @@ class Client(Protocol):
     def topic_assets(self, topic_id: int, role: str | None = None) -> dict[str, Any] | None: ...
     def create_topic(self, **body: Any) -> dict[str, Any]: ...
     def stats(self) -> dict[str, Any]: ...
+    def vocab(self) -> str: ...
 
 
 class HttpClient:
@@ -111,6 +112,11 @@ class HttpClient:
 
     def stats(self):
         return self._get("/stats")
+
+    def vocab(self):
+        r = self._c.get("/vocab")
+        r.raise_for_status()
+        return r.text
 
 
 class LocalClient:
@@ -264,6 +270,12 @@ class LocalClient:
 
         with self._s() as s:
             return home_stats(s)
+
+    def vocab(self):
+        from .services.vocab import export_vocab
+
+        with self._s() as s:
+            return export_vocab(s)
 
 
 def connect(settings: Settings | None = None, snapshot: Path | None = None, prefer_http: bool = True) -> Client:

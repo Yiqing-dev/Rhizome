@@ -139,6 +139,7 @@ export const api = {
   settings: () => req<Record<string, any>>("GET", "/settings"),
   patchSettings: (b: Record<string, unknown>) => req<Record<string, any>>("PATCH", "/settings", b),
   vocab: () => req<string>("GET", "/vocab"),
+  rxfInstructions: (lang: string) => req<string>("GET", "/rxf/instructions", undefined, { lang }),
   system: () => req<SystemInfo>("GET", "/system"),
   openFolder: (target: "data" | "inbox" | "logs" | "models" | "backups") => req<{ opened: string }>("POST", `/system/open/${target}`),
   backupNow: () => req<BackupStatus & { path: string | null }>("POST", "/system/backup"),

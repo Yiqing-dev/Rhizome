@@ -477,13 +477,9 @@ def rxf_validate(files: list[Path]) -> None:
 @rxf_app.command("instructions")
 def rxf_instructions(lang: Optional[str] = None) -> None:
     """Print the export instructions to paste into the Claude / ChatGPT Project."""
-    from importlib import resources
+    from .rxf.guide import instructions
 
-    from .config import ui_language
-
-    lang = lang or ui_language()
-    name = "export-instructions.zh.md" if lang.startswith("zh") else "export-instructions.en.md"
-    typer.echo(resources.files("rhizome").joinpath("data", name).read_text("utf-8"))
+    typer.echo(instructions(lang))
 
 
 # ---- settings / models -------------------------------------------------------------------------
