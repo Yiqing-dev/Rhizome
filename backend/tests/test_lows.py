@@ -148,11 +148,13 @@ def test_unreadable_card_state_is_replayed_from_the_log(library, session):
     grade(session, card["id"], 3)
     grade(session, card["id"], 4)
     row = session.get(ReviewCard, card["id"])
-    due_before = row.due
     row.state = {"from": "another py-fsrs major", "stability": "?"}
     session.flush()
-    out = grade(session, card["id"], 3)
-    assert out["interval_days"] > 0 and session.get(ReviewCard, card["id"]).due >= due_before
+    out = grade(session, card["id"], 3)  # the two earlier reviews are replayed, not lost
+    from rhizome.db.models import utcnow
+
+    assert out["interval_days"] > 0 and session.get(ReviewCard, card["id"]).due > utcnow()
+    assert session.get(ReviewCard, card["id"]).state.get("stability") not in (None, "?")
 
 
 def test_raw_mirror_check_and_export(library, session, settings, tmp_path):

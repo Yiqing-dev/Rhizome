@@ -54,7 +54,7 @@ def test_ncbi_answers_and_etiquette(online, monkeypatch):
     monkeypatch.setattr(verify, "_ncbi_last", verify.time.monotonic())
     routes["esearch.fcgi"] = (200, {"esearchresult": {"count": "1", "idlist": ["9"]}})
     verify.check_accession("GSE5", "GEO")
-    assert times and 0 < times[0] <= verify.NCBI_SPACING  # 3 requests per second at most
+    assert times and 0 < times[0] <= verify.NCBI_SPACING + 0.01  # 3 requests per second at most (float slack)
 
 
 def test_biostudies_zenodo_and_forges(online):
