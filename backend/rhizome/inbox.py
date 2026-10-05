@@ -24,7 +24,7 @@ SUFFIXES = (".yaml", ".yml", ".rxf")
 # companions and files still being written (browser downloads) are never ingested themselves
 SKIP_SUFFIXES = (".pdf", ".part", ".partial", ".crdownload", ".download", ".tmp", ".swp")
 RESCAN_SECONDS = 60
-_RXF_KEY = re.compile(r"^\s*(?:```[\w-]*\s*$\s*)?rxf_version\s*:", re.M)
+_RXF_KEY = re.compile(r"^[ \t]*rxf_version[ \t]*:", re.M)  # anywhere: prose or a fence may come first
 
 
 def looks_like_rxf(p: Path, head: int = 65536) -> bool:

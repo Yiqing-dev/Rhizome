@@ -21,7 +21,7 @@ paper:
   modalities: [snRNA-seq, scATAC-seq]
 tldr: [what was done, most important finding, biggest reservation]
 topics:
-  - {id: t1, name: GRN inference, relation: about}
+  - {id: t1, name: GRN inference, relation: about, aliases: [gene regulatory network inference, 基因调控网络推断]}
   - {id: t2, name: spatial domain detection, relation: applicable_to}
 claims:
   - id: c1
@@ -60,7 +60,7 @@ review_cards:
 - user_insights 只收录我在本次对话中说出的判断和联想，按我的原意转述，不要把你的观点归到我名下。
 - ideas 中由你提出的标 origin: model，由我提出的标 origin: user。
 - claims 取自逻辑链的结论；带【逻辑跳跃】的设 logic_jump: true。每条 claim 必须有 evidence（原文位置）。
-- topics 优先使用 Project 知识里 rhizome-vocab.yaml 的规范名；没有合适的再新建，用简短的英文名词短语；relation 只能是 about 或 applicable_to。
+- topics 优先使用 Project 知识里 rhizome-vocab.yaml 的规范名（candidate_topics 里合适的也可以沿用）；没有合适的再新建，用简短的英文名词短语，并在 aliases 里给出它的其他叫法（缩写的全称、中文名），这样会并入已有主题而不是另起一个；relation 只能是 about 或 applicable_to。
 - review_cards 出 3–5 道题，覆盖最值得记住的资产和论断，题目要能脱离原文作答。
 - depth 按本次讨论的实际深度填写。
 - topics、claims、datasets、methods、ideas、user_insights 各条目给一个文件内唯一的短 id（t1、c1、d1、m1、i1、u1）。links_to 和 about 只能写这些 id，不写名称；transfer 必须是嵌套的 {type, to, barrier} 对象；topics 不标 new（新不新由 Rhizome 判断）。

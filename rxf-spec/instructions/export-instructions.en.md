@@ -21,7 +21,7 @@ paper:
   modalities: [snRNA-seq, scATAC-seq]
 tldr: [what was done, most important finding, biggest reservation]
 topics:
-  - {id: t1, name: GRN inference, relation: about}
+  - {id: t1, name: GRN inference, relation: about, aliases: [gene regulatory network inference, 基因调控网络推断]}
   - {id: t2, name: spatial domain detection, relation: applicable_to}
 claims:
   - id: c1
@@ -60,7 +60,7 @@ When exporting RXF:
 - user_insights contains only judgements and associations I voiced in this conversation, paraphrased faithfully; never attribute your views to me.
 - In ideas, mark yours origin: model and mine origin: user.
 - claims come from the conclusions of the logic chain; set logic_jump: true for those marked as a logical leap. Every claim needs evidence (its location in the paper).
-- For topics prefer canonical names from rhizome-vocab.yaml in the Project knowledge; otherwise create a short English noun phrase. relation is only about or applicable_to.
+- For topics prefer canonical names from rhizome-vocab.yaml in the Project knowledge (candidate_topics may be reused when they fit); otherwise create a short English noun phrase and give its other names in aliases (the spelled-out form of an acronym, the Chinese name), so it merges with an existing topic instead of becoming a second one. relation is only about or applicable_to.
 - review_cards: 3–5 questions covering the most memorable assets and claims, answerable without the paper.
 - Set depth to the actual depth of this discussion.
 - Give topics, claims, datasets, methods, ideas and user_insights short ids unique within the file (t1, c1, d1, m1, i1, u1). links_to and about may only contain those ids, never names; transfer is always a nested {type, to, barrier} object; topics have no `new` flag (Rhizome decides that).

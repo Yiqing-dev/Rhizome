@@ -23,7 +23,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, PrivateAttr, ValidationError, field_validator, model_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 log = logging.getLogger(__name__)
@@ -150,6 +150,10 @@ class RemoteTarget(BaseModel):
 
 
 class Thresholds(BaseModel):
+    """Score bars. The defaults are for the built-in lexical models; THRESHOLD_PROFILES holds the
+    starting points for the other embedders (their score scales differ), and a value you set
+    yourself keeps winning across a model switch."""
+
     merge_auto: float = 0.9  # >= : merge automatically
     merge_review: float = 0.6  # [review, auto) : review queue; below: new entity
     retro_k: int = 500
@@ -160,6 +164,17 @@ class Thresholds(BaseModel):
     recall_min: float = 0.25
     recall_limit: int = 5
     synthesis_sim: float = 0.55
+    topic_relation_min: float = 0.35  # reranker score from which a new topic's neighbour is worth a breadth question
+    code_sim_min: float = 0.2  # recall from code: vector similarity below which a snippet is ignored
+    code_rel_min: float = 0.3  # ... and reranker relevance below which an asset is not shown
+
+
+# Starting points per embedder (cosine of bge-m3 is denser near the top than the hashing model's).
+THRESHOLD_PROFILES: dict[str, dict[str, float]] = {
+    "hashing": {},
+    "bge-m3": {"merge_auto": 0.92, "merge_review": 0.72, "synthesis_sim": 0.62, "recall_min": 0.35,
+               "retro_rerank_min": 0.35, "topic_relation_min": 0.4, "code_sim_min": 0.3, "code_rel_min": 0.35},
+}
 
 
 class Settings(BaseSettings):
@@ -192,6 +207,23 @@ class Settings(BaseSettings):
     review_daily_new: int = 20
     review_daily_max: int = 100
     remotes: list[RemoteTarget] = Field(default_factory=list)
+    _thresholds_set: set[str] = PrivateAttr(default_factory=set)  # the ones the user set explicitly
+
+    @model_validator(mode="after")
+    def _profile_thresholds(self) -> "Settings":
+        self._thresholds_set = set(self.thresholds.model_fields_set)
+        self.thresholds = self.thresholds_for(self.embedder)
+        return self
+
+    def thresholds_for(self, embedder: str) -> Thresholds:
+        """The embedder's profile, overlaid with the values set explicitly (settings.json, env)."""
+        base = dict(THRESHOLD_PROFILES.get(embedder) or {})
+        base.update({k: getattr(self.thresholds, k) for k in self._thresholds_set})
+        return Thresholds(**base)
+
+    def with_embedder(self, embedder: str) -> "Settings":
+        """A copy for another embedder: its thresholds follow (unless set explicitly)."""
+        return self.model_copy(update={"embedder": embedder, "thresholds": self.thresholds_for(embedder)})
 
     @field_validator("backup_dir", "inbox_dir", "local_llm_path", mode="before")
     @classmethod
@@ -392,7 +424,7 @@ def adopt_file_embedder() -> Settings:
     cur = get_settings()
     fresh = load_settings(cur.data_dir)
     if fresh.embedder != cur.embedder:
-        cur = cur.model_copy(update={"embedder": fresh.embedder})
+        cur = cur.with_embedder(fresh.embedder)
         set_settings(cur)
     return cur
 

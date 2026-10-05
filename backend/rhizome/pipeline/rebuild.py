@@ -68,9 +68,38 @@ def _prewarm_embeddings(s: Session) -> int:
     return len(texts)
 
 
-def rebuild(s: Session, backup: bool = True) -> dict:
+class RebuildAborted(RuntimeError):
+    """Stored exports that would not replay: nothing was deleted. ``failures`` lists them."""
+
+    def __init__(self, failures: list[dict]):
+        self.failures = failures
+        super().__init__(f"{len(failures)} stored export(s) would not replay: "
+                         + ", ".join(f"#{f['extraction_id']} ({f['work_key']}): {f['error'][:80]}" for f in failures[:5]))
+
+
+def preflight(s: Session) -> list[dict]:
+    """Validate every current RXF row with the models of its stored version *before* anything is
+    deleted: a row the current code cannot read must stop the rebuild (or be listed, with
+    ``force``), never vanish silently from the graph."""
+    from ..rxf.schema import parse_stored
+
+    out = []
+    for ex in s.execute(select(Extraction).where(Extraction.is_current, Extraction.kind == "rxf")
+                        .order_by(Extraction.id)).scalars():
+        try:
+            parse_stored(ex.output, ex.schema_version)
+        except Exception as e:  # noqa: BLE001 - any validation error
+            out.append({"extraction_id": ex.id, "work_key": ex.work_key, "error": " ".join(str(e).split())[:300]})
+    return out
+
+
+def rebuild(s: Session, backup: bool = True, force: bool = False) -> dict:
     t0 = time.time()
     warnings: list[str] = []
+    bad = preflight(s)
+    if bad and not force:
+        raise RebuildAborted(bad)
+    failed: list[dict] = list(bad)
     if backup:
         s.commit()
         st = get_settings()
@@ -126,6 +155,8 @@ def rebuild(s: Session, backup: bool = True) -> dict:
                     _restamp(s, ex, out.work if ex.kind == "rxf" else out)
             except Exception as e:  # keep going; report at the end
                 log.exception("extraction %s failed to materialise: %s", ex.id, e)
+                if not any(f["extraction_id"] == ex.id for f in failed):
+                    failed.append({"extraction_id": ex.id, "work_key": ex.work_key, "error": str(e)[:300]})
         if phase[0] == "rxf":
             cites = link_citations(g)
             skipped: list[dict] = []
@@ -133,6 +164,9 @@ def rebuild(s: Session, backup: bool = True) -> dict:
     if any(x.kind == "retro_tag" for x in current):
         skipped = []
         applied = apply_all(g, skipped)  # decisions about retro-tag edges (e.g. rejections) win again
+    if failed:
+        warnings.append(f"{len(failed)} stored export(s) did not replay and are missing from the graph: "
+                        + ", ".join(f"#{f['extraction_id']}" for f in failed))
     if skipped:
         warnings.append(f"{len(skipped)} decision(s) could not be replayed: "
                         + ", ".join(f"#{x['id']} {x['op']}" for x in skipped))
@@ -155,5 +189,5 @@ def rebuild(s: Session, backup: bool = True) -> dict:
     return {"extractions": n, "cites": cites, "decisions_applied": applied, "topics_promoted": promoted,
             "entities": s.query(Entity).count(), "edges": s.query(Edge).count(),
             "seconds": round(time.time() - t0, 2), "prewarmed": prewarmed, "cards": cards, "decisions_skipped": skipped,
-            "vector_cache_pruned": pruned,
+            "vector_cache_pruned": pruned, "failed": failed,
             "warnings": warnings}

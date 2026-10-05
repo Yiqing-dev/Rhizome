@@ -12,6 +12,14 @@ _CJK = re.compile(r"[㐀-鿿豈-﫿]")
 _WORD = re.compile(r"[a-z0-9]+|[㐀-鿿豈-﫿]")
 
 
+# Durable keys (free_key: "topic:<norm>", "idea:<sha of norm>") and entity_alias.norm are derived
+# from norm(). Changing it orphans every decision, card and access record that names a key, so:
+# bump NORM_VERSION, ship a data migration that recomputes alias norms and rewrites the keys in
+# human_decision payloads, review_card.entity_key, access_log and retro_tag outputs, and update
+# the golden test (tests/test_rxf.py::test_norm_and_keys_are_pinned).
+NORM_VERSION = 1
+
+
 def norm(s: str) -> str:
     """Case/punctuation/width-insensitive form used for exact alias matching."""
     s = unicodedata.normalize("NFKC", s).casefold().strip()

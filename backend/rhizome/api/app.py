@@ -387,7 +387,7 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         return instructions(lang)
 
     @app.get("/vocab", dependencies=A, response_class=PlainTextResponse)
-    def vocab(include_candidates: bool = False, s: Session = Depends(db)) -> str:
+    def vocab(include_candidates: bool = True, s: Session = Depends(db)) -> str:
         from ..services.vocab import export_vocab
 
         return export_vocab(s, include_candidates)

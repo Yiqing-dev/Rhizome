@@ -174,7 +174,7 @@ export const api = {
   digest: () => req<any>("GET", "/digest"),
   settings: () => req<Record<string, any>>("GET", "/settings"),
   patchSettings: (b: Record<string, unknown>) => req<Record<string, any>>("PATCH", "/settings", b),
-  vocab: () => req<string>("GET", "/vocab"),
+  vocab: (includeCandidates = true) => req<string>("GET", "/vocab", undefined, { include_candidates: includeCandidates }),
   rxfInstructions: (lang: string) => req<string>("GET", "/rxf/instructions", undefined, { lang }),
   system: () => req<SystemInfo>("GET", "/system"),
   openFolder: (target: "data" | "inbox" | "logs" | "models" | "backups") => req<{ opened: string }>("POST", `/system/open/${target}`),

@@ -43,8 +43,9 @@ export default function SettingsPage() {
     URL.revokeObjectURL(url);
   }
 
+  const [vocabCandidates, setVocabCandidates] = useState(true);
   async function downloadVocab() {
-    save(await api.vocab(), "rhizome-vocab.yaml", "text/yaml");
+    save(await api.vocab(vocabCandidates), "rhizome-vocab.yaml", "text/yaml");
   }
 
   const instrLang = () => (i18n.language.startsWith("zh") ? "zh_CN" : "en");
@@ -224,7 +225,8 @@ export default function SettingsPage() {
               <label>{t("settings.embedder")}
                 <select value={s.embedder} onChange={(e) => patch({ embedder: e.target.value })}>
                   <option value="hashing">{t("settings.builtin")}</option><option value="bge-m3" disabled={si ? !si.models_available : false}>bge-m3</option>
-                </select></label>
+                </select>
+                {s.embedder === "hashing" && <span className="hint">{t("settings.lexical_only")}</span>}</label>
               <label>{t("settings.reranker")}
                 <select value={s.reranker} onChange={(e) => patch({ reranker: e.target.value })}>
                   <option value="lexical">{t("settings.builtin")}</option><option value="bge-reranker-v2-m3" disabled={si ? !si.models_available : false}>bge-reranker-v2-m3</option>
@@ -274,6 +276,7 @@ export default function SettingsPage() {
               <button className="primary" onClick={copyInstructions}>{copied ? t("settings.copied") : t("settings.project_copy")}</button>
               <button onClick={downloadInstructions}>{t("settings.project_download")}</button>
               <button onClick={downloadVocab}>{t("settings.vocab_download")}</button>
+              <label className="small"><input type="checkbox" checked={vocabCandidates} onChange={(e) => setVocabCandidates(e.target.checked)} /> {t("settings.vocab_candidates")}</label>
             </div>
             <p className="hint">{t("settings.vocab_hint")}</p>
           </section>

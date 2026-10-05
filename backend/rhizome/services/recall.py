@@ -197,16 +197,17 @@ def related_to_work(s: Session, work_id: int, limit: int = 5) -> list[dict[str, 
 
     # semantic: nearest assets from other works
     rr = get_reranker()
+    th = get_settings().thresholds
     for e in [work, *mine]:
         qv = embed_texts(s, [entity_text(e)], persist=False)[0]
         for nid, sim in knn(s, qv, types=ASSET_TYPES + ("work",), k=8, exclude=own_ids):
-            if sim < 0.2:
+            if sim < th.code_sim_min:
                 continue
             other = g.by_id(nid)
             if other is None or other.status == "rejected":
                 continue
             rel = rr.score(entity_text(e), [entity_text(other)])[0]
-            if rel < 0.3:
+            if rel < th.code_rel_min:
                 continue
             owners = [other.id] if other.type == "work" else [w["work_id"] for w in source_works(s, [nid])[nid]]
             for w in owners:

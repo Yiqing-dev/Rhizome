@@ -351,7 +351,9 @@
     "restore_file": "备份文件路径",
     "contact_email": "联系邮箱（可选）",
     "contact_email_hint": "填写后 OpenAlex 和 NCBI 会把请求放进更稳定的“礼貌通道”，较少被限流。只用于这两个服务的请求头。在需要代理才能上网的校园网或公司网络里，设置环境变量 HTTPS_PROXY 后重启应用；命令行 rhz doctor 可以检查网络。",
-    "network_failing": "{{host}} 最近 {{failed}} 次请求失败（成功 {{ok}} 次）。失败时相关 ID 记为“未验证”，不会被丢弃；之后会自动补查。"
+    "network_failing": "{{host}} 最近 {{failed}} 次请求失败（成功 {{ok}} 次）。失败时相关 ID 记为“未验证”，不会被丢弃；之后会自动补查。",
+    "lexical_only": "内置模型只做字面匹配（同义词、缩写、中英文对应不会自动合并；首字母能对上的会进待审）。",
+    "vocab_candidates": "包含候选主题"
   },
   "lang": {
     "short_en": "EN",

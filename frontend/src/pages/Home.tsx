@@ -8,7 +8,7 @@ import { useLoad } from "../hooks";
 import { fmtNum } from "../i18n";
 import { go, href } from "../router";
 
-const RXF_HEAD = /^\s*(?:```[\w-]*\s*$\s*)?rxf_version\s*:/m;
+const RXF_HEAD = /^[ \t]*rxf_version[ \t]*:/m;
 const TILE_TYPES = ["work", "dataset", "method", "idea", "claim", "topic"] as const;
 
 export default function Home() {

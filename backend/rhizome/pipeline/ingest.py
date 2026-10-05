@@ -4,9 +4,11 @@ human decisions -> embeddings -> recall."""
 
 from __future__ import annotations
 
+import json
 import logging
 import shutil
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from .. import rawstore
 from ..config import get_settings
-from ..db.models import Entity, Extraction, RawObject
+from ..db.models import Entity, Extraction, RawObject, utcnow
 from ..external import openalex
 from ..external.ids import accession_format_ok, is_url, normalize_doi, normalize_repo
 from ..external.verify import check_accession, check_repo, taxonomy_lookup
@@ -85,10 +87,16 @@ def _check_ids(doc: RxfDocument) -> tuple[dict[str, str], list[str]]:
     return checks, suspect
 
 
+_FETCH = object()
+
+
 def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes | None = None,
-                recall: bool = True, repair: bool = False, replace: bool = False) -> IngestResult:
+                recall: bool = True, repair: bool = False, replace: bool = False, *,
+                openalex_record: Any = _FETCH, captured_at: datetime | None = None) -> IngestResult:
     """``repair`` applies the known-drift fixes (rxf/repair.py): L0 keeps the original bytes, the L1
-    row holds the repaired document and records the fixes in ``meta.repairs``."""
+    row holds the repaired document and records the fixes in ``meta.repairs``. ``openalex_record``
+    (a stored response or None) and ``captured_at`` replay a capture from raw/ without going
+    online and with its original time."""
     res = load_rxf(text, repair=repair)
     if not res.ok:
         return IngestResult(ok=False, problems=res.problems, report=report_for(filename, res),
@@ -107,7 +115,10 @@ def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes
     max_before = s.execute(select(func.coalesce(func.max(Entity.id), 0))).scalar_one()
 
     # resolve canonical work id (T0) and verify external ids before anything enters the graph
-    oa, oa_status = openalex.fetch(doi=doc.paper.doi) if doc.paper.doi else (None, "no_doi")
+    if openalex_record is _FETCH:
+        oa, oa_status = openalex.fetch(doi=doc.paper.doi) if doc.paper.doi else (None, "no_doi")
+    else:
+        oa, oa_status = openalex_record, "ok" if openalex_record else "replayed"
     checks, suspect = _check_ids(doc)
     meta = {"openalex_id": oa["id"] if oa else None, "checks": checks, "suspect": suspect,
             "filename": filename, "taxa": _check_taxa(doc), "openalex": oa_status}
@@ -118,13 +129,21 @@ def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes
     hashes = [rawstore.put(s, data, "rxf", filename, wkey)]
     if pdf:
         hashes.append(rawstore.put(s, pdf, "pdf", Path(filename).with_suffix(".pdf").name, wkey))
+    oa_sha = None
+    if oa:  # the response is L0 too: a replay from raw/ must not depend on OpenAlex being up
+        oa_sha = rawstore.put(s, json.dumps(oa, ensure_ascii=False, sort_keys=True).encode("utf-8"), "openalex",
+                              f"openalex:{oa['id']}", wkey)
+    now = captured_at or utcnow()
+    rawstore.write_meta(sha, {"filename": filename, "captured_at": now.isoformat(), "pdf_sha": hashes[1] if pdf else None,
+                              "openalex_sha": oa_sha, "repairs": res.repairs, "replace": replace,
+                              "work_key": wkey})
 
-    ex_oa = attach_openalex(g, wkey, oa, doc.paper.doi) if oa else None
+    ex_oa = attach_openalex(g, wkey, oa, doc.paper.doi, created_at=now) if oa else None
 
     ex = Extraction(kind="rxf", work_key=wkey, tier=2 if pdf and doc.depth == "deep" else 1,
                     model="chat-export", prompt_version=doc.prompt_version,
                     schema_version=f"rxf-v{doc.rxf_version}", input_hashes=hashes,
-                    output=doc.model_dump(mode="json"), meta=meta)
+                    output=doc.model_dump(mode="json"), meta=meta, created_at=now)
     s.add(ex)
     s.flush()
     out = materialize_rxf(g, ex)
@@ -170,7 +189,8 @@ def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes
     return result
 
 
-def attach_openalex(g: Graph, wkey: str, oa: dict, doi: str | None) -> Extraction | None:
+def attach_openalex(g: Graph, wkey: str, oa: dict, doi: str | None,
+                    created_at: datetime | None = None) -> Extraction | None:
     """Store an OpenAlex record as an L1 extraction of the paper and materialise it, unless the
     paper already has one (it may exist under its DOI key or its OpenAlex key)."""
     s = g.s
@@ -184,7 +204,7 @@ def attach_openalex(g: Graph, wkey: str, oa: dict, doi: str | None) -> Extractio
         return None
     ex_oa = Extraction(kind="openalex", work_key=existing_work.key if existing_work else wkey, tier=0,
                        model="openalex", prompt_version=None, schema_version="openalex-v1", input_hashes=[],
-                       output=oa, meta={})
+                       output=oa, meta={}, created_at=created_at or utcnow())
     s.add(ex_oa)
     s.flush()
     materialize_openalex(g, ex_oa)
@@ -294,3 +314,46 @@ def _unique(p: Path) -> Path:
     while (q := p.with_name(f"{p.stem}.{i}{p.suffix}")).exists():
         i += 1
     return q
+
+
+def recover_from_raw(s: Session) -> dict[str, Any]:
+    """Replay every capture record in raw/ (oldest first) that the database does not have: the
+    original bytes, the paired PDF and the OpenAlex response stored at the time, under the
+    original capture time. Offline by construction. Captures already present are skipped."""
+    done = skipped = failed = 0
+    problems: list[dict[str, Any]] = []
+    present = _captures(s)
+    for m in rawstore.list_meta():
+        sha = m["sha"]
+        if sha in present:
+            skipped += 1
+            continue
+        data = rawstore.read(sha, "rxf")
+        if data is None:
+            problems.append({"sha": sha, "error": "raw file missing"})
+            failed += 1
+            continue
+        pdf = rawstore.read(m["pdf_sha"], "pdf") if m.get("pdf_sha") else None
+        oa = None
+        if m.get("openalex_sha"):
+            blob = rawstore.read(m["openalex_sha"], "openalex")
+            oa = json.loads(blob) if blob else None
+        try:
+            when = datetime.fromisoformat(m["captured_at"]) if m.get("captured_at") else None
+        except ValueError:
+            when = None
+        r = ingest_text(s, data.decode("utf-8-sig"), m.get("filename") or f"{sha}.yaml", pdf, recall=False,
+                        repair=bool(m.get("repairs")), replace=bool(m.get("replace")),
+                        openalex_record=oa, captured_at=when)
+        if r.ok:
+            done += 1
+        else:
+            failed += 1
+            problems.append({"sha": sha, "error": (r.report or "")[:300]})
+        s.commit()
+    return {"recovered": done, "already_present": skipped, "failed": failed, "problems": problems}
+
+
+def _captures(s: Session) -> set[str]:
+    """sha of every RXF capture the database already holds (current or retracted)."""
+    return {h[0] for h in s.execute(select(Extraction.input_hashes).where(Extraction.kind == "rxf")).scalars() if h}

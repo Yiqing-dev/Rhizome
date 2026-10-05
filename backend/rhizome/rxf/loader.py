@@ -16,7 +16,10 @@ from ..i18n import _
 from .repair import repair as _repair
 from .schema import SCHEMAS, RxfDocument, declared_ids, json_schema, reference_problems
 
-_FENCE = re.compile(r"^\s*```[a-zA-Z]*\s*\n(.*?)\n\s*```\s*$", re.S)
+# a fenced block (``` or ~~~, any info string) anywhere in the text: chat clients wrap exports in
+# prose ("Here is the export:" ... "Let me know if ...")
+_FENCE_BLOCK = re.compile(r"^[ \t]*(```|~~~)[^\n]*\n(.*?)\n[ \t]*\1[ \t]*$", re.S | re.M)
+_RXF_LINE = re.compile(r"^[ \t]*rxf_version[ \t]*:", re.M)
 
 
 @dataclass
@@ -56,14 +59,31 @@ _NoDatesLoader.yaml_implicit_resolvers = {
 
 
 def strip_fences(text: str) -> str:
-    m = _FENCE.match(text)
-    return m.group(1) if m else text
+    """The RXF document inside the text: the first fenced block that contains rxf_version, else
+    (no fences) the text from its rxf_version line on, so prose around an export is ignored."""
+    for m in _FENCE_BLOCK.finditer(text):
+        if _RXF_LINE.search(m.group(2)):
+            return m.group(2)
+    if "```" not in text and "~~~" not in text:
+        m = _RXF_LINE.search(text)
+        if m and m.start() > 0:
+            return text[m.start():]
+    return text
 
 
 @lru_cache(maxsize=None)
 def schema_for(version: int) -> dict:
     """Built from the Pydantic models, so there is no second copy that could drift."""
     return json_schema(version)
+
+
+def _enum_of(schema: dict) -> list[str]:
+    if "enum" in schema:
+        return [str(x) for x in schema["enum"]]
+    for sub in schema.get("anyOf", []):
+        if "enum" in sub:
+            return [str(x) for x in sub["enum"]]
+    return []
 
 
 def _path(parts) -> str:
@@ -80,9 +100,22 @@ def _problems(err: jsonschema.ValidationError) -> list[ValidationProblem]:
         return [ValidationProblem(_path(path), err.message, "unexpected_field", field=str(k))
                 for k in inst if k not in allowed]
     if v == "required" and isinstance(inst, dict):
-        return [ValidationProblem(_path(path), err.message, "missing_field", field=str(k))
-                for k in err.validator_value if k not in inst]
+        props = (err.schema or {}).get("properties", {})
+        out = []
+        for k in err.validator_value:
+            if k in inst:
+                continue
+            allowed = _enum_of(props.get(k, {}))  # "add relation" alone costs the model a round trip
+            out.append(ValidationProblem(_path(path), err.message, "missing_field", field=str(k),
+                                         value=", ".join(allowed) if allowed else None))
+        return out
     name = str(path[-1]) if path and not isinstance(path[-1], int) else None
+    if v == "type" and path and isinstance(path[-1], int):
+        # an item of a list is of the wrong type: name the list and what an item needs
+        name = str(path[-2]) if len(path) > 1 else None
+        req = (err.schema or {}).get("required") or []
+        expected = str(err.validator_value) + (f" with {', '.join(req)}" if req else "")
+        return [ValidationProblem(_path(path), err.message, "bad_type", field=name, value=expected)]
     if v == "enum":
         return [ValidationProblem(_path(path), err.message, "bad_value", field=name,
                                   value=", ".join(str(x) for x in err.validator_value))]
@@ -157,6 +190,16 @@ _IDX = re.compile(r"(?<=\.)\d+(?=\.|$)|^\d+(?=\.|$)")
 # (path pattern, kind, field) -> specific fix hint key for known export drift
 _KNOWN = {
     ("topics.*", "unexpected_field", "new"): "rxf.fix.topic_new",
+    # misplaced or renamed, never "remove": the data is right, the place or the key is wrong
+    ("(root)", "unexpected_field", "datasets"): "rxf.fix.move_assets",
+    ("(root)", "unexpected_field", "methods"): "rxf.fix.move_assets",
+    ("(root)", "unexpected_field", "ideas"): "rxf.fix.move_assets",
+    ("claims.*", "unexpected_field", "claim"): "rxf.fix.claim_text",
+    ("claims.*", "unexpected_field", "statement"): "rxf.fix.claim_text",
+    ("review_cards.*", "unexpected_field", "question"): "rxf.fix.card_q",
+    ("review_cards.*", "unexpected_field", "answer"): "rxf.fix.card_a",
+    ("paper", "unexpected_field", "journal"): "rxf.fix.paper_venue",
+    ("user_insights.*", "unexpected_field", "links"): "rxf.fix.links_to",
     ("assets.ideas.*", "unexpected_field", "type"): "rxf.fix.transfer",
     ("assets.ideas.*", "unexpected_field", "to"): "rxf.fix.transfer",
     ("assets.ideas.*", "unexpected_field", "barrier"): "rxf.fix.transfer",
@@ -217,7 +260,9 @@ def _describe(g: dict[str, Any]) -> tuple[str, str | None]:
     if kind in ("unexpected_field", "missing_field", "bad_reference", "not_a_node", "duplicate_id"):
         what = _(f"rxf.problem.{kind}", field=f, values=", ".join(vals))
         hint = _KNOWN.get((g["pattern"], kind, f), f"rxf.fix.{kind}")
-        return what, _(hint, field=f)
+        if kind == "missing_field" and vals and hint == "rxf.fix.missing_field":
+            hint = "rxf.fix.missing_field_values"
+        return what, _(hint, field=f, values=" | ".join(vals))
     if kind == "bad_value":
         return _("rxf.problem.bad_value", field=f, values=" | ".join(vals)), None
     if kind == "bad_type":
@@ -240,6 +285,8 @@ def error_report(filename: str, problems: list[ValidationProblem], repairable: l
     if known_ids and any(g["kind"] == "bad_reference" for g in groups):
         lines += ["", _("rxf.report_known_ids", ids=", ".join(known_ids))]
     lines += ["", _("rxf.report_hint")]
+    if len(groups) >= 4:  # many causes: the model is better off re-reading the skeleton
+        lines.append(_("rxf.report_skeleton"))
     if repairable:
         lines += ["", _("rxf.report_repairable", fixes="; ".join(_(f"rxf.repair.{c}") for c in repairable),
                         file=filename)]

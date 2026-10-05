@@ -14,7 +14,7 @@ from ..db.models import Edge, Entity, Extraction, ReviewCard, Work, utcnow
 from ..external.ids import effective_database, normalize_doi, normalize_repo, normalize_zenodo
 from ..i18n import _
 from ..inference import get_backend
-from ..rxf.schema import RxfDocument, uses_ids
+from ..rxf.schema import RxfDocument, parse_stored, uses_ids
 from ..text import norm, sha256
 from .canonicalize import is_user, resolve_claim, resolve_free, resolve_modality, resolve_organism
 from ..ml import get_reranker
@@ -104,7 +104,7 @@ def materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
 
 
 def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
-    doc = RxfDocument.model_validate(ex.output)
+    doc = parse_stored(ex.output, ex.schema_version)
     meta = ex.meta or {}
     checks: dict[str, str] = meta.get("checks", {})
     p = doc.paper
@@ -139,7 +139,7 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
         edge(work, resolve_modality(g, name), "of_modality")
 
     for t in doc.topics:
-        r = resolve_free(g, "topic", t.name, status="candidate")
+        r = resolve_free(g, "topic", t.name, status="candidate", aliases=tuple(t.aliases))
         if r.created:
             _topic_relation_candidates(g, r.entity)
         edge(work, r.entity, t.relation)
@@ -317,7 +317,7 @@ def _topic_relation_candidates(g: Graph, topic: Entity) -> None:
     distinct = g.distinct_pairs()
     backend = get_backend()
     for other, sc in zip(neighbours, scores):
-        if sc < 0.35 or sc >= th.merge_review or frozenset((topic.key, other.key)) in distinct:
+        if sc < th.topic_relation_min or sc >= th.merge_review or frozenset((topic.key, other.key)) in distinct:
             continue
         verdict = backend.judge_breadth(topic.canonical_name, other.canonical_name)
         suggestion = verdict[0] if verdict else None

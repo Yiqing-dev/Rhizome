@@ -351,7 +351,9 @@
     "restore_file": "backup file",
     "contact_email": "Contact e-mail (optional)",
     "contact_email_hint": "With an address, OpenAlex and NCBI put requests in their more reliable 'polite pool' with fewer rate limits. It is only sent to those two services. Behind a campus or company proxy, set HTTPS_PROXY and restart the app; `rhz doctor` checks the network.",
-    "network_failing": "{{host}}: {{failed}} recent requests failed ({{ok}} succeeded). Affected ids are kept as 'unverified', never dropped, and checked again later."
+    "network_failing": "{{host}}: {{failed}} recent requests failed ({{ok}} succeeded). Affected ids are kept as 'unverified', never dropped, and checked again later.",
+    "lexical_only": "Built-in model: matching is lexical only (synonyms, acronyms and Chinese/English pairs are not merged; they are queued for review when the initials match).",
+    "vocab_candidates": "include candidate topics"
   },
   "lang": {
     "short_en": "EN",

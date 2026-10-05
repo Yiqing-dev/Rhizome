@@ -388,7 +388,7 @@ def connect(settings: Settings | None = None, snapshot: Path | None = None, pref
         st = snapshot_settings(snapshot)
         key = embedder_setting_for(snapshot_meta(snapshot).get("index_model"))
         if key and key != st.embedder:
-            st = st.model_copy(update={"embedder": key})
+            st = st.with_embedder(key)
         return LocalClient(st, read_only=True, create=False)
     st = settings or get_settings()
     if prefer_http:

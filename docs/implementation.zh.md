@@ -164,6 +164,35 @@
 | A19 | 下载提示区分单个 run（prefetch）与研究/项目（ENA filereport 列 run），GEO 系列给出 suppl FTP 路径，Zenodo 不再落到"检索" |
 | A20 | 快照内写入 `kv.snapshot_meta`（生成时间、版本、schema），超过 7 天提示 |
 
+## 数据质量组（2026-10-05）
+
+| 编号 | 修改 |
+| --- | --- |
+| D10 | 用户想法与模型想法不再自动合并（进待审）；接受合并后保留用户的措辞和 origin |
+| D12 D20 | 论文立场为 contradicts 时不再对其蕴含的论断写 supports 边；矛盾待审项带立场、证据类型、强度和 extraction id，接受后写入边的列（立场相反时写 supports） |
+| D15 | 另一份导出重报的边整体替换证据/置信度/属性，旧记录存入 `attrs.evidence_records`；同一份导出内仍取最大值 |
+| D17 | 多篇论文报告的数据集/方法属性：空位填入、产出方优先、冲突记入 `attrs.reported` |
+| D18 | 文件内 id（d1、t2）不再进入属性和全文；idea 的 transfer 存主题名和 key；迁移 0004 清理旧库 |
+| M6 | 人工合并的任一侧尚未物化时按自己的 key 创建且不自动合并；来源已并到别处的合并作为跳过项报告 |
+| D6 | 读写引擎 `synchronous=FULL`；原始文件 mkstemp + fsync + rename；截断文件会重写；`rhz diag` 检查原始文件 |
+| D7 | 重算和 `rhz gc` 清理其他模型和无主文本的向量缓存（gc 并 VACUUM）；快照去掉向量缓存、他模型向量、访问记录、任务行并压缩 |
+| P1 P7 | 向量索引预分配缓冲、逻辑长度、O(1) 追加、交换删除；按行数流式加载、单飞；应用和 MCP 启动时后台预热；`token_path` 移到 config |
+| P10 | 合成候选按块矩阵乘，最优在前、每个源至多 2 条，只对够好的对走图检查，从上次水位线扫描 |
+| P4 | `neighbors` 两跳都是子查询，不穿过 organism/modality 枢纽，SQL 分页计数，只读页内节点间的边 |
+| M12 | `/entity` 支持 `touch=false`；Claude 的 `rhz_get` 不再算作"看过" |
+| M13 | `POST /cards/{id}/suspend`（可整资产 `no_cards`）；界面 `s` 键与按钮，CLI s / S / k；被否决资产的卡片查询时过滤 |
+| M15 | 模板想法卡以 transfer 目标或关联资产为线索；无线索的模型想法不出卡；生成卡揭晓前隐藏资产名 |
+| M7 | 无本地判官时每次 retro 只排 `retro_queue_max` 条并报告剩余，重跑翻页；`POST /review/dismiss`；重定义主题使旧候选失效 |
+| D19 | `ex.meta.insight_keys` 记录每条 insight 对应的实体；论文卡可就地改写（edit_text），`rhz edit KEY TEXT` |
+| X6 | 从正文任意位置的围栏块（``` 或 ~~~）或 `rxf_version:` 行开始取文档；收件箱识别同样放宽 |
+| X2 | 报错提示改为"移到 assets 下 / 改名为 text、q、a、venue、links_to"，缺枚举字段列出可选值，列表项类型错时列出所需键，原因 ≥4 条提示重读骨架 |
+| X4 | 词表默认包含有论文的候选主题（单独 `candidate_topics` 段，标状态和论文数）；CLI `--no-candidates`，设置页勾选 |
+| M4 | RXF topics 可带 `aliases`（导出指令已更新）；缩写/全称首字母匹配进待审；设置页提示内置模型只做字面匹配 |
+| M5 | 阈值按嵌入模型分档（`THRESHOLD_PROFILES`），用户显式设置的值跨模型保留；0.35/0.2/0.3 字面量进 `Thresholds` |
+| U4 | 重算前按存储版本预检所有导出，失败则中止不删（`--force` 跳过并列出，退出码 1）；`parse_stored` 按版本解析并 upcast |
+| U5 | `NORM_VERSION` 与黄金测试锁定 norm/free_key 输出，注释写明改动所需的数据迁移 |
+| D30 | OpenAlex 响应存为 L0，`<sha>.meta.json` 记录文件名、时间、PDF/OpenAlex 哈希、修复；`rhz recover --from-raw` 离线重放并保留原时间 |
+
 ## 还需要你来做的（M0）
 
 - 定稿导出指令：`rxf-spec/instructions/` 里是按设计文档整理的版本，加了一条“含问号的文本不要写进花括号”——

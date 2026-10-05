@@ -58,6 +58,9 @@ class Paper(_Strict):
 class TopicRef(_Item):
     name: str
     relation: Literal["about", "applicable_to"]
+    aliases: list[str] = Field(default_factory=list,
+                               description="Other names for the same topic (the Chinese name, an acronym), "
+                                           "so it is matched to an existing topic instead of becoming a second one")
 
 
 class Claim(_Item):
@@ -154,6 +157,33 @@ class RxfDocument(_Strict):
 
 
 SCHEMAS: dict[int, type[RxfDocument]] = {1: RxfDocument}
+
+
+def stored_version(schema_version: str | None) -> int:
+    """'rxf-v1' -> 1 (rows written before versions were recorded are v1)."""
+    try:
+        return int(str(schema_version or "rxf-v1").rsplit("v", 1)[1])
+    except (ValueError, IndexError):
+        return RXF_VERSION
+
+
+def upcast(data: dict, from_version: int) -> dict:
+    """A stored document of an older RXF version in the shape the current models expect. v1 is the
+    only version so far; each later version adds its own step here, never a change to the stored
+    rows (L1 is append-only)."""
+    return data
+
+
+def parse_stored(output: dict, schema_version: str | None) -> RxfDocument:
+    """Validate a stored L1 row with the models of the version it was written under (a stricter
+    current model must not make old rows unreadable), then upcast."""
+    v = stored_version(schema_version)
+    if v not in SCHEMAS:
+        raise ValueError(f"unknown stored RXF version {schema_version}")
+    model = SCHEMAS[v]
+    if v == RXF_VERSION:
+        return model.model_validate(output)
+    return SCHEMAS[RXF_VERSION].model_validate(upcast(model.model_validate(output).model_dump(mode="json"), v))
 
 # Kinds an id can point at that become graph nodes; issues and review cards are not nodes.
 NODE_KINDS = ("topic", "claim", "dataset", "method", "idea", "user_insight")

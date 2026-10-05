@@ -652,6 +652,14 @@
           ],
           "title": "Relation",
           "type": "string"
+        },
+        "aliases": {
+          "description": "Other names for the same topic (the Chinese name, an acronym), so it is matched to an existing topic instead of becoming a second one",
+          "items": {
+            "type": "string"
+          },
+          "title": "Aliases",
+          "type": "array"
         }
       },
       "required": [

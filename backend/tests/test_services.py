@@ -128,7 +128,10 @@ def test_vocab_export(library, session):
     decisions.record(Graph(session), "create_topic", {"name": "GRN inference", "aliases": ["基因调控网络推断"]})
     text = export_vocab(session)
     assert "name: GRN inference" in text and "基因调控网络推断" in text
-    assert "benchmarking" not in text  # candidates are excluded
+    # candidates with papers are listed apart, marked, after the confirmed topics
+    assert "candidate_topics:" in text and text.index("benchmarking") > text.index("candidate_topics:")
+    assert "status: candidate" in text and "papers: 1" in text
+    assert "benchmarking" not in export_vocab(session, include_candidates=False)
 
 
 def test_stale_running_jobs_are_recovered(library, session):

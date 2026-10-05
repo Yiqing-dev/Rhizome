@@ -13,11 +13,24 @@ from sqlalchemy.orm import Session
 from ..db.models import Edge, Entity, EntityAlias
 
 
-def export_vocab(s: Session, include_candidates: bool = False) -> str:
-    q = select(Entity).where(Entity.type == "topic")
-    if not include_candidates:
-        q = q.where(Entity.status == "active")
-    topics = sorted(s.execute(q).scalars(), key=lambda t: t.canonical_name.lower())
+def export_vocab(s: Session, include_candidates: bool = True) -> str:
+    """Active topics under ``topics``; with ``include_candidates`` also the candidate topics that at
+    least one paper is on, under ``candidate_topics`` with their status and paper count (new
+    topics start as candidates, so a vocabulary of active ones alone stays empty for weeks)."""
+    from sqlalchemy import func
+
+    active = sorted(s.execute(select(Entity).where(Entity.type == "topic", Entity.status == "active")).scalars(),
+                    key=lambda t: t.canonical_name.lower())
+    works_of = dict(s.execute(
+        select(Edge.dst, func.count(func.distinct(Edge.src))).join(Entity, Entity.id == Edge.src)
+        .where(Edge.type.in_(("about", "applicable_to")), Edge.status != "rejected", Entity.type == "work")
+        .group_by(Edge.dst)).all())
+    candidates = []
+    if include_candidates:
+        candidates = sorted((t for t in s.execute(select(Entity).where(Entity.type == "topic", Entity.status == "candidate"))
+                             .scalars() if works_of.get(t.id, 0) >= 1),
+                            key=lambda t: (-works_of.get(t.id, 0), t.canonical_name.lower()))
+    topics = active + candidates
     parents: dict[int, list[str]] = {}
     for src, dst_name in s.execute(select(Edge.src, Entity.canonical_name).join(Entity, Entity.id == Edge.dst)
                                    .where(Edge.type == "is_a", Edge.status != "rejected")).all():
@@ -36,7 +49,16 @@ def export_vocab(s: Session, include_candidates: bool = False) -> str:
             entry["definition"] = t.attrs["definition"]
         if t.id in parents:
             entry["parents"] = sorted(parents[t.id])
+        if t.status != "active":
+            entry["status"] = t.status
+            entry["papers"] = works_of.get(t.id, 0)
         out.append(entry)
+    n_active = len(active)
+    doc = {"topics": out[:n_active]}
     header = (f"# rhizome-vocab.yaml - generated {date.today().isoformat()}\n"
               "# Use `name` as the topic name in RXF exports; aliases are for matching only.\n")
-    return header + yaml.safe_dump({"topics": out}, allow_unicode=True, sort_keys=False, width=100)
+    if include_candidates:
+        doc["candidate_topics"] = out[n_active:]
+        header += ("# candidate_topics are not confirmed yet: prefer a topic from `topics` when one fits,\n"
+                   "# reuse a candidate's name when the paper is really about it, otherwise coin a new one.\n")
+    return header + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=100)

@@ -58,6 +58,7 @@ def resolve_free(g: Graph, etype: str, name: str, *, attrs: dict[str, Any] | Non
         for a in aliases:
             hit = g.by_alias(etype, a)
             if hit:
+                g.add_alias(hit, name)  # found through one of its other names: this one joins them
                 break
     if hit is not None:
         for a in aliases:
@@ -84,6 +85,12 @@ def resolve_free(g: Graph, etype: str, name: str, *, attrs: dict[str, Any] | Non
         scores = get_reranker().score(probe_text, [entity_text(c) for c in cands])
         j = max(range(len(cands)), key=lambda i: scores[i])
         best = (cands[j], scores[j])
+    if (best is None or best[1] < th.merge_review) and etype in ACRONYM_TYPES:
+        # the default (lexical) models never see that "GRN inference" and "gene regulatory network
+        # inference" are one topic: an initials match is at least a question for the user
+        hit = acronym_match(g, etype, name)
+        if hit is not None and (best is None or hit.id != best[0].id):
+            best = (hit, th.merge_review)
     cross_origin = best is not None and origin is not None and is_user(best[0]) != (origin == "user")
     if best and best[1] >= th.merge_auto and auto_merge and not cross_origin:
         g.add_alias(best[0], name, source="auto-merge")
@@ -99,6 +106,50 @@ def resolve_free(g: Graph, etype: str, name: str, *, attrs: dict[str, Any] | Non
                           "b_name": best[0].canonical_name, "score": round(best[1], 4)},
                 dedupe=f"merge:{a}|{b}", score=best[1])
     return Resolution(e, True, best[1] if best else None)
+
+
+ACRONYM_TYPES = ("topic", "method", "dataset")
+_STOP = {"of", "and", "the", "for", "in", "on", "a", "an", "to", "by", "with", "via", "from"}
+_WORD_RE = re.compile(r"[A-Za-z][A-Za-z0-9]*")
+
+
+def _content_words(text: str) -> list[str]:
+    return [w.lower() for w in _WORD_RE.findall(text) if w.lower() not in _STOP]
+
+
+def acronym_expands(short: str, long: str) -> bool:
+    """'GRN inference' / 'GRN' is 'gene regulatory network inference' / 'gene regulatory network':
+    the short form's first token is the initials of the long form's first words and any further
+    tokens repeat the remaining words."""
+    st = _content_words(short)
+    lt = _content_words(long)
+    if not st or len(lt) < 3 or len(st) >= len(lt):
+        return False
+    head, rest = st[0], st[1:]
+    k = len(head)
+    if k < 2 or k > len(lt) or k < len(lt) - len(rest):
+        return False
+    return "".join(w[0] for w in lt[:k]) == head and lt[k:] == rest
+
+
+def acronym_match(g: Graph, etype: str, name: str) -> Entity | None:
+    """An existing entity of the type whose alias is an acronym form of ``name``, or whose alias
+    ``name`` abbreviates. Both lookups are bounded by the alias's first letter and length."""
+    from sqlalchemy import func, select
+
+    from ..db.models import EntityAlias
+
+    n = norm(name)
+    if not n or not n[0].isalpha():
+        return None
+    long_form = len(_content_words(name)) >= 3
+    q = (select(EntityAlias.alias, Entity).join(Entity, Entity.id == EntityAlias.entity_id)
+         .where(Entity.type == etype, EntityAlias.norm.like(f"{n[0]}%")))
+    q = q.where(func.length(EntityAlias.norm) <= len(n) - 4) if long_form else q.where(func.length(EntityAlias.norm) >= len(n) + 4)
+    for alias, e in g.s.execute(q.limit(2000)).all():
+        if (acronym_expands(alias, name) if long_form else acronym_expands(name, alias)):
+            return e
+    return None
 
 
 # ---- claims -------------------------------------------------------------------------

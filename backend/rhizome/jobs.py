@@ -208,7 +208,7 @@ class Worker(threading.Thread):
 def _rebuild(s: Session, p: dict[str, Any]) -> dict[str, Any]:
     from .pipeline.rebuild import rebuild
 
-    return rebuild(s, backup=p.get("backup", True))
+    return rebuild(s, backup=p.get("backup", True), force=p.get("force", False))
 
 
 @handler("retro_tag")

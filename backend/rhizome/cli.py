@@ -59,7 +59,7 @@ def main(ctx: typer.Context, data_dir: Optional[Path] = typer.Option(None, envva
 # Commands that change the library or need it to be the real one: refused in snapshot mode.
 WRITE_COMMANDS = frozenset({"serve", "mcp", "watch", "ingest", "decide", "undo", "retract", "reject", "rename", "alias",
                             "merge", "topic", "rebuild", "nightly", "enrich", "snapshot", "sync", "data-dir",
-                            "backups", "restore", "backup", "review", "gc", "edit"})
+                            "backups", "restore", "backup", "review", "gc", "edit", "recover"})
 
 
 def _require_writable() -> None:
@@ -455,30 +455,44 @@ def topic_add(name: str, definition: Optional[str] = typer.Option(None, "--defin
 
 
 @app.command()
-def rebuild(no_backup: bool = False) -> None:
-    """Recompute L2/L3 from L1 (after model / mapping / schema changes)."""
+def rebuild(no_backup: bool = False,
+            force: bool = typer.Option(False, help="Rebuild even if some stored exports cannot be replayed")) -> None:
+    """Recompute L2/L3 from L1 (after model / mapping / schema changes). Stored exports are checked
+    first; one the current version cannot read stops the rebuild unless --force (it is then listed
+    and left out)."""
     from .client import HttpClient
 
     c = _client(prefer_http=True)
     if isinstance(c, HttpClient):  # the app is running: its worker does it, no second writer
-        j = c.run_job("rebuild", {"backup": not no_backup})
+        j = c.run_job("rebuild", {"backup": not no_backup, "force": force})
         if j.get("status") != "done":
             typer.secho(j.get("error") or j.get("status"), fg="red", err=True)
             raise typer.Exit(1)
         summary = j["result"]
     else:
         from .db.session import init_db, session_scope
+        from .pipeline.rebuild import RebuildAborted
         from .pipeline.rebuild import rebuild as do_rebuild
 
         init_db()
-        with session_scope() as s:
-            summary = do_rebuild(s, backup=not no_backup)
+        try:
+            with session_scope() as s:
+                summary = do_rebuild(s, backup=not no_backup, force=force)
+        except RebuildAborted as e:
+            typer.secho(_("cli.rebuild_aborted", n=len(e.failures)), fg="red", err=True)
+            for f in e.failures:
+                typer.echo(f"  #{f['extraction_id']}  {f['work_key']}  {f['error']}", err=True)
+            raise typer.Exit(1) from None
     if _out(summary):
-        return
+        raise typer.Exit(1 if summary.get("failed") else 0)
     typer.echo(_("cli.rebuild_done", summary=json.dumps({k: v for k, v in summary.items()
-                                                          if k not in ("warnings", "decisions_skipped")})))
+                                                          if k not in ("warnings", "decisions_skipped", "failed")})))
     for w in summary.get("warnings", []):
         typer.secho(w, fg="yellow")
+    for f in summary.get("failed", []):
+        typer.secho(f"  #{f['extraction_id']}  {f['work_key']}  {f['error']}", fg="red", err=True)
+    if summary.get("failed"):
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -556,12 +570,13 @@ def bench(spec: Path, k: int = 10) -> None:
 
 
 @app.command()
-def vocab(output: Path = typer.Option(Path("rhizome-vocab.yaml"), "-o")) -> None:
+def vocab(output: Path = typer.Option(Path("rhizome-vocab.yaml"), "-o"),
+          candidates: bool = typer.Option(True, help="Include candidate topics that at least one paper is on")) -> None:
     """Export rhizome-vocab.yaml for the chat Project knowledge."""
     from .services.vocab import export_vocab
 
     with _local_session() as s:
-        output.write_text(export_vocab(s), encoding="utf-8")
+        output.write_text(export_vocab(s, include_candidates=candidates), encoding="utf-8")
     typer.echo(_("cli.vocab_done", path=output))
 
 
@@ -681,6 +696,32 @@ def diag(output: Path = typer.Option(None, "-o")) -> None:
         typer.secho(_("cli.raw_problems", missing=len(raw["missing"]), empty=len(raw["empty"]),
                       tmp=len(raw["stray_tmp"])), fg="yellow")
     typer.echo(_("cli.diag_done", path=output))
+
+
+@app.command()
+def recover(from_raw: bool = typer.Option(False, "--from-raw", help="Replay the raw/ folder into this library")) -> None:
+    """Rebuild a library from its raw/ folder alone (the captured exports, PDFs and metadata
+    responses), e.g. into a fresh data dir after the database was lost. Offline; keeps the
+    original capture times; skips captures the database already has."""
+    from .db.session import init_db
+    from .pipeline.ingest import recover_from_raw
+
+    _require_writable()
+    if not from_raw:
+        typer.echo(_("cli.recover_usage"))
+        raise typer.Exit(2)
+    init_db()
+    from .db.session import session_scope
+
+    with session_scope() as s:
+        out = recover_from_raw(s)
+    if _out(out):
+        return
+    typer.echo(_("cli.recover_done", **{k: out[k] for k in ("recovered", "already_present", "failed")}))
+    for pr in out["problems"]:
+        typer.secho(f"  {pr['sha'][:12]}  {pr['error']}", fg="red", err=True)
+    if out["failed"]:
+        raise typer.Exit(1)
 
 
 @app.command()

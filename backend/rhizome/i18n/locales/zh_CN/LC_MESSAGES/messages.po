@@ -327,3 +327,36 @@ msgstr "已暂停这张卡。"
 
 msgid "card.idea_transfer_q"
 msgstr "“{title}”里提出了哪个可以用到 {to} 的想法？"
+
+msgid "rxf.fix.move_assets"
+msgstr "保留这个列表，但把它移到 assets: 下面（assets: {{datasets: [...], methods: [...], ideas: [...]}}）。"
+
+msgid "rxf.fix.claim_text"
+msgstr "把 {field} 改名为 text（论断的内容写在 text 里）。"
+
+msgid "rxf.fix.card_q"
+msgstr "把 {field} 改名为 q。"
+
+msgid "rxf.fix.card_a"
+msgstr "把 {field} 改名为 a。"
+
+msgid "rxf.fix.paper_venue"
+msgstr "把 {field} 改名为 venue。"
+
+msgid "rxf.fix.links_to"
+msgstr "把 {field} 改名为 links_to（本文件中声明的 id 列表）。"
+
+msgid "rxf.fix.missing_field_values"
+msgstr "补上 {field}，取值只能是 {values} 之一。"
+
+msgid "rxf.report_skeleton"
+msgstr "有多处不符：请先重新阅读骨架（rhz rxf instructions，或在 Claude 里用 rhz_rxf_guide 工具），按骨架重新导出。"
+
+msgid "cli.rebuild_aborted"
+msgstr "重算在改动任何数据之前停止：有 {n} 份已保存的导出当前版本无法读取。请修正或撤回它们、升级 Rhizome，或加 --force 重新运行以跳过它们。"
+
+msgid "cli.recover_usage"
+msgstr "rhz recover --from-raw   把当前资料库目录的 raw/ 文件夹重放进数据库"
+
+msgid "cli.recover_done"
+msgstr "恢复了 {recovered} 份导出；{already_present} 份已存在；{failed} 份失败。"

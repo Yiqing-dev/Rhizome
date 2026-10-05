@@ -327,3 +327,36 @@ msgstr "Card suspended."
 
 msgid "card.idea_transfer_q"
 msgstr "Which idea from “{title}” was proposed for {to}?"
+
+msgid "rxf.fix.move_assets"
+msgstr "keep the list, but move it under assets: (assets: {{datasets: [...], methods: [...], ideas: [...]}})."
+
+msgid "rxf.fix.claim_text"
+msgstr "rename {field} to text (the claim's wording goes in text)."
+
+msgid "rxf.fix.card_q"
+msgstr "rename {field} to q."
+
+msgid "rxf.fix.card_a"
+msgstr "rename {field} to a."
+
+msgid "rxf.fix.paper_venue"
+msgstr "rename {field} to venue."
+
+msgid "rxf.fix.links_to"
+msgstr "rename {field} to links_to (a list of ids declared in this file)."
+
+msgid "rxf.fix.missing_field_values"
+msgstr "add {field}: one of {values}."
+
+msgid "rxf.report_skeleton"
+msgstr "Several parts are off: re-read the skeleton first (rhz rxf instructions, or the rhz_rxf_guide tool in Claude) and export again from it."
+
+msgid "cli.rebuild_aborted"
+msgstr "Rebuild stopped before changing anything: {n} stored export(s) cannot be read by this version. Fix or retract them, update Rhizome, or run again with --force to leave them out."
+
+msgid "cli.recover_usage"
+msgstr "rhz recover --from-raw   replays the raw/ folder of the current data dir into its database"
+
+msgid "cli.recover_done"
+msgstr "Recovered {recovered} capture(s); {already_present} already present; {failed} failed."
