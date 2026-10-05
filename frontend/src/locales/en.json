@@ -115,7 +115,8 @@
     "inbox_ignored": "{{n}} inbox files are not RXF exports and were skipped: {{files}}",
     "importing": "Importing {{done}} / {{total}}…",
     "recalling": "Recalling…",
-    "recall_chars": "{{n}} / {{max}} characters read"
+    "recall_chars": "{{n}} / {{max}} characters read",
+    "vocab_stale": "The topic vocabulary has changed since you last put it into the Project."
   },
   "action": {
     "confirm": "confirm",
@@ -179,7 +180,12 @@
     "contested": "contested",
     "n_works": "{{n}} papers",
     "subtree": "{{n}} sub-topics",
-    "no_items": "Nothing here yet"
+    "no_items": "Nothing here yet",
+    "reject": "Reject topic",
+    "reject_confirm": "Hide the topic “{{name}}” everywhere? (undo under Decisions)",
+    "merge": "Merge into…",
+    "merge_placeholder": "topic key or name to merge into",
+    "merge_confirm": "Merge this topic into {{into}}?"
   },
   "column": {
     "dataset": "Data",
@@ -291,7 +297,8 @@
     "threshold": "Similarity bar",
     "threshold_default": "default {{v}}, adjusted by your feedback",
     "threshold_reset": "reset",
-    "note_placeholder": "What connects them, and which problem might it help? (saved as your idea when marked useful)"
+    "note_placeholder": "What connects them, and which problem might it help? (saved as your idea when marked useful)",
+    "mark_read": "Mark read"
   },
   "settings": {
     "title": "Settings",

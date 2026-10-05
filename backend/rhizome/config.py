@@ -218,7 +218,8 @@ class Settings(BaseSettings):
 
     offline: bool = False  # no OpenAlex / NCBI / GitHub calls
     check_updates: bool = True  # once a day, ask GitHub whether a newer release exists (off when offline)
-    contact_email: str | None = None  # OpenAlex polite pool
+    contact_email: str | None = None  # OpenAlex polite pool, NCBI E-utilities etiquette
+    ncbi_api_key: str | None = None  # raises NCBI's limit from 3 to 10 requests per second
 
     embedder: Literal["hashing", "bge-m3"] = "hashing"
     reranker: Literal["lexical", "bge-reranker-v2-m3"] = "lexical"

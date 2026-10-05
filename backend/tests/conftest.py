@@ -23,9 +23,14 @@ def _isolated_env(tmp_path, monkeypatch):
     for var in ("APPDATA", "XDG_DATA_HOME", "HOME", "USERPROFILE"):
         monkeypatch.setenv(var, str(home))
     import rhizome.config as config
+    from rhizome.external import verify
 
     monkeypatch.setattr(config, "_current", None)
     monkeypatch.setattr(config, "_overrides", {})
+    # per-process lookup memory (NCBI answers, a spent GitHub quota) must not leak between tests
+    verify._ncbi_cache.clear()
+    monkeypatch.setattr(verify, "_github_reset_at", 0.0)
+    monkeypatch.setattr(verify, "_ncbi_last", 0.0)
 
 
 @pytest.fixture()

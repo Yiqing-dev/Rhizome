@@ -29,6 +29,7 @@ from typing import Any
 from sqlalchemy import delete, select, update
 
 from ..db.models import EDGE_TYPES, Edge, Entity, Extraction, HumanDecision, ReviewCard, ReviewItem, utcnow
+from ..text import norm
 from .canonicalize import free_key, resolve_free
 from .graph import Graph
 
@@ -49,6 +50,7 @@ def record(g: Graph, op: str, payload: dict[str, Any]) -> HumanDecision:
     if op not in OPS:
         raise DecisionError(f"unknown op {op}")
     _validate(op, payload)
+    payload = canonical_payload(g, op, payload)
     # a repeated request (double click, retried call) is the same decision, not a second row
     last = g.s.execute(select(HumanDecision).where(HumanDecision.revoked_at.is_(None))
                        .order_by(HumanDecision.id.desc()).limit(1)).scalar_one_or_none()
@@ -107,7 +109,7 @@ def _validate(op: str, p: dict[str, Any]) -> None:
         if isinstance(p.get(k), str):
             p[k] = p[k].strip()
     if op in ("edge_status", "add_edge") and p["type"] not in EDGE_TYPES:
-        raise DecisionError(f"unknown edge type {p['type']}")
+        raise DecisionError(f"unknown edge type {p['type']}; one of: {', '.join(EDGE_TYPES)}")
     if op == "edge_status" and p["status"] not in ("confirmed", "rejected", "auto"):
         raise DecisionError("status must be confirmed | rejected | auto")
 
@@ -149,8 +151,43 @@ def apply_all(g: Graph, skipped: list[dict] | None = None) -> int:
 def _need(g: Graph, key: str) -> Entity:
     e = g.by_key(key)
     if e is None:
-        raise DecisionError(f"entity {key} not found")
+        raise DecisionError(f"entity {key} not found" + _hint(g, key))
     return e
+
+
+def _hint(g: Graph, key: str) -> str:
+    """'did you mean': entities of that type whose alias is the key's name part."""
+    etype, _, name = key.partition(":")
+    if not name or etype not in ("topic", "method", "dataset", "idea", "claim", "work", "organism", "modality"):
+        return ""
+    words = name.replace(":", " ").split()
+    for n in range(len(words), 0, -1):  # the name, then shorter and shorter prefixes of it
+        hit = g.by_alias(etype, " ".join(words[:n]))
+        if hit is not None:
+            return f" (did you mean {hit.key}?)"
+    return ""
+
+
+def canonical_payload(g: Graph, op: str, p: dict[str, Any]) -> dict[str, Any]:
+    """Keys typed by hand: an alias or a differently cased key resolves to the real key before the
+    decision is stored (a payload with a mistyped key would be replayed forever)."""
+    out = dict(p)
+    for k in ("key", "from", "into", "a", "b", "src", "dst", "work", "parent"):
+        v = out.get(k)
+        if not isinstance(v, str) or g.by_key(v) is not None:
+            continue
+        etype, _, name = v.partition(":")
+        cand = None
+        if name and etype in ("topic", "method", "dataset", "idea", "claim", "work"):
+            cand = g.by_alias(etype, name) or g.by_key(f"{etype}:{name.lower()}")
+        elif not name and k == "parent":
+            cand = g.by_alias("topic", v)
+        if cand is not None:
+            out[k] = cand.key
+    if op == "create_topic" and out.get("parent") and g.by_key(out["parent"]) is None \
+            and g.by_alias("topic", out["parent"]) is None:
+        raise DecisionError(f"parent topic {out['parent']} not found")
+    return out
 
 
 def _op_merge(g: Graph, p):
@@ -179,21 +216,49 @@ def _op_distinct(g: Graph, p):
 
 
 def _op_split(g: Graph, p):
+    """Move the listed edges (and the aliases that name the new entity) from ``key`` to a new
+    entity. The edges are resolved first: a split that matches nothing is an error, not a silent
+    success with an empty new entity. The pair is remembered as distinct so auto-merge never folds
+    them back (Graph.distinct_pairs reads split decisions too)."""
+    from sqlalchemy import select as _select
+
+    from ..db.models import EntityAlias
+
     orig = _need(g, p["key"])
-    new_key = p.get("new_key") or free_key(orig.type, p["new_name"])
-    new = g.by_key(new_key) or g.create(orig.type, new_key, p["new_name"], attrs=dict(orig.attrs or {}))
+    moves = []
     for sig in p["edges"]:
         src, dst = g.by_key(sig["src"]), g.by_key(sig["dst"])
         if src is None or dst is None:
             continue
         ed = g.edge(src, dst, sig["type"])
-        if ed is None:
-            continue
+        if ed is not None and orig.id in (ed.src, ed.dst):
+            moves.append((ed, src, dst))
+    if not moves:
+        raise DecisionError(f"split {p['key']}: none of the listed edges exist")
+    new_key = p.get("new_key") or free_key(orig.type, p["new_name"])
+    p["new_key"] = new_key
+    new = g.by_key(new_key) or g.create(orig.type, new_key, p["new_name"],
+                                       attrs={k: v for k, v in (orig.attrs or {}).items() if k != "reported"})
+    for ed, src, dst in moves:
         ns = new if src.id == orig.id else src
         nd = new if dst.id == orig.id else dst
         if g.edge(ns, nd, ed.type) is None:
             ed.src, ed.dst = ns.id, nd.id
+        else:
+            g.s.delete(ed)
+    # aliases that are really the new entity's name go with it (otherwise the next paper that
+    # uses that name lands on the original again)
+    wanted = {norm(p["new_name"]), *(norm(a) for a in p.get("aliases") or [])}
+    have = set(g.s.execute(_select(EntityAlias.norm).where(EntityAlias.entity_id == new.id)).scalars())
+    for al in g.s.execute(_select(EntityAlias).where(EntityAlias.entity_id == orig.id)).scalars().all():
+        if al.norm in wanted and al.norm != norm(orig.canonical_name):
+            if al.norm in have:
+                g.s.delete(al)  # the new entity already carries this name
+            else:
+                al.entity_id = new.id
     g.s.flush()
+    g.reindex(orig)
+    g.reindex(new)
     return True
 
 

@@ -332,7 +332,7 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         from ..pipeline.graph import Graph
         from ..services.views import entity_card
 
-        e = Graph(s).by_key(key)
+        e = Graph(s).resolve_ref(key)
         if e is None:
             raise HTTPException(404, _("api.not_found"))
         return entity_card(s, e.id, touch_access=touch and not read_only)
@@ -421,10 +421,16 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         return instructions(lang)
 
     @app.get("/vocab", dependencies=A, response_class=PlainTextResponse)
-    def vocab(include_candidates: bool = True, s: Session = Depends(db)) -> str:
-        from ..services.vocab import export_vocab
+    def vocab(include_candidates: bool = True, mark: bool = False, s: Session = Depends(db)) -> str:
+        """``mark=true`` (the download button): remember what went into the Project, so the home
+        page can say when the vocabulary has moved on."""
+        from ..services.vocab import export_vocab, mark_exported
 
-        return export_vocab(s, include_candidates)
+        text = export_vocab(s, include_candidates)
+        if mark and not read_only:
+            with session_scope() as w:
+                mark_exported(w, text)
+        return text
 
     # ---- review queue & decisions ----
     @app.get("/review", dependencies=A)
@@ -505,6 +511,12 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         from ..services.synthesis import weekly_digest
 
         return weekly_digest(s, days)
+
+    @app.post("/digest/ack", dependencies=W)
+    def digest_ack(s: Session = Depends(db)) -> dict[str, Any]:
+        from ..services.synthesis import ack_digest
+
+        return {"ack_at": ack_digest(s)}
 
     @app.get("/data/{accession}", dependencies=A)
     def data(accession: str, s: Session = Depends(db)) -> dict[str, Any]:

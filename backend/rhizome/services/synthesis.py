@@ -143,8 +143,26 @@ def generate_candidates(s: Session, days: int = 7, max_items: int = 20, since: d
     return made
 
 
+ACK_KEY = "digest_ack"
+
+
+def ack_digest(s: Session) -> str:
+    """'Mark read': disputes and pairs shown so far stop counting as new."""
+    now = utcnow().isoformat()
+    row = s.get(KV, ACK_KEY)
+    if row is None:
+        s.add(KV(k=ACK_KEY, v={"at": now}))
+    else:
+        row.v = {"at": now}
+    return now
+
+
 def weekly_digest(s: Session, days: int = 7) -> dict[str, Any]:
+    ack_row = s.get(KV, ACK_KEY)
+    ack = datetime.fromisoformat(ack_row.v["at"]) if ack_row and ack_row.v and ack_row.v.get("at") else None
     since = utcnow() - timedelta(days=days)
+    if ack is not None:
+        since = min(since, ack)  # everything since you last read the digest, at least a week
     pairs = s.execute(select(ReviewItem).where(ReviewItem.kind == "synthesis", ReviewItem.status == "pending")
                       .order_by(ReviewItem.score.desc()).limit(30)).scalars().all()
     contra = s.execute(select(Edge).where(Edge.type == "contradicts", Edge.created_at >= since,
@@ -163,7 +181,7 @@ def weekly_digest(s: Session, days: int = 7) -> dict[str, Any]:
         if w and c:
             contested.append({"work": summarize(w), "claim": summarize(c), "evidence": ed.evidence})
     last = s.get(KV, "last_synthesis")
-    return {"since": since.isoformat(), "threshold": current_threshold(s),
+    return {"since": since.isoformat(), "ack_at": ack.isoformat() if ack else None, "threshold": current_threshold(s),
             "threshold_default": get_settings().thresholds.synthesis_sim,
             "last_synthesis": (last.v or {}).get("at") if last else None, "pairs": pairs_out,
             "contradictions": contested,

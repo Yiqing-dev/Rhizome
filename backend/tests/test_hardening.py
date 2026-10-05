@@ -198,8 +198,8 @@ def test_light_export_does_not_overwrite_deep_summary_and_cards_skip_dropped_ite
     monkeypatch_checks = {"CNP9990004": "not_found"}
     real = ing._check_ids
 
-    def fake(d):
-        checks, suspect = real(d)
+    def fake(d, s=None):
+        checks, suspect = real(d, s)
         checks.update(monkeypatch_checks)
         return checks, suspect + ["CNP9990004"]
 

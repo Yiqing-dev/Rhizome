@@ -45,7 +45,7 @@ export default function SettingsPage() {
 
   const [vocabCandidates, setVocabCandidates] = useState(true);
   async function downloadVocab() {
-    save(await api.vocab(vocabCandidates), "rhizome-vocab.yaml", "text/yaml");
+    save(await api.vocab(vocabCandidates, true), "rhizome-vocab.yaml", "text/yaml");
   }
 
   const instrLang = () => (i18n.language.startsWith("zh") ? "zh_CN" : "en");

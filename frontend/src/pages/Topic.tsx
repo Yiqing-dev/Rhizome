@@ -12,6 +12,7 @@ const ROLES = ["about", "applicable_to", "proposes", "uses", "produces", "evalua
 export default function TopicPage({ id, query }: { id: number; query?: URLSearchParams }) {
   const { t } = useTranslation();
   const role = query?.get("role") ?? "";
+  const [mergeInto, setMergeInto] = useState("");
   const setRole = (r: string) => go(`topic/${id}`, { role: r || undefined });
   const page = useLoad(() => api.topicAssets(id, role || undefined), [id, role]);
   const [more, setMore] = useState<Record<string, TopicItem[]>>({});
@@ -60,6 +61,15 @@ export default function TopicPage({ id, query }: { id: number; query?: URLSearch
                   {t("topic.confirm")}
                 </button>
               )}
+              {p.topic.status !== "rejected" && (
+                <button className="danger" onClick={() => {
+                  if (window.confirm(t("topic.reject_confirm", { name: p.topic.name }))) api.decide("reject_entity", { key: p.topic.key }).then(page.reload);
+                }}>{t("topic.reject")}</button>
+              )}
+              <input value={mergeInto} onChange={(e) => setMergeInto(e.target.value)} placeholder={t("topic.merge_placeholder")} style={{ minWidth: "14rem" }} />
+              <button disabled={!mergeInto.trim()} onClick={() => {
+                if (window.confirm(t("topic.merge_confirm", { into: mergeInto.trim() }))) api.decide("merge", { from: p.topic.key, into: mergeInto.trim() }).then(page.reload);
+              }}>{t("topic.merge")}</button>
             </div>
           </header>
           <div className="columns">

@@ -144,6 +144,12 @@ class RxfDocument(_Strict):
     id: str | None = Field(None, description="Id of this export, assigned by the exporting chat")
     exported_at: str | None = Field(None, description="When the export was written (ISO 8601)")
     language: str | None = Field(None, description="Main language of the free-text values, e.g. zh-CN, en")
+    instructions_version: str | float | int | None = Field(None, description="Version of the export instructions, copied as is")
+
+    @field_validator("instructions_version", mode="before")
+    @classmethod
+    def _version_text(cls, v):
+        return str(v) if isinstance(v, (int, float)) else v  # YAML reads 2026.10 as a number
     prompt_version: str | None = None
     depth: Literal["light", "deep"] = "light"
     paper: Paper

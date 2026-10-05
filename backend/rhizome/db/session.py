@@ -97,6 +97,13 @@ def make_engine(url: str, read_only: bool = False) -> Engine:
             cur.close()
 
         return engine
+    if url.startswith("postgresql"):
+        try:
+            import psycopg  # noqa: F401
+        except ImportError as e:
+            from ..i18n import _
+
+            raise RuntimeError(_("db.postgres_missing")) from e
     return create_engine(url, pool_pre_ping=True)
 
 
@@ -171,7 +178,14 @@ def backup_database(settings: Settings, tag: str = "backup") -> Path | None:
     """Consistent copy of the SQLite database (uses the online backup API), then prune old ones."""
     engine = get_engine(settings)
     if not is_sqlite(engine):
-        return None
+        # Postgres has its own dumps, but a safety copy before a rebuild must not silently vanish:
+        # a SQLite snapshot (the same file a remote machine reads) is written instead
+        from ..services.snapshot import make_snapshot
+
+        settings.backups_dir.mkdir(parents=True, exist_ok=True)
+        dst = settings.backups_dir / f"rhizome-{tag}-{datetime.now():%Y%m%d-%H%M%S}.db"
+        make_snapshot(settings, dst)
+        return dst
     src = Path(settings.db_url.split("sqlite:///", 1)[1])
     if not src.exists():
         return None
@@ -295,11 +309,39 @@ DAILY_EVERY = 20 * 3600
 
 def maybe_daily_backup(settings: Settings) -> Path | None:
     """Called at startup and periodically by the worker: one daily backup when the newest is older
-    than 20 h (so a laptop that is only open in the evening still gets one per day)."""
+    than 20 h (so a laptop that is only open in the evening still gets one per day). When the
+    backup folder is somewhere else (another disk, a synced folder), raw/ is mirrored there too."""
     daily = [p for p in list_backups(settings) if _backup_kind(p) == "daily"]
     if daily and time.time() - daily[0].stat().st_mtime < DAILY_EVERY:
         return None
-    return backup_database(settings, tag="daily")
+    out = backup_database(settings, tag="daily")
+    if settings.backup_dir is not None:
+        try:
+            mirror_raw(settings)
+        except OSError:
+            log.warning("raw mirror into %s failed", settings.backups_dir, exc_info=True)
+    return out
+
+
+def mirror_raw(settings: Settings) -> int:
+    """Copy-if-absent of raw/ (exports, PDFs, metadata) into <backups>/raw: the database backup
+    alone cannot rebuild a library, raw/ can (rhz recover --from-raw). Returns files copied."""
+    import shutil
+
+    src, dst = settings.raw_dir, settings.backups_dir / "raw"
+    if not src.is_dir():
+        return 0
+    n = 0
+    for p in src.rglob("*"):
+        if not p.is_file() or p.suffix == ".tmp":
+            continue
+        target = dst / p.relative_to(src)
+        if target.exists() and target.stat().st_size == p.stat().st_size:
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(p, target)
+        n += 1
+    return n
 
 
 def recent_backup(settings: Settings, tag: str, within: float) -> bool:

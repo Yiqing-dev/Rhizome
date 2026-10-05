@@ -26,6 +26,7 @@ export default function DigestPage() {
           <p className="sub">{t("digest.hint")}</p>
         </div>
         <button onClick={nightly.start} disabled={nightly.running}>{nightly.running ? t("jobs.running") : t("digest.run_now")}</button>
+        <button className="ghost" onClick={() => api.digestAck().then(() => d.reload())}>{t("digest.mark_read")}</button>
       </div>
       {nightly.job?.status === "failed" && <div className="notice error"><pre>{nightly.job.error}</pre></div>}
       {d.data && (

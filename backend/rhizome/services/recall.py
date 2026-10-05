@@ -194,6 +194,9 @@ def related_to_work(s: Session, work_id: int, limit: int = 5) -> list[dict[str, 
     own_ids = {work_id, *[e.id for e in mine]}
     scores: dict[int, float] = defaultdict(float)
     dims: dict[int, list[dict[str, str]]] = defaultdict(list)
+    # the best semantic match per (other paper, dimension): ten weak neighbours of one kind must
+    # not outrank one strong shared dataset
+    best_sem: dict[tuple[int, str], tuple[float, dict[str, str]]] = {}
 
     # semantic: nearest assets from other works
     rr = get_reranker()
@@ -213,26 +216,43 @@ def related_to_work(s: Session, work_id: int, limit: int = 5) -> list[dict[str, 
             for w in owners:
                 if w == work_id:
                     continue
-                scores[w] += rel
-                dims[w].append({"dimension": other.type, "mine": e.canonical_name[:200],
-                                "theirs": other.canonical_name[:200]})
+                cur = best_sem.get((w, other.type))
+                if cur is None or rel > cur[0]:
+                    best_sem[(w, other.type)] = (rel, {"dimension": other.type, "mine": e.canonical_name[:200],
+                                                       "theirs": other.canonical_name[:200]})
+    for (w, _dim), (rel, d) in best_sem.items():
+        scores[w] += rel
+        dims[w].append(d)
 
-    # structural: shared topics / organisms / datasets / methods
+    # structural: shared topics / datasets / methods, each counted once per other paper and damped
+    # by how many papers share it (an organism everyone works on says nothing)
     shared_rows = s.execute(
-        select(Edge.src, Edge.type, Entity.type, Entity.canonical_name)
+        select(Edge.src, Edge.type, Entity.id, Entity.type, Entity.canonical_name)
         .join(Entity, Entity.id == Edge.dst)
-        .where(Edge.dst.in_(select(Edge.dst).where(Edge.src == work_id)), Edge.src != work_id,
-               Edge.status != "rejected",
+        .where(Edge.dst.in_(select(Edge.dst).where(Edge.src == work_id, Edge.status != "rejected")),
+               Edge.src != work_id, Edge.status != "rejected",
                Entity.type.in_(("topic", "dataset", "method")))
     ).all()
-    for src, etype, dtype, dname in shared_rows:
-        src_ent = g.by_id(src)
-        if src_ent is None or src_ent.type != "work":
+    degree: dict[int, int] = defaultdict(int)
+    for _src, _etype, did, _dtype, _dname in shared_rows:
+        degree[did] += 1
+    seen_pairs: set[tuple[int, int]] = set()
+    for src, etype, did, dtype, dname in shared_rows:
+        if (src, did) in seen_pairs:
             continue
-        scores[src] += 0.5
+        seen_pairs.add((src, did))
+        src_ent = g.by_id(src)
+        if src_ent is None or src_ent.type != "work" or src_ent.status == "rejected":
+            continue
+        scores[src] += 0.5 / math.log(2 + degree[did])
         dims[src].append({"dimension": dtype, "mine": dname, "theirs": dname, "edge": etype})
 
-    ranked = sorted(scores, key=lambda w: -scores[w])[:limit]
+    # papers you have not opened for a long time come first among equals
+    others = [g.by_id(w) for w in scores]
+    forget = forgetting(s, [e for e in others if e is not None])
+    for w in list(scores):
+        scores[w] *= 0.5 + 0.5 * forget.get(w, 0.0)
+    ranked = sorted(scores, key=lambda w: (-round(scores[w], 6), w))[:limit]
     out = []
     for w in ranked:
         e = g.by_id(w)

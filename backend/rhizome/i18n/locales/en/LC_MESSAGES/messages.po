@@ -390,3 +390,18 @@ msgstr "Downloading {model} failed: {error}. Behind a proxy set HTTPS_PROXY; in 
 
 msgid "api.move_outside_profile"
 msgstr "{path} is outside your user profile: the folder was created readable by this account only; check its permissions if other accounts use this computer."
+
+msgid "db.postgres_missing"
+msgstr "This build cannot open a PostgreSQL library (the psycopg driver is not included). Use the pip-installed rhizome with the postgres extra, or a SQLite library."
+
+msgid "cli.check_raw_ok"
+msgstr "Raw store: every object the database knows is present."
+
+msgid "cli.check_backups"
+msgstr "Backups: {n} in {dir} (latest {last})"
+
+msgid "cli.export_done"
+msgstr "Exported {entities} entities, {edges} edges, {decisions} decisions and {cards} cards to {path}"
+
+msgid "cli.unknown_setting"
+msgstr "No setting named {name}. Settings: {keys}"

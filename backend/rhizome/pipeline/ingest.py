@@ -69,19 +69,34 @@ def _check_taxa(doc: RxfDocument) -> dict[str, str]:
     return out
 
 
-def _check_ids(doc: RxfDocument) -> tuple[dict[str, str], list[str]]:
+def _already_verified(s: Session | None, etype: str, external_id: str) -> bool:
+    """An anchored entity the library already verified needs no new lookup (rate limits)."""
+    if s is None:
+        return False
+    e = s.execute(select(Entity).where(Entity.type == etype, Entity.external_id == external_id)).scalar_one_or_none()
+    return bool(e is not None and (e.attrs or {}).get("verified") == "verified")
+
+
+def _check_ids(doc: RxfDocument, s: Session | None = None) -> tuple[dict[str, str], list[str]]:
     checks: dict[str, str] = {}
     for d in doc.assets.datasets:
         if not d.accession:
             continue
         acc = d.accession.strip()
-        checks[acc] = check_accession(acc, d.database) if accession_format_ok(acc, d.database) else "bad_format"
+        if not accession_format_ok(acc, d.database):
+            checks[acc] = "bad_format"
+        elif _already_verified(s, "dataset", acc):
+            checks[acc] = "verified"
+        else:
+            checks[acc] = check_accession(acc, d.database)
     for m in doc.assets.methods:
         if m.repo:
             repo = normalize_repo(m.repo)
             if repo is None:
                 # a URL on another host (a lab site, Hugging Face, ...) is kept as a link, not anchored
                 checks[m.repo] = "unanchored" if is_url(m.repo) else "bad_format"
+            elif _already_verified(s, "method", repo):
+                checks[repo] = "verified"
             else:
                 checks[repo] = check_repo(repo)
     suspect = [k for k, v in checks.items() if v in ("not_found", "bad_format")]
@@ -144,7 +159,7 @@ def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes
         oa, oa_status = openalex.fetch(doi=doc.paper.doi) if doc.paper.doi else (None, "no_doi")
     else:
         oa, oa_status = openalex_record, "ok" if openalex_record else "replayed"
-    checks, suspect = _check_ids(doc)
+    checks, suspect = _check_ids(doc, s)
     meta = {"openalex_id": oa["id"] if oa else None, "checks": checks, "suspect": suspect,
             "filename": filename, "taxa": _check_taxa(doc), "openalex": oa_status}
     if res.repairs:
@@ -187,7 +202,7 @@ def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes
     link_citations(g, only_work_ids={out.work.id})
     # Human decisions persist on the incremental path without re-applying them: merges act through
     # key redirects and rejected/confirmed edges keep their status in upsert_edge.
-    promote_topics(g)
+    promote_topics(g, only=out.topics)
     s.flush()
     out.work = g.by_key(out.work.key) or out.work
     new = [e.key for e in s.execute(select(Entity).where(Entity.id > max_before)).scalars()]

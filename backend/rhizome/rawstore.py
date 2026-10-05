@@ -103,7 +103,12 @@ def put(s: Session, data: bytes, kind: str, uri: str, work_key: str | None = Non
 
 def read(sha: str, kind: str) -> bytes | None:
     p = path_for(sha, kind)
-    return p.read_bytes() if p.exists() else None
+    if not p.exists():
+        import logging
+
+        logging.getLogger(__name__).warning("raw object missing: %s (rhz check lists them)", p.name)
+        return None
+    return p.read_bytes()
 
 
 def check(s: Session) -> dict[str, Any]:

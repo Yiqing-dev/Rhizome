@@ -111,10 +111,26 @@ def _out(obj: Any) -> bool:
     return False
 
 
+def _clip(text: str, width: int) -> str:
+    """Cut to a display width: East Asian wide characters count double, so Chinese titles are
+    clipped where Latin ones are, not at half the screen."""
+    import unicodedata
+
+    out, w = [], 0
+    for ch in text:
+        cw = 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+        if w + cw > width:
+            out.append("…")
+            break
+        out.append(ch)
+        w += cw
+    return "".join(out)
+
+
 def _hit_line(h: dict[str, Any]) -> str:
     src = h.get("sources") or []
-    where = f"  ← {src[0]['title'][:60]}" + (f" ({src[0]['evidence']})" if src[0].get("evidence") else "") if src else ""
-    return f"[{h['id']:>5}] {h['type']:<8} {h['name'][:90]}{where}"
+    where = f"  ← {_clip(src[0]['title'], 60)}" + (f" ({src[0]['evidence']})" if src[0].get("evidence") else "") if src else ""
+    return f"[{h['id']:>5}] {h['type']:<8} {_clip(h['name'], 90)}{where}"
 
 
 # ---- serve / watch ---------------------------------------------------------------------
@@ -277,7 +293,7 @@ def search(q: str, type: Optional[str] = typer.Option(None, "--type", "-t", help
 
 @app.command()
 def get(ref: str) -> None:
-    """Show a paper or asset card by id or key."""
+    """Show a paper or asset card by id, key, DOI, accession, repository or name."""
     c = _client(create=False)
     card = c.get(int(ref)) if ref.isdigit() else c.get_by_key(ref)
     if card is None:
@@ -294,7 +310,7 @@ def get(ref: str) -> None:
         for e in edges[:15]:
             arrow = "→" if e["direction"] == "out" else "←"
             ev = f"  ({e['evidence']})" if e.get("evidence") else ""
-            typer.echo(f"  {arrow} [{e['other']['id']}] {e['other']['type']}: {e['other']['name'][:80]}{ev}")
+            typer.echo(f"  {arrow} [{e['other']['id']}] {e['other']['type']}: {_clip(e['other']['name'], 80)}{ev}")
 
 
 @app.command()
@@ -750,6 +766,43 @@ def recover(from_raw: bool = typer.Option(False, "--from-raw", help="Replay the 
 
 
 @app.command()
+def check() -> None:
+    """Check the library's files: raw objects the database knows but the folder lacks, empty or
+    leftover files, and the backups. Exit code 1 when something is wrong."""
+    from . import rawstore
+    from .db.session import backup_status
+
+    st = get_settings()
+    with _local_session() as s:
+        raw = rawstore.check(s)
+    out = {"raw": raw, "backups": backup_status(st)}
+    if _out(out):
+        raise typer.Exit(0 if raw["ok"] else 1)
+    if raw["ok"]:
+        typer.echo(_("cli.check_raw_ok"))
+    else:
+        typer.secho(_("cli.raw_problems", missing=len(raw["missing"]), empty=len(raw["empty"]), tmp=len(raw["stray_tmp"])),
+                    fg="yellow")
+        for name in raw["missing"][:20]:
+            typer.echo(f"  missing  {name}")
+    b = out["backups"]
+    typer.echo(_("cli.check_backups", n=b["count"], last=b["last"] or "-", dir=b["dir"]))
+    raise typer.Exit(0 if raw["ok"] else 1)
+
+
+@app.command()
+def export(out: Path = typer.Option(Path("rhizome-export"), "-o", help="Folder for the JSONL files")) -> None:
+    """Export the library in an open format: entities, edges, aliases, decisions and cards as
+    JSONL keyed by entity key (never by row id), plus an index of the PDFs in raw/. Read-only:
+    nothing is marked as seen."""
+    from .services.export import export_library
+
+    with _local_session() as s:
+        counts = export_library(s, out)
+    _out(counts) or typer.echo(_("cli.export_done", path=out, **{k: counts[k] for k in ("entities", "edges", "decisions", "cards")}))
+
+
+@app.command()
 def gc() -> None:
     """Compact the library: drop cached vectors nothing uses any more and reclaim the space."""
     from sqlalchemy import text as sql
@@ -827,9 +880,15 @@ def settings_set(key: str, value: str) -> None:
         parsed = value
     if value == "default":
         parsed = None
+    from .config import Settings, Thresholds
+
+    parts = key.split(".")
+    known = {"thresholds": Thresholds.model_fields}
+    if parts[0] not in Settings.model_fields or (len(parts) > 1 and parts[1] not in known.get(parts[0], {})):
+        typer.secho(_("cli.unknown_setting", name=key, keys=", ".join(sorted(Settings.model_fields))), fg="red", err=True)
+        raise typer.Exit(2)
     patch: dict[str, Any] = {}
     cur = patch
-    parts = key.split(".")
     for p in parts[:-1]:
         cur = cur.setdefault(p, {})
     cur[parts[-1]] = parsed

@@ -282,13 +282,14 @@ def home_stats(s: Session) -> dict[str, Any]:
     by_kind = dict(s.execute(select(ReviewItem.kind, func.count()).where(ReviewItem.status == "pending")
                              .group_by(ReviewItem.kind)).all())
     from ..jobs import update_notice
+    from .vocab import vocab_status
     from .cards import due_count
 
     from .. import inbox
 
     return {"entities": by_type, "edges": s.query(Edge).count(), "review_queue": queue,
             "review_queue_by_kind": by_kind, "cards_due": due_count(s), "inbox": inbox.status(),
-            "update": update_notice(s)}
+            "update": update_notice(s), "vocab": vocab_status(s)}
 
 
 def work_sources(s: Session, entity_id: int) -> list[dict[str, Any]]:

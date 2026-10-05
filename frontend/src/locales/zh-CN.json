@@ -115,7 +115,8 @@
     "inbox_ignored": "收件箱里有 {{n}} 个文件不是 RXF 导出，已跳过：{{files}}",
     "importing": "正在导入 {{done}} / {{total}}…",
     "recalling": "正在召回…",
-    "recall_chars": "已读取 {{n}} / {{max}} 字"
+    "recall_chars": "已读取 {{n}} / {{max}} 字",
+    "vocab_stale": "主题词表自上次放进 Project 之后已有变化。"
   },
   "action": {
     "confirm": "确认",
@@ -179,7 +180,12 @@
     "contested": "有争议",
     "n_works": "{{n}} 篇论文",
     "subtree": "{{n}} 个子主题",
-    "no_items": "暂无"
+    "no_items": "暂无",
+    "reject": "否决主题",
+    "reject_confirm": "在所有地方隐藏主题“{{name}}”？（可在“决策”里撤销）",
+    "merge": "并入…",
+    "merge_placeholder": "要并入的主题 key 或名称",
+    "merge_confirm": "把这个主题并入 {{into}}？"
   },
   "column": {
     "dataset": "数据",
@@ -291,7 +297,8 @@
     "threshold": "相似度门槛",
     "threshold_default": "默认 {{v}}，已按你的反馈调整",
     "threshold_reset": "恢复默认",
-    "note_placeholder": "这两项之间是什么联系？可能帮到什么问题？（标为有用时保存为你的思路）"
+    "note_placeholder": "这两项之间是什么联系？可能帮到什么问题？（标为有用时保存为你的思路）",
+    "mark_read": "标为已读"
   },
   "settings": {
     "title": "设置",

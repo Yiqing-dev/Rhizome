@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+import pytest
 from rhizome.pipeline.graph import Graph
 from rhizome.services.recall import context_from_code, recall, related_to_work
 from rhizome.services.search import Filters, search
@@ -92,12 +93,12 @@ def test_retrieval_regression_set(library, session):
     from rhizome.services.bench import run
 
     spec = (Path(__file__).parent / "fixtures" / "bench-synthetic.yaml").read_text("utf-8")
-    g = Graph(session)
-    claim = g.by_alias("claim", "Chromatin accessibility changes precede expression changes along root "
-                                "developmental trajectories.")
-    spec = spec.replace("expect: [claim]", f"expect: ['{claim.key}']")
     res = run(session, spec)
-    assert res["passed"], res
+    assert res["passed"] and not res["missed"], res
+    from rhizome.services.bench import BenchSpecError
+
+    with pytest.raises(BenchSpecError):
+        run(session, spec.replace("topic:空间转录组", "topic~no such topic"))
 
 
 def test_recall_handles_empty_and_import_free_contexts(library, session):

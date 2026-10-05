@@ -421,6 +421,20 @@ class Graph:
     def invalidate_redirects(self) -> None:
         self._redirects = None
 
+    def at(self, when: datetime | None):
+        """``with g.at(ex.created_at):`` stamps what is created inside with that time."""
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _ctx():
+            prev = self.clock
+            self.clock = when
+            try:
+                yield self
+            finally:
+                self.clock = prev
+        return _ctx()
+
     def pinned_by_decision(self, key: str) -> bool:
         """``key`` takes part in a human merge whose other side does not exist (yet): during a
         rebuild the other export may simply come later. The entity is then created under its own
@@ -438,6 +452,36 @@ class Graph:
 
     def by_id(self, entity_id: int) -> Entity | None:
         return self.s.get(Entity, entity_id)
+
+    def resolve_ref(self, ref: str) -> Entity | None:
+        """What a person or Claude types for an entity: a key, a DOI, an accession or repository
+        (external id), or a name / alias of any type (works first, then assets)."""
+        from ..external.ids import DOI_RE, normalize_doi, normalize_repo
+
+        ref = ref.strip()
+        if not ref:
+            return None
+        e = self.by_key(ref)
+        if e is not None:
+            return e
+        doi = ref.removeprefix("https://doi.org/").removeprefix("doi:")
+        if DOI_RE.match(doi):
+            e = self.by_key(f"work:doi:{normalize_doi(doi)}") or self.by_alias("work", normalize_doi(doi))
+            if e is not None:
+                return e
+        repo = normalize_repo(ref)
+        if repo:
+            e = self.by_key(f"method:repo:{repo}") or self.by_external_id("method", repo)
+            if e is not None:
+                return e
+        e = self.s.execute(select(Entity).where(Entity.external_id == ref).order_by(Entity.id)).scalars().first()
+        if e is not None:
+            return e
+        for etype in ("work", "dataset", "method", "topic", "idea", "claim", "organism", "modality"):
+            e = self.by_alias(etype, ref)
+            if e is not None:
+                return e
+        return None
 
     def by_external_id(self, etype: str, external_id: str) -> Entity | None:
         return self.s.execute(select(Entity).where(Entity.type == etype, Entity.external_id == external_id)
@@ -716,8 +760,12 @@ class Graph:
         return item
 
     def distinct_pairs(self) -> set[frozenset[str]]:
-        return {
-            frozenset((d.payload["a"], d.payload["b"]))
-            for d in self.s.execute(select(HumanDecision).where(HumanDecision.op == "distinct",
-                                                                HumanDecision.revoked_at.is_(None))).scalars()
-        }
+        """Pairs a human said are two things: explicit `distinct` decisions and every `split`."""
+        out: set[frozenset[str]] = set()
+        for d in self.s.execute(select(HumanDecision).where(HumanDecision.op.in_(("distinct", "split")),
+                                                            HumanDecision.revoked_at.is_(None))).scalars():
+            if d.op == "distinct":
+                out.add(frozenset((d.payload["a"], d.payload["b"])))
+            elif d.payload.get("new_key"):
+                out.add(frozenset((d.payload["key"], d.payload["new_key"])))
+        return out

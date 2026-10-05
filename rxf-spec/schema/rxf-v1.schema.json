@@ -794,6 +794,25 @@
       "description": "Main language of the free-text values, e.g. zh-CN, en",
       "title": "Language"
     },
+    "instructions_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Version of the export instructions, copied as is",
+      "title": "Instructions Version"
+    },
     "prompt_version": {
       "anyOf": [
         {

@@ -271,6 +271,36 @@
 | H3 | README / 设计文档：NSIS 而非 MSI、14 类边；`scripts/check_version.py` 进 CI；安装后校验 `/health.version` 与安装包版本一致 |
 | H5 | `scripts/gen_third_party_notices.py` 汇总 Python / npm / Rust 依赖与字体许可，生成 `THIRD-PARTY-NOTICES.txt` 随安装包发布 |
 
+## low 组（四）：图谱/数据细节与测试工具（2026-10-05）
+
+| 编号 | 修改 |
+| --- | --- |
+| P6 | 单篇导入只读本文的 OpenAlex 引用列表和（json_each 查询）引用本文的记录；`promote_topics(only=...)` 一条 GROUP BY 只看本文的主题 |
+| N8 | 已锚定且已验证的实体不再联网复查；后续验证成功会把旧的 unverified 升级；GitHub 403 记住重置时间，期间不再请求 |
+| N10 | NCBI 请求带 tool/email/`ncbi_api_key`，全局锁 0.34 s 间隔，进程内缓存同一查询 |
+| D24 | bio.tools id 规范化为 `biotools:<id>` 别名并作为锚点（有无仓库都查） |
+| D27 | split 先解析边，没有匹配则报错不创建；把属于新实体的别名移过去；split 的两方计入 distinct，不会再被自动合并 |
+| A16 | 决策里的 key 可写别名或大小写不同的 key（入库前规范化）；父主题不存在报错；未知边类型列出可选值；找不到实体给出"你是不是指" |
+| D29 | 主题页可否决（reject_entity）或并入另一主题 |
+| M17 | `POST /digest/ack` "标为已读"，摘要从上次已读时间起算（至少一周） |
+| M18 | 相关论文排序：每个维度只取最佳语义匹配、共享实体按 1/log(2+度) 衰减且每篇只计一次、过滤被否决的边、乘以遗忘度、平局按 id |
+| X5 | 下载词表时记录摘要（`mark=true`），`/stats.vocab.stale` 在词表变化后提示重新放入 Project |
+| X7 | 导出指令带 `instructions_version: "2026.10"`（照抄）与 light/deep 判据；schema 接受该字段 |
+| A21 | 终端输出按东亚宽度截断；`/entity/by-key`、`rhz get`、`rhz_get` 接受 DOI、登录号、仓库地址或名称（`Graph.resolve_ref`） |
+| U7 | fsrs 固定 `>=6,<7`；无法读取的卡片状态按复习日志重放重建 |
+| H6 | `Graph.at()` 上下文管理器取代裸赋值 `clock` |
+| D31 | `rhz export -o DIR`：实体、边、决策、卡片 JSONL（按 key）+ PDF 索引 + README |
+| D32 | Postgres 下备份改为写 SQLite 快照；桌面构建缺 psycopg 时给出明确提示 |
+| D33 | 外置备份目录时每日把 raw/ 增量镜像到 `<backups>/raw`；`rhz check` 检查原始文件与备份；读取缺失对象记警告 |
+| T15 | 基准问题 `type~name` 按别名解析（缺失即报错），每题必须命中，加入干扰题；测试和发布用同一文件 |
+| T16 | `test_external.py` 用 MockTransport 覆盖 NCBI / BioStudies / Zenodo / 论坛 / OpenAlex 的各种响应，以及 OpenAlex 5xx 下的导入 |
+| T6 | MCP 走内存 JSON-RPC 会话：列工具、调用、错误用例 |
+| T8 | CI 增加非阻塞 mypy（pipeline/、services/），`[tool.mypy]` 配置 |
+| T9 | 所有 CLI 命令的 `--help` 参数化测试；`settings set` 校验键名 |
+| T10 | API 合同测试：`api.ts` 里 Stats / Hit / Card / ExportView / SystemInfo 的必填字段必须出现在响应里；Rust `js_string` 单元测试 |
+| H4 | 测试检查前端的边类型、实体类型、待审种类列表和 i18n 键与后端常量一致 |
+| H1 | 未做（`create_app` 拆分为模块级依赖是纯重构，收益不如风险，留待需要时再做） |
+
 ## 还需要你来做的（M0）
 
 - 定稿导出指令：`rxf-spec/instructions/` 里是按设计文档整理的版本，加了一条“含问号的文本不要写进花括号”——

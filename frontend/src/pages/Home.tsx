@@ -187,6 +187,7 @@ export default function Home() {
               ) : null}
             </div>
           )}
+          {s?.vocab?.stale ? <p className="hint">{t("home.vocab_stale")} <a href={href("settings")}>{t("settings.vocab_download")}</a></p> : null}
           {s?.inbox?.pending.length ? <p className="hint">{t("home.inbox_pending", { n: s.inbox.pending.length, files: s.inbox.pending.slice(0, 5).join("、") })}</p> : null}
           {s?.inbox?.ignored.length ? <p className="hint">{t("home.inbox_ignored", { n: s.inbox.ignored.length, files: s.inbox.ignored.slice(0, 5).join("、") })}</p> : null}
           {failed.data?.files.length ? (

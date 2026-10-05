@@ -95,7 +95,7 @@ def grade(s: Session, card_id: str, rating: int, now: datetime | None = None) ->
     if c is None:
         raise LookupError(card_id)
     now = now or utcnow()
-    fc = Card.from_dict(c.state) if c.state else Card(due=now.replace(tzinfo=timezone.utc))
+    fc = _card_state(s, c, now)
     fc, _log = _scheduler.review_card(fc, Rating(rating), review_datetime=now.replace(tzinfo=timezone.utc))
     c.state = fc.to_dict()
     c.due = fc.due.astimezone(timezone.utc).replace(tzinfo=None)
@@ -104,6 +104,23 @@ def grade(s: Session, card_id: str, rating: int, now: datetime | None = None) ->
     s.add(ReviewLog(card_id=c.id, rating=rating, reviewed_at=now))
     touch(s, c.entity_key)
     return {"id": c.id, "due": c.due.isoformat(), "interval_days": round((c.due - now) / timedelta(days=1), 2)}
+
+
+def _card_state(s: Session, c: ReviewCard, now: datetime) -> Card:
+    """The FSRS card for a row. A state dict written by another py-fsrs major (unreadable now) is
+    rebuilt by replaying the card's review log, so no card is ever lost to a library upgrade."""
+    if not c.state:
+        return Card(due=now.replace(tzinfo=timezone.utc))
+    try:
+        return Card.from_dict(c.state)
+    except (KeyError, TypeError, ValueError):
+        pass
+    logs = s.execute(select(ReviewLog).where(ReviewLog.card_id == c.id).order_by(ReviewLog.reviewed_at)).scalars().all()
+    first = (logs[0].reviewed_at if logs else now).replace(tzinfo=timezone.utc)
+    fc = Card(due=first)
+    for entry in logs:
+        fc, _ = _scheduler.review_card(fc, Rating(entry.rating), review_datetime=entry.reviewed_at.replace(tzinfo=timezone.utc))
+    return fc
 
 
 def suspend(s: Session, card_id: str, suspended: bool = True, entity: bool = False) -> dict[str, Any]:

@@ -119,7 +119,8 @@ export interface ReviewItem {
 export interface DueCard { id: string; q: string; a: string; entity_key: string; entity_name: string | null; origin: string; new: boolean }
 export interface Stats { entities: Record<string, number>; edges: number; review_queue: number; review_queue_by_kind: Record<string, number>; cards_due: number;
   inbox?: { watching: boolean; last_scan: string | null; pending: string[]; ignored: string[] };
-  update?: { latest: string; url: string | null; current: string } | null }
+  update?: { latest: string; url: string | null; current: string } | null;
+  vocab?: { exported_at: string | null; stale: boolean | null } }
 
 export interface Decision { id: number; op: string; payload: Record<string, unknown>; created_at: string; revoked_at: string | null }
 export interface JobView {
@@ -181,9 +182,10 @@ export const api = {
   suspendCard: (id: string, entity = false) => req<{ suspended: boolean; cards: number }>("POST", `/cards/${id}/suspend`, { suspended: true, entity }),
   dismissReview: (kind: string, topic?: string) => req<{ dismissed: number }>("POST", "/review/dismiss", { kind, topic }),
   digest: () => req<any>("GET", "/digest"),
+  digestAck: () => req<{ ack_at: string }>("POST", "/digest/ack"),
   settings: () => req<Record<string, any>>("GET", "/settings"),
   patchSettings: (b: Record<string, unknown>) => req<Record<string, any>>("PATCH", "/settings", b),
-  vocab: (includeCandidates = true) => req<string>("GET", "/vocab", undefined, { include_candidates: includeCandidates }),
+  vocab: (includeCandidates = true, mark = false) => req<string>("GET", "/vocab", undefined, { include_candidates: includeCandidates, mark }),
   rxfInstructions: (lang: string) => req<string>("GET", "/rxf/instructions", undefined, { lang }),
   system: () => req<SystemInfo>("GET", "/system"),
   openFolder: (target: "data" | "inbox" | "logs" | "models" | "backups") => req<{ opened: string }>("POST", `/system/open/${target}`),

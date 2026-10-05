@@ -26,7 +26,7 @@ dependencies = [
   "watchdog>=4.0,<7",
   "numpy>=1.26,<3",
   "babel>=2.14,<3",
-  "fsrs>=5.0,<7",
+  "fsrs>=6.0,<7",  # review_card.state is a py-fsrs dict: a new major is adopted deliberately
   "mcp>=1.2,<2",
   # TLS through the OS certificate store (campus / corporate proxies re-signing HTTPS); MIT
   "truststore>=0.9,<1",
@@ -41,7 +41,7 @@ graph = ["graspologic>=3.4"]
 postgres = ["psycopg[binary]>=3.1", "pgvector>=0.2"]
 keyring = ["keyring>=24"]
 # ruff is pinned: a new release adds rules, and lint must not turn red without a code change.
-dev = ["pytest>=8", "pip-licenses>=4.4", "ruff==0.15.20"]
+dev = ["pytest>=8", "pip-licenses>=4.4", "ruff==0.15.20", "mypy>=1.10"]
 
 [project.scripts]
 rhz = "rhizome.cli:run"
@@ -59,3 +59,9 @@ markers = ["bench: timing runs on a synthetic library (RHIZOME_BENCH=1 to enable
 
 [tool.ruff]
 line-length = 110
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = false

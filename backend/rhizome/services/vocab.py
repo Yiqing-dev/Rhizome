@@ -62,3 +62,36 @@ def export_vocab(s: Session, include_candidates: bool = True) -> str:
         header += ("# candidate_topics are not confirmed yet: prefer a topic from `topics` when one fits,\n"
                    "# reuse a candidate's name when the paper is really about it, otherwise coin a new one.\n")
     return header + yaml.safe_dump(doc, allow_unicode=True, sort_keys=False, width=100)
+
+
+VOCAB_KEY = "vocab_export"
+
+
+def _digest(text: str) -> str:
+    import hashlib
+
+    body = "\n".join(ln for ln in text.splitlines() if not ln.startswith("#"))  # the date line is not a change
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+
+
+def mark_exported(s: Session, text: str) -> None:
+    from datetime import datetime, timezone
+
+    from ..db.models import KV
+
+    v = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "digest": _digest(text)}
+    row = s.get(KV, VOCAB_KEY)
+    if row is None:
+        s.add(KV(k=VOCAB_KEY, v=v))
+    else:
+        row.v = v
+
+
+def vocab_status(s: Session) -> dict:
+    """{exported_at, stale}: stale when the vocabulary the Project holds differs from today's."""
+    from ..db.models import KV
+
+    row = s.get(KV, VOCAB_KEY)
+    if row is None or not row.v:
+        return {"exported_at": None, "stale": None}
+    return {"exported_at": row.v.get("at"), "stale": row.v.get("digest") != _digest(export_vocab(s))}

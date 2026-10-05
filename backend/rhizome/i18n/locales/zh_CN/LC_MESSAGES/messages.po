@@ -390,3 +390,18 @@ msgstr "下载 {model} 失败：{error}。如经代理请设置 HTTPS_PROXY；�
 
 msgid "api.move_outside_profile"
 msgstr "{path} 在你的用户目录之外：新建的文件夹已设为仅本账户可读；如果这台电脑还有其他账户，请检查其权限。"
+
+msgid "db.postgres_missing"
+msgstr "这个版本无法打开 PostgreSQL 资料库（未包含 psycopg 驱动）。请使用 pip 安装的 rhizome 并带 postgres 扩展，或改用 SQLite 资料库。"
+
+msgid "cli.check_raw_ok"
+msgstr "原始文件：数据库记录的对象全部存在。"
+
+msgid "cli.check_backups"
+msgstr "备份：{dir} 下共 {n} 份（最近 {last}）"
+
+msgid "cli.export_done"
+msgstr "已导出 {entities} 个实体、{edges} 条边、{decisions} 条决策和 {cards} 张卡到 {path}"
+
+msgid "cli.unknown_setting"
+msgstr "没有叫 {name} 的设置。可用设置：{keys}"

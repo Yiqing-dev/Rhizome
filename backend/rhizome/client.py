@@ -222,7 +222,7 @@ class LocalClient:
         from .services.views import entity_card
 
         with self._s() as s:
-            e = Graph(s).by_key(key)
+            e = Graph(s).resolve_ref(key)
             return entity_card(s, e.id, touch_access=touch and not self.read_only) if e else None
 
     def related(self, entity_id):

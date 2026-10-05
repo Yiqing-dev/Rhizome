@@ -11,7 +11,7 @@ from sqlalchemy import func, select, update
 
 from ..config import get_settings
 from ..db.models import Edge, Entity, Extraction, ReviewCard, Work, utcnow
-from ..external.ids import effective_database, normalize_doi, normalize_repo, normalize_zenodo
+from ..external.ids import effective_database, normalize_biotools, normalize_doi, normalize_repo, normalize_zenodo
 from ..i18n import _
 from ..inference import get_backend
 from ..rxf.schema import RxfDocument, parse_stored, uses_ids
@@ -96,11 +96,8 @@ def _strength(evidence_type: str, logic_jump: bool) -> str:
 
 
 def materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
-    g.clock = ex.created_at
-    try:
+    with g.at(ex.created_at):
         return _materialize_rxf(g, ex)
-    finally:
-        g.clock = None
 
 
 def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
@@ -276,6 +273,8 @@ def _dataset(g: Graph, d, checks: dict[str, str], authoritative: bool = False) -
         else:
             g.anchor(e, acc)
             g.merge_reported(e, attrs, authoritative=authoritative)
+            if checks.get(acc) == "verified" and (e.attrs or {}).get("verified") != "verified":
+                g.update_attrs(e, verified="verified")
             g.add_alias(e, acc)
             if d.name:
                 g.add_alias(e, d.name)
@@ -287,6 +286,9 @@ def _dataset(g: Graph, d, checks: dict[str, str], authoritative: bool = False) -
 def _method(g: Graph, m, checks: dict[str, str], authoritative: bool = False) -> Entity | None:
     attrs = {k: v for k, v in m.model_dump().items()
              if k not in ("id", "role", "evidence", "extends") and v not in (None, [])}
+    bt = normalize_biotools(m.biotools) if m.biotools else None
+    if bt:
+        attrs["biotools"] = bt
     repo = normalize_repo(m.repo) if m.repo else None
     if m.repo and (repo is None or checks.get(repo) == "not_found"):
         # not a forge repository (a lab site, Hugging Face, ...) -> a free concept that keeps the
@@ -294,20 +296,33 @@ def _method(g: Graph, m, checks: dict[str, str], authoritative: bool = False) ->
         if repo is not None or checks.get(m.repo) != "unanchored":
             attrs.pop("repo", None)
         repo = None
+    bt_alias = (f"biotools:{bt}",) if bt else ()
     if repo:
         key = f"method:repo:{repo}"
-        e = g.by_key(key) or g.by_external_id("method", repo) or g.by_alias("method", m.name)
+        e = (g.by_key(key) or g.by_external_id("method", repo) or (g.by_alias("method", bt_alias[0]) if bt else None)
+             or g.by_alias("method", m.name))
         if e is None:
             e = g.create("method", key, m.name, external_id=repo,
-                         attrs={**attrs, "verified": checks.get(repo, "unverified")}, aliases=(repo,))
+                         attrs={**attrs, "verified": checks.get(repo, "unverified")}, aliases=(repo, *bt_alias))
         else:
             g.anchor(e, repo)
             g.merge_reported(e, attrs, authoritative=authoritative)
+            if checks.get(repo) == "verified" and (e.attrs or {}).get("verified") != "verified":
+                g.update_attrs(e, verified="verified")  # a later successful check upgrades the old 'unverified'
             g.add_alias(e, m.name)
             g.add_alias(e, repo)
+            for a in bt_alias:
+                g.add_alias(e, a, source="biotools")
             g.reindex(e)
         return e
-    return resolve_free(g, "method", m.name, attrs=attrs).entity
+    if bt:  # a bio.tools id is an anchor too: the same tool from another paper lands here
+        hit = g.by_alias("method", bt_alias[0])
+        if hit is not None:
+            g.merge_reported(hit, attrs, authoritative=authoritative)
+            g.add_alias(hit, m.name)
+            return hit
+    r = resolve_free(g, "method", m.name, attrs=attrs, aliases=bt_alias)
+    return r.entity
 
 
 def _topic_relation_candidates(g: Graph, topic: Entity) -> None:
@@ -504,11 +519,8 @@ def template_card(e: Entity, work: Entity) -> tuple[str, str] | None:
 # ---- OpenAlex (T0) -----------------------------------------------------------------------
 
 def materialize_openalex(g: Graph, ex: Extraction) -> Entity:
-    g.clock = ex.created_at
-    try:
+    with g.at(ex.created_at):
         return _materialize_openalex(g, ex)
-    finally:
-        g.clock = None
 
 
 def _materialize_openalex(g: Graph, ex: Extraction) -> Entity:
@@ -524,10 +536,31 @@ def _materialize_openalex(g: Graph, ex: Extraction) -> Entity:
 
 
 def link_citations(g: Graph, only_work_ids: set[int] | None = None) -> int:
-    """cites edges among works in the library, from stored OpenAlex reference lists."""
+    """cites edges among works in the library, from stored OpenAlex reference lists. With
+    ``only_work_ids`` (one ingest) only those papers' own reference lists and the records that
+    cite them are read (a JSON query), not every OpenAlex record in the library."""
     by_oa = {w.openalex_id: w.entity_id for w in g.s.execute(select(Work).where(Work.openalex_id.isnot(None))).scalars()}
     n = 0
-    for ex in g.s.execute(select(Extraction).where(Extraction.kind == "openalex", Extraction.is_current)).scalars():
+    if only_work_ids:
+        oa_ids = [oid for oid, wid in by_oa.items() if wid in only_work_ids]
+        keys = {g.by_id(w).key for w in only_work_ids if g.by_id(w) is not None}
+        rows = list(g.s.execute(select(Extraction).where(Extraction.kind == "openalex", Extraction.is_current,
+                                                         Extraction.work_key.in_(keys))).scalars())
+        if oa_ids and g.s.get_bind().dialect.name == "sqlite":
+            from sqlalchemy import text as sql
+
+            marks = ",".join(f":o{i}" for i in range(len(oa_ids)))
+            ids = g.s.execute(sql(
+                "select distinct e.id from extraction e, json_each(e.output, '$.referenced_works') r "
+                f"where e.kind = 'openalex' and e.is_current and r.value in ({marks})"),
+                {f"o{i}": o for i, o in enumerate(oa_ids)}).scalars().all()
+            seen = {x.id for x in rows}
+            rows += [x for x in g.s.execute(select(Extraction).where(Extraction.id.in_(ids))).scalars() if x.id not in seen]
+        elif oa_ids:  # other dialects: the full scan, as before
+            rows = list(g.s.execute(select(Extraction).where(Extraction.kind == "openalex", Extraction.is_current)).scalars())
+    else:
+        rows = list(g.s.execute(select(Extraction).where(Extraction.kind == "openalex", Extraction.is_current)).scalars())
+    for ex in rows:
         src_id = by_oa.get(ex.output.get("id"))
         if src_id is None:
             continue
@@ -547,32 +580,37 @@ def materialize_retro(g: Graph, ex: Extraction) -> None:
     topic = g.by_key(ex.output["topic"])
     if topic is None:
         return
-    g.clock = ex.created_at
-    try:
+    with g.at(ex.created_at):
         for a in ex.output.get("assignments", []):
             e = g.by_key(a["key"])
             if e is not None:
                 g.upsert_edge(e, topic, a["relation"], confidence=a["confidence"], extraction_id=ex.id,
                               attrs={"via": "retro_tag"})
-    finally:
-        g.clock = None
 
 
 # ---- topics ----------------------------------------------------------------------------------
 
-def promote_topics(g: Graph) -> int:
-    """candidate -> active once linked to >= N works (confirmed topics are already active)."""
+def promote_topics(g: Graph, only: list[Entity] | None = None) -> int:
+    """candidate -> active once linked to >= N works (confirmed topics are already active). One
+    GROUP BY over the candidates (or only the given ones, after a single ingest)."""
+    from sqlalchemy.orm import aliased
+
     need = get_settings().thresholds.topic_promote_works
+    W = aliased(Entity)
+    q = (select(Entity, func.count(func.distinct(Edge.src)).label("works"))
+         .join(Edge, Edge.dst == Entity.id).join(W, W.id == Edge.src)
+         .where(Entity.type == "topic", Entity.status == "candidate", Edge.type.in_(("about", "applicable_to")),
+                Edge.status != "rejected", W.type == "work")
+         .group_by(Entity.id).having(func.count(func.distinct(Edge.src)) >= need))
+    if only is not None:
+        ids = [t.id for t in only if t.status == "candidate"]
+        if not ids:
+            return 0
+        q = q.where(Entity.id.in_(ids))
     n = 0
-    for t in g.s.execute(select(Entity).where(Entity.type == "topic", Entity.status == "candidate")).scalars():
-        works = g.s.execute(
-            select(func.count(func.distinct(Edge.src))).join(Entity, Entity.id == Edge.src)
-            .where(Edge.dst == t.id, Edge.type.in_(("about", "applicable_to")), Edge.status != "rejected",
-                   Entity.type == "work")
-        ).scalar_one()
-        if works >= need:
-            t.status = "active"
-            n += 1
+    for t, _works in g.s.execute(q).all():
+        t.status = "active"
+        n += 1
     return n
 
 

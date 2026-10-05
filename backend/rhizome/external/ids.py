@@ -111,3 +111,14 @@ def normalize_repo(url: str) -> str | None:
 def is_url(text: str) -> bool:
     p = urlparse(text.strip())
     return p.scheme in ("http", "https") and bool(p.hostname)
+
+
+def normalize_biotools(value: str) -> str | None:
+    """'https://bio.tools/scanpy', 'biotools:scanpy', 'Scanpy' -> 'scanpy' (bio.tools ids are
+    lowercase slugs); None when it is not one."""
+    v = value.strip()
+    for prefix in ("https://bio.tools/", "http://bio.tools/", "bio.tools/", "biotools:"):
+        if v.lower().startswith(prefix):
+            v = v[len(prefix):]
+    v = v.strip("/").lower()
+    return v if BIOTOOLS_RE.match(v) else None

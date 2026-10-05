@@ -37,6 +37,10 @@ jobs:
           RHIZOME_OFFLINE: "1"
       - name: Lint
         run: ruff check backend
+      - name: Type check (informational)
+        if: runner.os == 'Linux' && matrix.python == '3.11'
+        continue-on-error: true
+        run: mypy backend/rhizome/pipeline backend/rhizome/services
       - name: Dependency licenses (no GPL/AGPL)
         if: runner.os == 'Linux'
         shell: bash

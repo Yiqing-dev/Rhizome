@@ -1,5 +1,7 @@
 # Retrieval regression set over the synthetic examples (the real M0 set lives outside the repo).
-threshold: {hit_at_5: 0.8}
+# Every question must hit within 5 (the test asserts it; the release build runs the same file).
+# `type~name` resolves an entity by alias at run time (claims have hashed keys).
+threshold: {hit_at_5: 1.0}
 questions:
   - q: which dataset profiled Arabidopsis root nuclei with snRNA-seq?
     expect: [dataset:GSE999001]
@@ -11,10 +13,17 @@ questions:
     expect: [method:domaingat]
     types: [method]
   - q: does chromatin opening come before expression changes?
-    expect: [claim]
+    expect: ["claim~Chromatin accessibility changes precede expression changes along root developmental trajectories."]
     types: [claim]
   - q: 空间转录组
     expect: [topic:空间转录组]
   - q: mouse bone marrow single-cell data used in a GRN benchmark
     expect: [dataset:GSE999002]
     types: [dataset]
+  # distractors: two datasets, two GRN methods; the question must pick the right one of the pair
+  - q: human and mouse scRNA-seq benchmark dataset, not the plant root atlas
+    expect: [dataset:GSE999002]
+    types: [dataset]
+  - q: regulon inference method evaluated in the benchmark, the one with a GitHub repository
+    expect: [method~SCENIC]
+    types: [method]

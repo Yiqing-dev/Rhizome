@@ -350,3 +350,17 @@ fn main() {
         }
     });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::js_string;
+
+    #[test]
+    fn js_string_escapes_what_breaks_a_script_or_a_page() {
+        assert_eq!(js_string(r#"a"b"#), r#""a\"b""#);
+        assert_eq!(js_string("x\\y"), r#""x\\y""#);
+        assert_eq!(js_string("l1\nl2\r"), r#""l1\nl2""#);
+        assert_eq!(js_string("<script>"), r#""&lt;script&gt;""#);
+        assert_eq!(js_string("研究 资料"), "\"研究 资料\"");
+    }
+}

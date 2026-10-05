@@ -10,7 +10,8 @@ rxf_version: 1
 id: rxf-2025-0001                     # optional id of this export
 exported_at: 2025-06-01T10:30:00+08:00
 language: zh-CN                       # main language of the text values
-prompt_version: deep-review-v2        # version of the review prompt used in this chat
+prompt_version: deep-review-v2        # copy as is: the version of these instructions, not something to invent
+instructions_version: "2026.10"       # copy as is
 depth: deep                           # light | deep
 paper:
   doi: 10.xxxx/xxxx
@@ -62,7 +63,7 @@ When exporting RXF:
 - claims come from the conclusions of the logic chain; set logic_jump: true for those marked as a logical leap. Every claim needs evidence (its location in the paper).
 - For topics prefer canonical names from rhizome-vocab.yaml in the Project knowledge (candidate_topics may be reused when they fit); otherwise create a short English noun phrase and give its other names in aliases (the spelled-out form of an acronym, the Chinese name), so it merges with an existing topic instead of becoming a second one. relation is only about or applicable_to.
 - review_cards: 3–5 questions covering the most memorable assets and claims, answerable without the paper.
-- Set depth to the actual depth of this discussion.
+- Set depth to the actual depth of this discussion: deep only when the logic chain was worked through and the paper was examined section by section (then claims, issues, review_cards); light for a summary-level read.
 - Give topics, claims, datasets, methods, ideas and user_insights short ids unique within the file (t1, c1, d1, m1, i1, u1). links_to and about may only contain those ids, never names; transfer is always a nested {type, to, barrier} object; topics have no `new` flag (Rhizome decides that).
 - Field names are fixed English; do not add fields outside the skeleton. Values may be in any language.
 - Write text containing question marks, colons or quotes (especially review_cards questions) in block style (q: / a: on their own lines), never inside {...} flow mappings.
