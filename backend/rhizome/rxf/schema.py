@@ -80,7 +80,7 @@ class Dataset(_Item):
     tissue: str | None = None
     modality: str | None = None
     scale: str | int | None = None
-    public: bool | None = None
+    public: Literal["yes", "no", "unknown"] | bool | None = None  # true | false | unknown, like maintained
     role: Literal["uses", "produces"] = "uses"
     evidence: str | None = None
 

@@ -119,7 +119,7 @@ def test_vocab_staleness_and_instruction_version(library, session):
     assert vocab_status(session)["stale"] is True
     for lang in ("en", "zh_CN"):
         text = instructions(lang)
-        assert 'instructions_version: "2026.10"' in text and "copy as is" in text
+        assert 'instructions_version: "2026.10"' in text  # the version the exporter copies as is
     from rhizome.rxf.loader import load_rxf
 
     assert load_rxf(example("light-scenic-benchmark.yaml").replace("rxf_version: 1", "rxf_version: 1\ninstructions_version: 2026.10")).ok  # unquoted: a float, still read

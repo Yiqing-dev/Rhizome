@@ -301,10 +301,17 @@
 | H4 | 测试检查前端的边类型、实体类型、待审种类列表和 i18n 键与后端常量一致 |
 | H1 | 未做（`create_app` 拆分为模块级依赖是纯重构，收益不如风险，留待需要时再做） |
 
+## 导出指令改版（2026-10-05）
+
+设计文档 10-04 版定为规格后对照代码核查，改了四处：`Dataset.public` 像 `maintained` 一样接受 unknown（之前
+"unknown" 会校验失败）；骨架和导出指令换成设计文档里的 17 条规则，中英两版，并补上代码已有而骨架漏掉的
+`claims.stance`、`topics.aliases`、`instructions_version` 和 database 枚举里的 GSA；两份指令里的骨架进入契约测试
+（`test_instruction_skeleton_is_a_valid_export`），骨架里的每个字段和枚举值都必须通过 schema；设计文档里 ONNX、MSI、
+"骨架由 Pydantic 生成"几处与实现不符的说法改回实际情况。
+
 ## 还需要你来做的（M0）
 
-- 定稿导出指令：`rxf-spec/instructions/` 里是按设计文档整理的版本，加了一条“含问号的文本不要写进花括号”——
-  写示例时真的踩到了这个 YAML 坑。
+- 导出指令已按设计文档 10-04 版定稿（见上一节）；用一段时间后若再出现校验失败，把错误报告贴回来改规则。
 - 预注册 benchmark 问题和门槛：按 `rhz bench` 的格式写 `questions.yaml`，放在仓库之外（含个人数据）。
 - 准备 G3 标注集（约 100 对实体、50 对论断），用来校准规范化阈值和 NLI。
 - 选定真实模型后：`pip install "rhizome[models]"`，`rhz settings set embedder bge-m3`，然后 `rhz rebuild`。

@@ -213,6 +213,14 @@
         "public": {
           "anyOf": [
             {
+              "enum": [
+                "yes",
+                "no",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
               "type": "boolean"
             },
             {

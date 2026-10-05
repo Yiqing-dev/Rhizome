@@ -1,6 +1,6 @@
 # Rhizome 开发文档
 
-Oct 3, 2026 · @YIQING WANG
+Oct 5, 2026 · @YIQING WANG
 
 ## 概述
 
@@ -70,7 +70,7 @@ Rhizome 是一个个人文献资产图谱。它把论文拆成数据、方法、
 | 类型 | 锚定 ID | 说明 |
 | --- | --- | --- |
 | Work 论文 | OpenAlex work ID；DOI 作为别名 | 预印本和正式发表版合并为同一个节点 |
-| Dataset 数据集 | GEO / SRA / CNGB / ArrayExpress accession | 被多篇论文使用的数据只存一个节点 |
+| Dataset 数据集 | GEO / SRA / ENA / GSA / CNGB / ArrayExpress / Zenodo accession；没有 accession 时用 name，按自由概念规范化 | 被多篇论文使用的数据只存一个节点 |
 | Method 方法/工具 | repo URL 或 bio.tools ID；没有代码时用自由概念 | 包括算法、软件、分析流程 |
 | Idea 思路 | 无（自由文本 + 向量） | 脱离原课题表述的可迁移思路 |
 | Claim 论断 | 无（自由文本 + 向量） | 一条可以被支持或反驳的命题，附成立条件；多篇论文可以指向同一个论断 |
@@ -95,6 +95,7 @@ Rhizome 是一个个人文献资产图谱。它把论文拆成数据、方法、
 | is\_a | Topic → Topic | 主题层级 |
 | of\_organism | Dataset / Work → Organism | 物种 |
 | of\_modality | Dataset / Method → Modality | 模态 |
+| relates\_to | 你的观点（origin 为 user 的 Idea）→ Claim / Method / Dataset / Idea / Topic | 这条观点联系到的节点，来自 RXF 的 links\_to |
 
 每条边都带以下属性：置信度、来源抽取记录、原文证据位置、状态（自动 / 已确认 / 已拒绝）。`applicable_to` 边额外带两个字段：迁移类型（跨物种 / 跨模态 / 跨问题）和迁移障碍。
 
@@ -126,62 +127,114 @@ RXF（Rhizome Exchange Format）是 Rhizome 唯一的输入格式。讨论结束
 
 选 YAML 而不选 JSON，是因为逻辑链、思路这类多行文本在 YAML 里不需要转义，LLM 输出时出错更少。入库时先转成 JSON，再用 JSON Schema 校验。
 
+骨架里 # 后为说明：“均必填”表示 light 和 deep 都必填；“必填”表示 deep 必填、light 选填；其余为选填。
+
 ```yaml
-rxf_version: 1
-prompt_version: deep-review-v2        # 生成时所用审稿提示词的版本
-depth: deep                           # light | deep
-paper:
-  doi: 10.1101/xxxx
-  title: ...
-  year: 2025
-  type: [research, tool]              # research | tool | resource | benchmark | review | protocol
-  organisms: [Arabidopsis thaliana]
+rxf_version: 1                        # 均必填
+exported_at: 2026-10-04               # 均必填；YYYY-MM-DD
+prompt_version: deep-review-v2        # 均必填；生成时所用审稿提示词的版本，没有时写 unversioned
+instructions_version: "2026.10"       # 均必填；照抄，不要自己编
+depth: deep                           # 均必填：light | deep
+language: zh                          # 均必填：自由文本的主要语言，zh | en
+paper:                                # 均必填
+  doi: "10.1101/xxxx"                 # 有则必填；arXiv 写 10.48550/arXiv.<编号>，不带版本号
+  title: "..."                        # 均必填，原文标题
+  year: 2025                          # 均必填
+  venue: "..."
+  type: [research, tool]              # 均必填，可多选：research | tool | resource | benchmark | review | protocol
+  organisms: [Arabidopsis thaliana]   # 拉丁学名
   modalities: [snRNA-seq, scATAC-seq]
-tldr: [做了什么, 最重要的发现, 最大的保留意见]
-topics:                               # 优先用词表里的规范名，没有再新建
-  - {name: GRN inference, relation: about}
-  - {name: spatial domain detection, relation: applicable_to}
-claims:                               # 取自逻辑链的结论 D
-  - text: ...
+tldr: ["做了什么", "最重要的发现", "最大的保留意见"]   # 均必填，恰好 3 条
+topics:                               # 均必填，至少 1 条；优先用词表里的规范名，不标 new
+  - {id: t1, name: GRN inference, relation: about, aliases: [gene regulatory network inference, 基因调控网络推断]}   # relation: about | applicable_to
+  - {id: t2, name: spatial domain detection, relation: applicable_to}
+claims:                               # 必填；取自逻辑链的结论 D
+  - id: c1                            # 文件内 id：t / c / d / m / i / u + 序号
+    text: "..."
     evidence_type: causal             # causal | correlational | speculative
-    evidence: Fig. 3B
-    boundary: ...
+    evidence: "Fig. 3B"               # 原文位置，均必填
+    boundary: "..."                   # 适用边界
     logic_jump: false
-assets:
+    stance: supports                  # supports | contradicts；原文证据与该命题相反时写 contradicts，否则可省略
+assets:                               # 有则必填
   datasets:
-    - {accession: GSE000000, database: GEO, organism: ..., tissue: ..., modality: ..., scale: ..., public: true}
+    - id: d1
+      name: "..."                     # 通用短名，不超过 5 个词；没有 accession 时必填
+      accession: GSE000000            # 原文给出才写
+      database: GEO                   # 必填：GEO | SRA | ENA | GSA | CNGB | ArrayExpress | Zenodo | other
+      role: produces                  # produces | uses
+      organism: "..."                 # 非生物数据删除
+      tissue: "..."
+      modality: "..."
+      scale: "..."                    # 按原文转述
+      public: true                    # true | false | unknown
   methods:
-    - {name: ..., repo: https://github.com/..., role: proposes, io: ..., maintained: unknown}
+    - id: m1
+      name: "SCENIC+"                 # 通用短名，不超过 5 个词
+      role: proposes                  # proposes | uses | evaluates
+      extends: ["SCENIC"]             # 被它改进的方法的短名
+      repo: "https://github.com/..."
+      io: "输入 → 输出"
+      maintained: unknown             # true | false | unknown
   ideas:
-    - text: ...                       # 脱离原课题的一句话
-      transfer: {type: cross-species, to: ..., barrier: ...}
+    - id: i1
+      text: "..."                     # 脱离原课题的一句话
+      transfer: {type: cross-species, to: t2, barrier: "..."}   # 必须嵌套；type: cross-species | cross-modality | cross-problem；to 填主题 id；barrier 选填
       origin: model                   # model | user
-issues:
-  - {severity: major, location: ..., text: ..., test: ...}
+issues:                               # 必填
+  - {severity: major, location: "...", text: "...", test: "..."}   # severity: minor | major | critical
 user_insights:                        # 只收录我在讨论中说出的判断和联想
-  - text: ...
-    links_to: [...]
-review_cards:                         # 复习卡片，导出时由 AI 出题
-  - {q: ..., a: ..., about: ...}
+  - {id: u1, text: "...", links_to: [c1, m1]}   # 只能引用本文件内的 id
+review_cards:                         # 必填，3–5 张
+  - q: "..."                          # 只能引用本文件内的 id
+    a: "..."
+    about: d1
 ```
 
-**导出指令**：把上面的骨架和下面这段规则一起放进 Claude 和 ChatGPT 的 Project 指令里。之后每次讨论结束，只需要说一句“导出 RXF”。
+**文件内 id**：`id` 只在单份 RXF 内有效，作用是让 `links_to` 和 `about` 有确定的引用对象。入库时它们会被解析成库里的实体 ID，本身不进入 L2。`id` 是可选字段；但只要 `links_to` 或 `about` 引用了某个 id，这个 id 就必须在本文件里存在，否则校验失败。
+
+**数据集标识**：数据集靠 accession 或 name 识别，两者至少有一个，否则校验失败。有 accession 时，database 填它所属的库（GEO / SRA / ENA / GSA / CNGB / ArrayExpress / Zenodo），不在枚举里的库填 other；没有 accession 时（非生物数据、需要订阅的数据、自建数据），name 必填，database 填 other。name 只写原文或领域里通用的短名，例如 GKX、nuScenes、Tabula Sapiens；没有通用名时用“第一作者 年份 + 数据类型”。name 要进别名表做精确匹配，写成长描述就不可能和其他论文里的同一份数据对上；描述性内容写进 tissue、modality、scale。数据集名和托管平台名（Hugging Face、GitHub、Kaggle）不写进 database。
+
+**布尔值**：`maintained` 和 `public` 的取值是 true / false / unknown，schema 里的类型为布尔值或字面量 "unknown"（历史导出里的 "yes" / "no" 也接受）。导出端不能写 yes / no：PyYAML 按 YAML 1.1 解析，会把 yes、no、on、off 转成布尔值。
+
+**导出指令**：放进 Claude 和 ChatGPT 的 Project 指令时，先放下面这段规则，再放上面的骨架；两段一起单独贴进对话也能用。之后每次讨论结束，只需要说一句“导出 RXF”。中英两个版本由 `rhz rxf instructions`（或设置页、MCP 的 `rhz_rxf_guide`）给出，下面是中文版。
 
 ```
-导出 RXF 时：
-- 只输出一个 YAML 代码块，代码块外不写任何内容。
-- 数字、accession、证据位置必须来自原文；没有的字段整个删除，不填占位符。
-- user_insights 只收录我在本次对话中说出的判断和联想，按我的原意转述，不要把你的观点归到我名下。
-- ideas 中由你提出的标 origin: model，由我提出的标 origin: user。
-- claims 取自逻辑链的结论；带【逻辑跳跃】的设 logic_jump: true。
-- topics 优先使用 Project 知识里 rhizome-vocab.yaml 的规范名；没有合适的再新建，用简短的英文名词短语；relation 只能是 about 或 applicable_to。
-- review_cards 出 3–5 道题，覆盖最值得记住的资产和论断，题目要能脱离原文作答。
-- depth 按本次讨论的实际深度填写。
+【Rhizome 导出规则 · RXF v1】
+当我说"导出 RXF"或"export RXF"时，按以下规则和其后的骨架输出本次讨论的论文。骨架里 # 后为说明："均必填"表示 light 和 deep 都必填；"必填"表示 deep 必填、light 选填；其余为选填。
+
+输出
+1. 能创建文件时，生成一个 .yaml 文件，文件名为 {year}_{第一作者姓}_{标题前3个词}.yaml：全部小写，词之间用 - 连接，只保留 a–z、0–9、- 和 _（例：2026_wang_birds-eye-view-informed-reasoning.yaml）。不能创建文件时，只输出一个 yaml 代码块，前后不写任何文字。
+2. 只用骨架里的字段名和枚举值，不增加字段。特别禁止：topics 里的 new；ideas 里摊平的 transfer_type / transfer_to / barrier；database 里写枚举以外的值。
+3. 输出必须能被标准 YAML 解析器解析：包含冒号、#、引号、问号或以特殊符号开头的字符串，用双引号包起来，或者用多行块写法（review_cards 的 q: / a: 各占一行，不写进 {...} 花括号里）；布尔值只写 true / false，不写 yes / no。
+4. 选填字段没有内容或不适用时，整个字段删除。不写 null、空字符串、"未报告""不适用"或任何占位符。
+
+内容
+5. 数字、accession、证据位置、repo 只能来自原文，不得推算或补全。
+6. DOI：有 DOI 就写；arXiv 论文写 10.48550/arXiv.<编号>，不带版本号。
+7. 自由文本用本次对话的主要语言；字段名、枚举值、topics.name、物种拉丁学名用英文；论文标题保持原文。
+8. depth：本次做过完整的深度审稿（逐节审读、理清逻辑链，于是有 claims、issues、review_cards）写 deep，否则写 light。
+9. claims 取自逻辑链的结论 D，一条写一个可以独立成立的命题。evidence_type 按证据的实际类型判断，不按作者的说法；每条都要有 evidence（原文位置）；带【逻辑跳跃】的设 logic_jump: true；原文证据与该命题相反时设 stance: contradicts，否则不写 stance。
+10. user_insights 只收录我在本次对话中明确说出的判断、联想和计划，按原意转述；你的观点不得放进这里。我没有说过，就删除整段。
+11. ideas：我提出的 origin 写 user，你提出的写 model；迁移信息只能写成嵌套的 transfer: {type, to, barrier}，to 填本文件里目标主题的 id。
+12. datasets：
+   - 有 accession：照原文写；database 填它所属的库（GEO、SRA、ENA、GSA、CNGB、ArrayExpress、Zenodo），不属于这些库的填 other。
+   - 没有 accession：name 必填，database 填 other。
+   - name 用原文或领域里通用的短名，不超过 5 个词（如 GKX、nuScenes、Tabula Sapiens）；没有通用名时，用"第一作者 年份 + 数据类型"（如 Lin 2026 duckweed snRNA-seq）。描述性内容写进 tissue / modality / scale，不写进 name。
+   - 数据集名和托管平台名（Hugging Face、GitHub、Kaggle、项目官网）一律不写进 database。
+   - public：全部可以公开下载写 true；部分公开或需要订阅写 false；原文没有说明写 unknown。
+13. methods：name 只写文献里通用的短名（如 MFCF、SCENIC+），不超过 5 个词；方法做什么写进 io。extends 只填它在其基础上改进的方法，不包括只是调用的组件；被改进的方法也列在本文件 methods 里时，名称与它的 name 完全一致。
+14. topics：如果对话或 Project 知识里有 rhizome-vocab.yaml，优先使用其中的规范名（candidate_topics 里合适的也可以沿用）；没有合适的才新建，用简短的英文名词短语，并在 aliases 里给出它的其他叫法（缩写的全称、中文名），这样会并入已有主题而不是另起一个。about 指论文本身研究的主题；applicable_to 指论文的资产可以用于、但论文本身并不研究的主题。
+15. id：topics 用 t1、t2…，claims 用 c1…，datasets 用 d1…，methods 用 m1…，ideas 用 i1…，user_insights 用 u1…；user_insights.links_to、review_cards.about 和 transfer.to 只能引用这些 id，不写名称。
+16. review_cards：3–5 张，题目必须能脱离原文作答，答案一到两句话。
+
+自查（写入或输出前完成，不要输出自查过程；能运行代码时，先用 YAML 解析器解析一遍，再逐项检查）
+17. 必填字段齐全；没有骨架之外的字段；枚举值合法；id 唯一；links_to、about 和 transfer.to 都指向本文件里存在的 id；每个 dataset 都有 accession 或 name，database 在枚举内；dataset 和 method 的 name 都是短名；没有占位符。
 ```
 
 **词表同步**：词表每次变化后，Rhizome 导出一份 rhizome-vocab.yaml（主题规范名及其中英别名），放进 Claude 和 ChatGPT 的 Project 知识里。这样导出时就直接使用规范名，入库时大部分主题在别名精确匹配这一步就能命中，审核队列也随之变短。
 
-格式漂移由两层机制兜住。第一，每份文档都带 `rxf_version`，入库时按对应版本的 schema 校验。第二，校验失败的文件会被移到 error/ 目录并附一份错误报告；把报告贴回聊天，让 AI 修正后重新导出即可。
+格式漂移由三层机制兜住。第一，字段和枚举只在代码里的 Pydantic 模型维护一份，JSON Schema 由它生成（`rhz rxf schema`）；骨架和导出指令手工维护，CI 把骨架当作正例跑契约测试（骨架里的每个字段和枚举值都必须通过 schema），并检查 rxf-spec 与后端内置的副本一致。schema 必须接受骨架允许的所有字段和枚举值，并拒绝骨架之外的字段；骨架里的必填标注约束的是导出端，schema 可以更宽。第二，每份文档都带 `rxf_version`，入库时按对应版本的 schema 校验，并检查文件内 id 引用是否完整。第三，校验失败的文件会被移到 error/ 目录并附一份错误报告；把报告贴回聊天，让 AI 修正后重新导出即可。
 
 ## 处理流水线
 
@@ -228,12 +281,13 @@ RXF 里的 user\_insights，也就是你在讨论中说出的判断和联想，�
 
 规范化分两条路径处理：锚定类实体靠外部 ID 自动对齐，自由概念靠“召回 + 判定 + 阈值”处理。人工只处理中间置信度的那一段。
 
-**锚定类实体（Dataset、Work、Organism、Modality、有 repo 的 Method）**
+**锚定类实体（有 accession 的 Dataset、Work、Organism、Modality、有 repo 的 Method）**
 
 - 抽取结果必须带上外部 ID。ID 先做格式校验（正则），再通过 API 确认它确实存在：GEO/SRA 用 NCBI E-utilities，Work 用 OpenAlex，repo 用 GitHub API。
+- Dataset 的 accession 格式按 database 校验，对不上就报错：GEO 为 GSE/GSM/GDS/GPL，SRA 为 SRP/SRR/SRX/SRS/PRJNA 及 ENA、DDBJ 的镜像前缀，ENA 为 PRJEB/ERP/ERR/ERX/ERS/SAMEA，GSA 为 PRJCA/CRA/CRR/CRX/HRA/OMIX，CNGB 为 CNP/CNX/CNR/CNS/CNA，ArrayExpress 为 E-XXXX-<编号>，Zenodo 为 10.5281/zenodo.<编号> 或纯编号。
 - 校验不通过的 ID 不入库，并标记该次抽取疑似幻觉。LLM 编造的 accession 是这一层最主要的风险。
 
-**自由概念（Topic、Idea、Claim、没有 repo 的 Method）**
+**自由概念（Topic、Idea、Claim、没有 repo 的 Method、没有 accession 的 Dataset）**
 
 1. 别名精确匹配：先做归一化（大小写、标点），再查中英文别名表。词表同步到聊天之后，大部分主题在这一步就能命中。
 2. 向量召回：在同类实体中取 top-5 作为候选。
@@ -380,7 +434,7 @@ Rhizome 按通用软件来开发：单用户，Windows 优先，macOS 和 Linux 
 **代码与测试**
 
 - 单仓库，目录分为 backend、frontend、desktop、rxf-spec、docs。
-- RXF 规范独立做版本管理，附带 JSON Schema 和示例文件，同时作为契约测试的输入。
+- RXF 规范独立做版本管理，附带 JSON Schema 和示例文件，同时作为契约测试的输入。JSON Schema 由 Pydantic 模型生成；骨架和导出指令手工维护，CI 以骨架为正例做契约测试。
 - 测试分三层：单元测试；RXF 契约测试；检索回归集（就是 M0 预注册的 benchmark 问题）。CI 用 GitHub Actions，在 Windows 和 Linux 上都要跑。
 - 版本号遵循语义化版本；数据库变更一律走 Alembic 迁移，每次升级前自动备份。
 - 日志写在本地文件里；提供一键导出诊断包，诊断包里不含论文内容。
@@ -389,7 +443,7 @@ Rhizome 按通用软件来开发：单用户，Windows 优先，macOS 和 Linux 
 
 - 后端用 PyInstaller 打成单个可执行文件，作为 Tauri 桌面外壳的 sidecar；Windows 安装包为 NSIS（exe）。
 - 所有模型（bge-m3、reranker、NLI、Qwen3.5-2B）都不打进安装包，用到对应功能时才下载，每个都可以单独关闭，以控制安装包体积。
-- 更新通过 Tauri 自带的更新机制完成，更新前自动备份数据目录。
+- 更新：后台每天查一次 GitHub Release，有新版时界面顶部提示并链接到安装包；安装前自动备份数据目录。
 
 **开源准备（开发测试阶段闭源）**
 
@@ -416,7 +470,7 @@ G2 是整个计划的证伪点：如果检索基线达不到 M0 预注册的阈�
 | 项目挤占科研时间 | 半途而废 | 每个里程碑结束时都能独立使用，任何时候停下都不白做 |
 | LLM 编造 accession 或数字 | 错误资产入库 | 用外部 API 校验 ID；审稿提示词和导出指令都禁止推算；证据位置为必填 |
 | 本地模型准确率不足 | 错误合并、错误的矛盾边 | 启用前先在你的标注集上验证（G3）；矛盾边先进审核队列；每个模型都可以单独关闭 |
-| 导出文档格式漂移 | 摄入失败或字段错位 | 每份文档带 `rxf_version`；schema 校验；把错误报告贴回聊天修正 |
+| 导出文档格式漂移 | 摄入失败或字段错位 | 每份文档带 `rxf_version`；schema 校验；骨架作为契约测试的正例；把错误报告贴回聊天修正 |
 | 你的观点被模型混写 | user\_insights 失真 | 导出指令要求按原意转述并区分 origin；入库后可以在论文卡片里修改 |
 | 主题爆炸 | 全景图不可读 | 主题从“候选”转“正式”需要满足门槛；每季度做一次合并审查 |
 | 重算覆盖人工决定 | 人工审核成果丢失 | `human_decision` 在重算的最后一步应用 |
@@ -432,7 +486,7 @@ G2 是整个计划的证伪点：如果检索基线达不到 M0 预注册的阈�
 
 ## 决定记录
 
-以下决定均在 2026-10-03 确认，相应的改动已经同步到上面各章。目前没有待定问题。
+以下决定在 2026-10-03 至 10-05 确认，相应的改动已经同步到上面各章。目前没有待定问题。
 
 | 问题 | 决定 | 对设计的影响 |
 | --- | --- | --- |
@@ -449,5 +503,8 @@ G2 是整个计划的证伪点：如果检索基线达不到 M0 预注册的阈�
 | 默认存储 | SQLite | Postgres 保留为可选后端；远程快照直接复用数据库文件 |
 | 是否开源 | 开源；开发测试阶段闭源 | 私有仓库开发；依赖必须与开源许可证兼容，igraph / leidenalg 换成 graspologic；新增“开源准备”一节 |
 | 开源许可证 | Apache-2.0 | CI 拒绝 GPL / AGPL 依赖；仓库带 LICENSE、NOTICE 和 SPDX 头 |
+| RXF v1 字段补充（首次导出校验失败后） | 新增可选字段 `exported_at`、`language`，claims 与各类 assets 新增文件内 `id`；`topics.new` 不收；`ideas.transfer` 保持嵌套 | 仍为 `rxf_version: 1`（向后兼容）；`links_to` / `about` 只能引用文件内 id，校验检查引用完整性；导出指令新增三条 |
+| RXF v1 第二次补充（两份导出分别因数据集缺少标识和 database 取值越界而校验失败，2026-10-04） | 数据集用 accession 或 name 标识；database 枚举定为 GEO / SRA / ENA / CNGB / ArrayExpress / Zenodo / other；骨架补齐代码已接受的字段（`paper.venue`、`datasets.name`、`datasets.role`、`methods.extends`）；`maintained`、`public` 用 true / false / unknown | 仍为 `rxf_version: 1`；导出指令重写为 17 条；没有 accession 的 Dataset 走自由概念规范化；骨架作为契约测试的正例 |
+| RXF v1 第三次补充（对照代码核查文档，2026-10-05） | `public` 与 `maintained` 一样接受 unknown；database 枚举加入 GSA；骨架补上代码已有的 `claims.stance`（contradicts 边的来源）、`topics.aliases`、`instructions_version`；导出指令改为上面的 17 条，中英两版 | 仍为 `rxf_version: 1`；骨架进入 CI 契约测试；实现状态见 docs/implementation.zh.md |
 
-需求和架构已经定稿，下一步进入 M0：定稿 RXF 导出指令，预注册 benchmark 问题和标注集。
+需求和架构已经定稿；实现进度和与设计的偏差见 docs/implementation.zh.md。还没完成的 M0 事项：预注册 benchmark 问题和门槛，准备 G3 标注集。

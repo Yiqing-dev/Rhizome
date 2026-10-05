@@ -69,3 +69,18 @@ def test_doi_prefix_stripped():
 def test_dataset_needs_identity():
     r = load_rxf("rxf_version: 1\npaper: {title: t}\nassets:\n  datasets:\n    - {organism: human}\n")
     assert not r.ok
+
+
+@pytest.mark.parametrize("name", ["export-instructions.zh.md", "export-instructions.en.md"])
+def test_instruction_skeleton_is_a_valid_export(name):
+    """The skeleton in the export instructions is the positive contract case: every field and enum
+    value it shows must be accepted by the schema (file-local ids included)."""
+    from rhizome.rxf.loader import load_rxf
+
+    text = (ROOT / "backend" / "rhizome" / "data" / name).read_text("utf-8")
+    block = text.split("```yaml\n", 1)[1].split("```", 1)[0]
+    res = load_rxf(block)
+    assert res.ok, res.report
+    doc = res.doc
+    assert doc.depth == "deep" and doc.assets.datasets[0].public is True and doc.assets.methods[0].extends
+    assert {t.id for t in doc.topics} == {"t1", "t2"} and doc.assets.ideas[0].transfer.to == "t2"
