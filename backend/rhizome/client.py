@@ -35,6 +35,7 @@ class Client(Protocol):
     def create_topic(self, **body: Any) -> dict[str, Any]: ...
     def stats(self) -> dict[str, Any]: ...
     def vocab(self) -> str: ...
+    def run_job(self, kind: str, payload: dict[str, Any] | None = None, wait: bool = True) -> dict[str, Any]: ...
 
 
 class HttpClient:
@@ -117,6 +118,23 @@ class HttpClient:
         r = self._c.get("/vocab")
         r.raise_for_status()
         return r.text
+
+    def run_job(self, kind, payload=None, wait=True, poll=1.0):
+        """Queue on the running app's worker (never a second writer next to it) and follow it."""
+        import time
+
+        j = self._post("/jobs", {"kind": kind, "payload": payload or {}})
+        while wait and j.get("status") in ("queued", "running"):
+            time.sleep(poll)
+            j = self._get(f"/jobs/{j['id']}")
+        return j
+
+    def patch_settings(self, patch):
+        r = self._c.patch("/settings", json=patch)
+        if r.status_code == 422:
+            raise ValueError(r.json().get("detail"))
+        r.raise_for_status()
+        return r.json()
 
 
 class LocalClient:
@@ -262,7 +280,7 @@ class LocalClient:
             job = jobs.enqueue(s, "retro_tag", {"topic": t.key, "k": k}) if retro else None
             out = {"topic_id": t.id, "key": t.key, "decision_id": d.id, "job_id": job.id if job else None}
         if retro:
-            jobs.run_all()
+            jobs.run_job(out["job_id"])
         return out
 
     def stats(self):
@@ -276,6 +294,18 @@ class LocalClient:
 
         with self._s() as s:
             return export_vocab(s)
+
+    def run_job(self, kind, payload=None, wait=True):
+        self._rw()
+        from . import jobs
+        from .db.models import Job
+
+        with self._s() as s:
+            jid = jobs.enqueue(s, kind, payload).id
+        if wait:
+            jobs.run_job(jid)
+        with self._s() as s:
+            return jobs.job_view(s.get(Job, jid))
 
 
 def connect(settings: Settings | None = None, snapshot: Path | None = None, prefer_http: bool = True) -> Client:

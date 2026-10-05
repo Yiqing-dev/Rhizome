@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api, ApiError } from "../api";
 import { Loading } from "../components/common";
 import { SettingsIcon } from "../components/icons";
-import { useLoad } from "../hooks";
+import { useJob, useLoad } from "../hooks";
 import { backendLang, fmtDate, setLanguage } from "../i18n";
 
 export default function SettingsPage() {
@@ -20,6 +20,7 @@ export default function SettingsPage() {
   const [backupDirEdit, setBackupDir] = useState<string | null>(null);
   const [backupMsg, setBackupMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const rebuild = useJob("rebuild");
 
   async function patch(b: Record<string, unknown>) {
     await api.patchSettings(b);
@@ -227,9 +228,16 @@ export default function SettingsPage() {
                 </select></label>
             </div>
             <div className="row wrap">
-              <button onClick={() => api.runJob("rebuild")}>{t("settings.rebuild")}</button>
+              <button onClick={rebuild.start} disabled={rebuild.running}>{rebuild.running ? t("jobs.running") : t("settings.rebuild")}</button>
               <span className="hint">{t("settings.rebuild_hint")}</span>
             </div>
+            {rebuild.job?.status === "done" && (
+              <div className="notice ok">
+                {t("jobs.rebuild_done", { entities: rebuild.job.result?.entities ?? 0, seconds: rebuild.job.result?.seconds ?? 0 })}
+                {(rebuild.job.result?.warnings ?? []).map((w: string) => <div key={w} className="small">{w}</div>)}
+              </div>
+            )}
+            {rebuild.job?.status === "failed" && <div className="notice error"><pre>{rebuild.job.error}</pre></div>}
           </section>
           <section className="panel">
             <h2>{t("settings.review")}</h2>

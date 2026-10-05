@@ -55,13 +55,17 @@ def record(g: Graph, op: str, payload: dict[str, Any]) -> HumanDecision:
     return d
 
 
-def revoke(g: Graph, decision_id: int) -> None:
-    """Undo = mark revoked; takes full effect on the next rebuild (which the API schedules)."""
+def revoke(g: Graph, decision_id: int) -> bool:
+    """Undo = mark revoked; takes full effect on the next rebuild (which the API schedules).
+    Returns False when it was already revoked (a repeated request changes nothing)."""
     d = g.s.get(HumanDecision, decision_id)
     if d is None:
         raise DecisionError("no such decision")
+    if d.revoked_at is not None:
+        return False
     d.revoked_at = utcnow()
     g.invalidate_redirects()
+    return True
 
 
 def _validate(op: str, p: dict[str, Any]) -> None:

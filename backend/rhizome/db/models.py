@@ -196,6 +196,7 @@ class Job(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+    owner_pid: Mapped[int | None] = mapped_column(Integer)  # process running it (stale-job recovery)
 
 
 class ReviewCard(Base):

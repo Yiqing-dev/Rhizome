@@ -76,6 +76,28 @@ function ModelBanner() {
   );
 }
 
+/** While a rebuild runs, changes are refused (503): say so on every page and clear when done. */
+function JobBanner() {
+  const { t } = useTranslation();
+  const [active, setActive] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    let timer = 0;
+    const poll = () => api.activeJobs()
+      .then((r) => {
+        if (!alive) return;
+        const run = r.jobs.find((j) => j.status === "running" && j.kind === "rebuild");
+        setActive(run ? run.kind : null);
+        timer = window.setTimeout(poll, run ? 3000 : 15000);
+      })
+      .catch(() => { if (alive) timer = window.setTimeout(poll, 15000); });
+    poll();
+    return () => { alive = false; window.clearTimeout(timer); };
+  }, []);
+  if (!active) return null;
+  return <div className="notice warn banner">{t("jobs.rebuilding_banner")}</div>;
+}
+
 export default function App() {
   const { t, i18n } = useTranslation();
   const route = useRoute();
@@ -121,6 +143,7 @@ export default function App() {
       </header>
       <main>
         <ModelBanner />
+        <JobBanner />
         <Suspense fallback={<div className="muted">{t("common.loading")}</div>}>{page}</Suspense>
       </main>
     </div>

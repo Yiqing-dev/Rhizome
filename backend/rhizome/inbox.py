@@ -23,6 +23,7 @@ log = logging.getLogger(__name__)
 SUFFIXES = (".yaml", ".yml", ".rxf")
 # companions and files still being written (browser downloads) are never ingested themselves
 SKIP_SUFFIXES = (".pdf", ".part", ".partial", ".crdownload", ".download", ".tmp", ".swp")
+RESCAN_SECONDS = 120
 _RXF_KEY = re.compile(r"^\s*(?:```[\w-]*\s*$\s*)?rxf_version\s*:", re.M)
 
 
@@ -114,12 +115,23 @@ def watch(on_result: Callable | None = None, stop: threading.Event | None = None
     inbox = get_settings().inbox
     inbox.mkdir(parents=True, exist_ok=True)
     scan(on_result)
+    handler = _Handler(on_result)
     obs = Observer()
-    obs.schedule(_Handler(on_result), str(inbox), recursive=False)
+    obs.schedule(handler, str(inbox), recursive=False)
     obs.start()
+    last_scan = time.monotonic()
     try:
         while not (stop and stop.is_set()):
             time.sleep(0.5)
+            # files left in place (library busy, model missing, events lost while asleep) get
+            # another chance; already processed files are gone from the inbox root
+            if time.monotonic() - last_scan > RESCAN_SECONDS:
+                last_scan = time.monotonic()
+                with handler._lock:
+                    try:
+                        scan(on_result)
+                    except Exception:  # noqa: BLE001
+                        log.exception("inbox rescan failed")
     finally:
         obs.stop()
         obs.join()

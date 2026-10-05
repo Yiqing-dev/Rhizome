@@ -93,6 +93,10 @@ export interface ReviewItem {
 export interface DueCard { id: string; q: string; a: string; entity_key: string; entity_name: string | null; origin: string; new: boolean }
 export interface Stats { entities: Record<string, number>; edges: number; review_queue: number; review_queue_by_kind: Record<string, number>; cards_due: number }
 
+export interface JobView {
+  id: number; kind: string; status: "queued" | "running" | "done" | "failed"; payload: Record<string, unknown>;
+  result: Record<string, any> | null; error: string | null; created_at: string | null; started_at: string | null; finished_at: string | null;
+}
 export interface FailedFile { name: string; report: string | null; repairable: string[]; has_pdf: boolean; modified: string }
 
 export interface SystemInfo {
@@ -147,5 +151,7 @@ export const api = {
   connectClaude: () => req<{ written: string[]; entry: Record<string, unknown> }>("POST", "/system/claude-desktop"),
   moveDataDir: (path: string | null, copy = true) =>
     req<{ data_dir: string; copied: boolean; restart_required: boolean; claude_config_updated?: string[] }>("POST", "/system/data-dir", { path, copy }),
-  runJob: (kind: string) => req<{ id: number }>("POST", "/jobs", { kind, payload: {} }),
+  runJob: (kind: string) => req<JobView>("POST", "/jobs", { kind, payload: {} }),
+  job: (id: number) => req<JobView>("GET", `/jobs/${id}`),
+  activeJobs: () => req<{ jobs: JobView[]; last_failed: JobView | null }>("GET", "/jobs", undefined, { active: true }),
 };

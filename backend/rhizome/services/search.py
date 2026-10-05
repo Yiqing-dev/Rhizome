@@ -166,7 +166,7 @@ def search(s: Session, q: str, f: Filters | None = None, limit: int = 20, offset
     q = q.strip()
     if not q:
         return browse(s, f, limit, offset)
-    qvec = embed_texts(s, [q])[0]
+    qvec = embed_texts(s, [q], persist=False)[0]
     vec_hits = [i for i, _ in knn(s, qvec, types=f.types, k=200)]
     kw_hits = keyword_ids(s, q, f.types, k=200)
     fused: dict[int, float] = {}

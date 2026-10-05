@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import traceback
 from datetime import timedelta
@@ -30,45 +31,81 @@ def handler(kind: str):
     return deco
 
 
+# Kinds whose result only depends on the library state: a second request while one is still
+# queued is the same work, so it is coalesced instead of running the whole thing twice.
+COALESCE = ("rebuild", "nightly")
+
+
 def enqueue(s: Session, kind: str, payload: dict[str, Any] | None = None) -> Job:
     if kind not in HANDLERS:
         raise ValueError(f"unknown job kind {kind}")
-    j = Job(kind=kind, payload=payload or {})
+    payload = payload or {}
+    if kind in COALESCE:
+        for j in s.execute(select(Job).where(Job.kind == kind, Job.status == "queued")).scalars():
+            if (j.payload or {}) == payload:
+                return j
+    j = Job(kind=kind, payload=payload)
     s.add(j)
     s.flush()
     return j
 
 
+def active_jobs(s: Session) -> list[Job]:
+    return list(s.execute(select(Job).where(Job.status.in_(("queued", "running"))).order_by(Job.id)).scalars())
+
+
+def running(s: Session, kind: str) -> bool:
+    return s.execute(select(Job.id).where(Job.kind == kind, Job.status == "running")).first() is not None
+
+
 def job_view(j: Job) -> dict[str, Any]:
     return {"id": j.id, "kind": j.kind, "status": j.status, "payload": j.payload, "result": j.result,
             "error": j.error, "created_at": j.created_at.isoformat() if j.created_at else None,
+            "started_at": j.started_at.isoformat() if j.started_at else None,
             "finished_at": j.finished_at.isoformat() if j.finished_at else None}
 
 
-def run_next() -> Job | None:
-    """Claim and run one queued job in its own transaction."""
+def _finish(job_id: int, **values: Any) -> None:
+    """Write the outcome only if this process still owns the job (a restart may have requeued it)."""
     with session_scope() as s:
-        j = s.execute(select(Job).where(Job.status == "queued").order_by(Job.id).limit(1)).scalar_one_or_none()
+        s.execute(update(Job).where(Job.id == job_id, Job.status == "running", Job.owner_pid == os.getpid())
+                  .values(finished_at=utcnow(), **values))
+
+
+def run_next(only_id: int | None = None) -> Job | None:
+    """Claim and run one queued job (the oldest, or ``only_id``) in its own transaction."""
+    with session_scope() as s:
+        q = select(Job).where(Job.status == "queued")
+        q = q.where(Job.id == only_id) if only_id is not None else q.order_by(Job.id).limit(1)
+        j = s.execute(q).scalar_one_or_none()
         if j is None:
             return None
         claimed = s.execute(update(Job).where(Job.id == j.id, Job.status == "queued")
-                            .values(status="running", started_at=utcnow())).rowcount
+                            .values(status="running", started_at=utcnow(), owner_pid=os.getpid())).rowcount
         if not claimed:
             return None
         job_id, kind, payload = j.id, j.kind, dict(j.payload or {})
     try:
         with session_scope() as s:
             result = HANDLERS[kind](s, payload)
-        with session_scope() as s:
-            j = s.get(Job, job_id)
-            j.status, j.result, j.finished_at = "done", result, utcnow()
+        _finish(job_id, status="done", result=result)
     except Exception as e:
         log.exception("job %s (%s) failed", job_id, kind)
-        with session_scope() as s:
-            j = s.get(Job, job_id)
-            j.status, j.error, j.finished_at = "failed", f"{e}\n{traceback.format_exc(limit=5)}", utcnow()
+        try:
+            _finish(job_id, status="failed", error=f"{e}\n{traceback.format_exc()[-8000:]}")
+            if kind == "nightly":
+                with session_scope() as s:
+                    _kv_set(s, "last_nightly_failure", {"at": utcnow().isoformat()})
+        except Exception:  # noqa: BLE001 - the database itself may be the problem
+            log.exception("could not record the failure of job %s", job_id)
     with session_scope() as s:
         return s.get(Job, job_id)
+
+
+def run_job(job_id: int) -> Job | None:
+    """Run exactly this job in the calling process (CLI, LocalClient) without draining the queue
+    that belongs to the app's worker."""
+    return run_next(only_id=job_id)
 
 
 def run_all() -> int:
@@ -82,10 +119,17 @@ STALE_RUNNING = timedelta(hours=6)
 
 
 def recover_stale_jobs(s: Session) -> int:
-    """Jobs left `running` by a crashed or killed process are re-queued (every handler is idempotent)."""
-    n = s.execute(update(Job).where(Job.status == "running")
-                  .values(status="queued", started_at=None, error="requeued after restart")).rowcount
-    return int(n or 0)
+    """Jobs left `running` by a process that is gone (crash, kill, power cut) are re-queued; every
+    handler is idempotent. A job another live process is running (the CLI, a second app) is left
+    alone."""
+    from .system import pid_alive
+
+    n = 0
+    for j in s.execute(select(Job).where(Job.status == "running")).scalars():
+        if j.owner_pid is None or (j.owner_pid != os.getpid() and not pid_alive(j.owner_pid)):
+            j.status, j.started_at, j.owner_pid, j.error = "queued", None, None, "requeued after restart"
+            n += 1
+    return n
 
 
 def maybe_schedule_nightly(s: Session) -> Job | None:
@@ -95,6 +139,10 @@ def maybe_schedule_nightly(s: Session) -> Job | None:
 
     if last and utcnow() - datetime.fromisoformat(last) < timedelta(hours=24):
         return None
+    fail = s.get(KV, "last_nightly_failure")
+    failed_at = fail.v.get("at") if fail and fail.v else None
+    if failed_at and utcnow() - datetime.fromisoformat(failed_at) < timedelta(hours=6):
+        return None  # back off: a failing nightly would otherwise rerun every 30 minutes
     pending = s.execute(select(Job).where(
         Job.kind == "nightly",
         (Job.status == "queued") | ((Job.status == "running") & (Job.started_at > utcnow() - STALE_RUNNING)),
@@ -134,6 +182,9 @@ class Worker(threading.Thread):
         self._daily_backup()
         while not self._stop.is_set():
             try:
+                from .services.recall import flush_seen
+
+                flush_seen()
                 if run_next() is None:
                     ticks += 1
                     if ticks % 900 == 0:  # roughly every 30 minutes

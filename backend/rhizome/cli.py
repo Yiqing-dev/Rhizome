@@ -106,9 +106,13 @@ def mcp() -> None:
 @app.command()
 def watch() -> None:
     """Watch the inbox and ingest RXF files as they arrive."""
+    from .client import HttpClient
     from .db.session import init_db
     from .inbox import watch as do_watch
 
+    if isinstance(_client(prefer_http=True), HttpClient):  # the app already watches this inbox
+        typer.secho(_("cli.watch_app_running"), fg="yellow")
+        raise typer.Exit(0)
     init_db()
     typer.echo(_("cli.watching", path=get_settings().inbox))
 
@@ -316,12 +320,22 @@ def topic_add(name: str, definition: Optional[str] = typer.Option(None, "--defin
 @app.command()
 def rebuild(no_backup: bool = False) -> None:
     """Recompute L2/L3 from L1 (after model / mapping / schema changes)."""
-    from .db.session import init_db, session_scope
-    from .pipeline.rebuild import rebuild as do_rebuild
+    from .client import HttpClient
 
-    init_db()
-    with session_scope() as s:
-        summary = do_rebuild(s, backup=not no_backup)
+    c = _client(prefer_http=True)
+    if isinstance(c, HttpClient):  # the app is running: its worker does it, no second writer
+        j = c.run_job("rebuild", {"backup": not no_backup})
+        if j.get("status") != "done":
+            typer.secho(j.get("error") or j.get("status"), fg="red", err=True)
+            raise typer.Exit(1)
+        summary = j["result"]
+    else:
+        from .db.session import init_db, session_scope
+        from .pipeline.rebuild import rebuild as do_rebuild
+
+        init_db()
+        with session_scope() as s:
+            summary = do_rebuild(s, backup=not no_backup)
     if _out(summary):
         return
     typer.echo(_("cli.rebuild_done", summary=json.dumps({k: v for k, v in summary.items()
@@ -333,18 +347,8 @@ def rebuild(no_backup: bool = False) -> None:
 @app.command()
 def nightly(force_synthesis: bool = False) -> None:
     """Run the nightly batch now (communities, topic promotion, weekly synthesis candidates)."""
-    from . import jobs
-    from .db.session import init_db, session_scope
-
-    init_db()
-    with session_scope() as s:
-        j = jobs.enqueue(s, "nightly", {"force_synthesis": force_synthesis})
-        jid = j.id
-    jobs.run_all()
-    from .db.models import Job
-
-    with session_scope() as s:
-        _out(jobs.job_view(s.get(Job, jid))) or typer.echo(json.dumps(s.get(Job, jid).result))
+    j = _client(prefer_http=True).run_job("nightly", {"force_synthesis": force_synthesis})
+    _out(j) or typer.echo(json.dumps(j.get("result") if j.get("status") == "done" else j, ensure_ascii=False))
 
 
 @app.command()
@@ -536,7 +540,22 @@ def settings_set(key: str, value: str) -> None:
     for p in parts[:-1]:
         cur = cur.setdefault(p, {})
     cur[parts[-1]] = parsed
-    update_settings(patch)
+    from .client import HttpClient
+
+    from .api.app import SettingsPatch
+
+    c = _client(prefer_http=True)
+    live = isinstance(c, HttpClient)
+    try:
+        if live and parts[0] in SettingsPatch.model_fields:
+            c.patch_settings(patch)  # the running app writes it and uses it right away
+        else:
+            update_settings(patch)
+            if live:
+                typer.secho(_("cli.restart_app_for_setting", key=key), fg="yellow")
+    except ValueError as e:
+        typer.secho(str(e), fg="red", err=True)
+        raise typer.Exit(2) from None
     typer.echo(f"{key} = {parsed!r}")
 
 

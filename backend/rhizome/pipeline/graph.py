@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+from collections import OrderedDict
 import threading
 from datetime import datetime
 from typing import Any, Iterable
@@ -208,10 +209,22 @@ def knn(s: Session, query_vec: np.ndarray, types: Iterable[str] | None = None, k
     return [(int(ids[i]), float(sims[i])) for i in top]
 
 
-def embed_texts(s: Session, texts: list[str]) -> np.ndarray:
-    """Embed with the configured model, using the text-hash cache."""
+_QUERY_LRU: "OrderedDict[tuple[str, str], np.ndarray]" = OrderedDict()
+_QUERY_LRU_MAX = 1024
+
+
+def embed_texts(s: Session, texts: list[str], persist: bool = True) -> np.ndarray:
+    """Embed with the configured model, using the text-hash cache. ``persist=False`` (search and
+    recall queries) keeps new vectors in an in-process LRU instead of writing them, so a read
+    request never needs the database write lock (which a long rebuild may hold)."""
     emb = get_embedder()
     shas = [sha256(t) for t in texts]
+    if not persist:
+        hit = [_QUERY_LRU.get((emb.name, h)) for h in shas]
+        if all(v is not None for v in hit):
+            for h in shas:
+                _QUERY_LRU.move_to_end((emb.name, h))
+            return np.stack(hit) if hit else np.zeros((0, emb.dim), dtype=np.float32)
     cached = {
         r.text_sha: np.frombuffer(r.vec, dtype=np.float32)
         for r in s.execute(select(VectorCache).where(VectorCache.model == emb.name,
@@ -223,6 +236,11 @@ def embed_texts(s: Session, texts: list[str]) -> np.ndarray:
         for j, i in enumerate(missing):
             if shas[i] not in cached:
                 cached[shas[i]] = new[j]
+                if not persist:
+                    _QUERY_LRU[(emb.name, shas[i])] = new[j]
+                    if len(_QUERY_LRU) > _QUERY_LRU_MAX:
+                        _QUERY_LRU.popitem(last=False)
+                    continue
                 if s.info.get("read_only"):
                     continue
                 s.merge(VectorCache(text_sha=shas[i], model=emb.name, vec=new[j].astype(np.float32).tobytes()))

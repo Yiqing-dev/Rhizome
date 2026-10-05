@@ -228,3 +228,12 @@ msgstr "用 {backup} 覆盖当前资料库？当前状态会先另存一份备�
 
 msgid "cli.restore_done"
 msgstr "已恢复。恢复前的状态保存在：{pre}"
+
+msgid "cli.watch_app_running"
+msgstr "Rhizome 应用正在运行，它已经在监听收件箱；不需要再运行 rhz watch。"
+
+msgid "cli.restart_app_for_setting"
+msgstr "{key} 已写入 settings.json；正在运行的应用要重启后才会使用它。"
+
+msgid "api.rebuilding"
+msgstr "正在重算资料库，暂时不能修改；完成后会自动恢复（通常不超过几分钟）。"

@@ -138,7 +138,7 @@ def test_inbox_moves_files_after_commit(settings, session, monkeypatch):
     real = ing.ingest_text
 
     def boom(*a, **k):
-        raise RuntimeError("database is locked")
+        raise RuntimeError("disk I/O error")
 
     monkeypatch.setattr(ing, "ingest_text", boom)
     assert not ingest_file(crash).ok  # an exception never escapes, so the watcher thread survives
@@ -148,7 +148,7 @@ def test_inbox_moves_files_after_commit(settings, session, monkeypatch):
     assert (inbox / "error" / "bad.yaml").exists()
     assert "claims.0" in (inbox / "error" / "bad.yaml.error.txt").read_text("utf-8")
     assert (inbox / "error" / "crash.yaml").exists()
-    assert "database is locked" in (inbox / "error" / "crash.yaml.error.txt").read_text("utf-8")
+    assert "disk I/O error" in (inbox / "error" / "crash.yaml.error.txt").read_text("utf-8")
     session.expire_all()
     assert session.query(Work).count() == 1  # the crashed file stored nothing
     assert session.query(RawObject).filter(RawObject.kind == "pdf").count() == 1
@@ -211,3 +211,22 @@ def test_deep_export_with_pdf_is_tier_2_and_survives_rebuild(settings, session):
     w = session.query(Work).one()
     assert w.tier == 2
     assert search(session, "single-nucleus multiome atlas", Filters(types=("work",), tier=2))
+
+
+def test_inbox_file_waits_while_the_library_is_busy(settings, monkeypatch):
+    """A long rebuild holds the write lock: the file is not broken, so it stays in the inbox for
+    the periodic rescan instead of landing in error/ with a misleading report."""
+    from sqlalchemy.exc import OperationalError
+
+    import rhizome.pipeline.ingest as ing
+    from rhizome.pipeline.ingest import ingest_file
+
+    f = settings.inbox / "busy.yaml"
+    f.write_text(example("light-spatial-domains.yaml"), "utf-8")
+
+    def locked(*a, **k):
+        raise OperationalError("insert", {}, Exception("database is locked"))
+
+    monkeypatch.setattr(ing, "ingest_text", locked)
+    assert not ingest_file(f).ok
+    assert f.exists() and not (settings.inbox / "error" / "busy.yaml").exists()

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import math
 import re
+import threading
 from collections import defaultdict
 from datetime import datetime
 from typing import Any
@@ -26,21 +27,78 @@ ASSET_TYPES = ("dataset", "method", "idea", "claim")
 TAU_DAYS = 30.0
 
 
-def touch(s: Session, key: str) -> None:
+# Opening a card records "seen" (it resets forgetting). Reads must not take the write lock, so views
+# are buffered in memory and written in one short transaction by the worker (or at process exit for
+# the CLI); a lost buffer only means slightly stale forgetting scores.
+_seen: dict[tuple[str, str], tuple[datetime, int]] = {}
+_seen_lock = threading.Lock()
+_atexit_registered = False
+
+
+def touch(s: Session, key: str, now: datetime | None = None) -> None:
+    global _atexit_registered
     if s.info.get("read_only"):
         return
-    row = s.get(AccessLog, key)
-    if row is None:
-        s.add(AccessLog(entity_key=key, last_seen_at=utcnow(), count=1))
-    else:
-        row.last_seen_at = utcnow()
-        row.count += 1
+    db = str(s.get_bind().url)
+    with _seen_lock:
+        _, n = _seen.get((db, key), (None, 0))
+        _seen[(db, key)] = (now or utcnow(), n + 1)
+        if not _atexit_registered:
+            import atexit
+
+            atexit.register(flush_seen)
+            _atexit_registered = True
+
+
+def flush_seen() -> int:
+    """Write buffered views (worker tick, process exit). Keeps them if the database is busy."""
+    from ..db.session import session_scope
+
+    with _seen_lock:
+        pending = dict(_seen)
+        _seen.clear()
+    if not pending:
+        return 0
+    settings = get_settings()
+    mine = {k: v for (db, k), v in pending.items() if db == str(_bind_url(settings))}
+    other = {dk: v for dk, v in pending.items() if dk[0] != str(_bind_url(settings))}
+    try:
+        with session_scope() as s:
+            for key, (at, n) in mine.items():
+                row = s.get(AccessLog, key)
+                if row is None:
+                    s.add(AccessLog(entity_key=key, last_seen_at=at, count=n))
+                else:
+                    row.last_seen_at = max(row.last_seen_at or at, at)
+                    row.count += n
+    except Exception:  # noqa: BLE001 - locked or closing: try again next time
+        with _seen_lock:
+            for k, v in pending.items():
+                if k not in _seen:
+                    _seen[k] = v
+        return 0
+    with _seen_lock:  # views of another library (tests, a moved data dir) stay buffered for it
+        for k, v in other.items():
+            _seen.setdefault(k, v)
+    return len(mine)
+
+
+def _bind_url(settings) -> str:
+    from ..db.session import get_engine
+
+    return str(get_engine(settings).url)
 
 
 def forgetting(s: Session, entities: list[Entity], now: datetime | None = None) -> dict[int, float]:
     now = now or utcnow()
     seen = {r.entity_key: r.last_seen_at for r in
             s.execute(select(AccessLog).where(AccessLog.entity_key.in_([e.key for e in entities]))).scalars()}
+    db = str(s.get_bind().url)
+    with _seen_lock:  # views not written yet still count
+        for e in entities:
+            buffered = _seen.get((db, e.key))
+            if buffered and (seen.get(e.key) is None or buffered[0] > seen[e.key]):
+                seen[e.key] = buffered[0]
     out = {}
     for e in entities:
         last = seen.get(e.key) or e.created_at or now
@@ -139,7 +197,7 @@ def related_to_work(s: Session, work_id: int, limit: int = 5) -> list[dict[str, 
     # semantic: nearest assets from other works
     rr = get_reranker()
     for e in [work, *mine]:
-        qv = embed_texts(s, [entity_text(e)])[0]
+        qv = embed_texts(s, [entity_text(e)], persist=False)[0]
         for nid, sim in knn(s, qv, types=ASSET_TYPES + ("work",), k=8, exclude=own_ids):
             if sim < 0.2:
                 continue

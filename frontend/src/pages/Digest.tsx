@@ -3,12 +3,13 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api";
 import { EmptyState, EntityLink, Loading, TypeBadge } from "../components/common";
 import { LinkIcon } from "../components/icons";
-import { useLoad } from "../hooks";
+import { useJob, useLoad } from "../hooks";
 
 /** Weekly digest: two asset cards side by side; explanations are written by Claude via MCP. */
 export default function DigestPage() {
   const { t } = useTranslation();
   const d = useLoad(() => api.digest(), []);
+  const nightly = useJob("nightly", () => d.reload());
   async function mark(id: number, useful: boolean) {
     await api.resolve(id, useful ? "useful" : "useless");
     d.reload();
@@ -20,8 +21,9 @@ export default function DigestPage() {
           <h1>{t("digest.title")}</h1>
           <p className="sub">{t("digest.hint")}</p>
         </div>
-        <button onClick={() => api.runJob("nightly").then(() => setTimeout(d.reload, 1500))}>{t("digest.run_now")}</button>
+        <button onClick={nightly.start} disabled={nightly.running}>{nightly.running ? t("jobs.running") : t("digest.run_now")}</button>
       </div>
+      {nightly.job?.status === "failed" && <div className="notice error"><pre>{nightly.job.error}</pre></div>}
       <Loading error={d.error} loading={d.loading && !d.data} />
       {d.data && (
         <>

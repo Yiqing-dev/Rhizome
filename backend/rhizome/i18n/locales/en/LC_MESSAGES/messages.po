@@ -228,3 +228,12 @@ msgstr "Replace the current library with {backup}? The current state is backed u
 
 msgid "cli.restore_done"
 msgstr "Restored. The state before the restore was saved to: {pre}"
+
+msgid "cli.watch_app_running"
+msgstr "The Rhizome app is running and already watches the inbox; rhz watch is not needed."
+
+msgid "cli.restart_app_for_setting"
+msgstr "{key} was written to settings.json; the running app uses it after a restart."
+
+msgid "api.rebuilding"
+msgstr "The library is being rebuilt and cannot be changed right now; this clears by itself when the rebuild finishes (usually within minutes)."

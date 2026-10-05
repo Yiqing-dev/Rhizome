@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { api, type JobView } from "./api";
 
 export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]): {
   data: T | null; error: unknown; loading: boolean; reload: () => void;
@@ -35,4 +36,26 @@ export function useKeys(handler: (e: KeyboardEvent) => void, deps: unknown[]): v
     return () => window.removeEventListener("keydown", on);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
+}
+
+/** Start a background job and follow it until it is done or failed (the button stays disabled
+ * meanwhile, so repeated clicks don't queue the same work again). */
+export function useJob(kind: string, onDone?: (j: JobView) => void): {
+  job: JobView | null; running: boolean; start: () => Promise<void>;
+} {
+  const [job, setJob] = useState<JobView | null>(null);
+  const timer = useRef<number | null>(null);
+  const done = useRef(onDone);
+  done.current = onDone;
+  useEffect(() => () => { if (timer.current) window.clearTimeout(timer.current); }, []);
+  const follow = useCallback((j: JobView) => {
+    setJob(j);
+    if (j.status === "queued" || j.status === "running") {
+      timer.current = window.setTimeout(() => api.job(j.id).then(follow).catch(() => undefined), 1500);
+    } else {
+      done.current?.(j);
+    }
+  }, []);
+  const start = useCallback(async () => follow(await api.runJob(kind)), [kind, follow]);
+  return { job, running: !!job && (job.status === "queued" || job.status === "running"), start };
 }

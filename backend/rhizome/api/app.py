@@ -172,9 +172,19 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         with session_scope(read_only=read_only) as s:
             yield s
 
-    def writable() -> None:
+    def writable(request: Request) -> None:
         if read_only:
             raise HTTPException(403, _("api.read_only"))
+        # During a rebuild the write lock is held for a long time: answer at once instead of
+        # making the caller wait for the 30 s busy timeout and then fail. Queueing jobs and the
+        # desktop-integration endpoints don't need the lock.
+        path = request.url.path
+        if path.startswith(("/jobs", "/system")):
+            return
+        with session_scope(read_only=False) as s:
+            busy = jobs.running(s, "rebuild")
+        if busy:
+            raise HTTPException(503, _("api.rebuilding"), headers={"Retry-After": "30"})
 
     A = [Depends(auth)]
     W = [Depends(auth), Depends(writable)]
@@ -390,11 +400,11 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         from ..pipeline.graph import Graph
 
         try:
-            decisions.revoke(Graph(s), decision_id)
+            changed = decisions.revoke(Graph(s), decision_id)
         except decisions.DecisionError:
             raise HTTPException(404, _("api.not_found"))
-        job = jobs.enqueue(s, "rebuild", {})
-        return {"revoked": decision_id, "rebuild_job": job.id}
+        job = jobs.enqueue(s, "rebuild", {}) if changed else None  # coalesced with a queued one
+        return {"revoked": decision_id, "changed": changed, "rebuild_job": job.id if job else None}
 
     # ---- recall / digest / data ----
     @app.post("/recall", dependencies=A)
@@ -452,6 +462,18 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
             return jobs.job_view(jobs.enqueue(s, body.kind, body.payload))
         except ValueError as e:
             raise HTTPException(422, str(e))
+
+    @app.get("/jobs", dependencies=A)
+    def list_jobs(active: bool = False, limit: int = Query(20, le=200), s: Session = Depends(db)) -> dict[str, Any]:
+        """Active jobs (queued / running), or the most recent ones; plus the last failure."""
+        from sqlalchemy import select
+
+        if active:
+            rows = jobs.active_jobs(s)
+        else:
+            rows = list(s.execute(select(Job).order_by(Job.id.desc()).limit(limit)).scalars())
+        failed = s.execute(select(Job).where(Job.status == "failed").order_by(Job.id.desc()).limit(1)).scalar_one_or_none()
+        return {"jobs": [jobs.job_view(j) for j in rows], "last_failed": jobs.job_view(failed) if failed else None}
 
     @app.get("/jobs/{job_id}", dependencies=A)
     def job(job_id: int, s: Session = Depends(db)) -> dict[str, Any]:

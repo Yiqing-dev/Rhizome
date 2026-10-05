@@ -25,6 +25,25 @@ log = logging.getLogger(__name__)
 REGENERATED_REVIEW_KINDS = ("merge", "topic_relation", "contradiction")
 
 
+PREWARM_BATCH = 256
+
+
+def _prewarm_embeddings(s: Session) -> int:
+    """Embed the current entities' texts in committed batches *before* the destructive part.
+    After a model switch this is the slow step (hours on CPU for a large library): done here, it
+    holds the write lock only per batch, other processes keep working in between, and a rebuild
+    that is interrupted resumes from the cache instead of from zero. Rebuilt entities mostly have
+    the same texts, so the locked phase below finds them in the cache."""
+    from .graph import embed_texts, entity_text
+
+    rows = s.execute(select(Entity).where(Entity.type.notin_(("organism", "modality"))).order_by(Entity.id)).scalars().all()
+    texts = list(dict.fromkeys(entity_text(e) for e in rows))
+    for i in range(0, len(texts), PREWARM_BATCH):
+        embed_texts(s, texts[i:i + PREWARM_BATCH])
+        s.commit()
+    return len(texts)
+
+
 def rebuild(s: Session, backup: bool = True) -> dict:
     t0 = time.time()
     warnings: list[str] = []
@@ -39,6 +58,7 @@ def rebuild(s: Session, backup: bool = True) -> dict:
             except Exception as e:  # noqa: BLE001
                 log.warning("pre-rebuild backup failed: %s", e)
                 warnings.append(f"pre-rebuild backup failed: {e}")
+    prewarmed = _prewarm_embeddings(s)
     # ids are handles (UI URLs, CLI, MCP, review items): remember them so the same key gets the same
     # id back, and a new entity never inherits the id of one that is gone
     id_plan = dict(s.execute(select(Entity.key, Entity.id)).all())
@@ -91,5 +111,5 @@ def rebuild(s: Session, backup: bool = True) -> dict:
     g.id_plan = g.item_plan = None
     return {"extractions": n, "cites": cites, "decisions_applied": applied, "topics_promoted": promoted,
             "entities": s.query(Entity).count(), "edges": s.query(Edge).count(),
-            "seconds": round(time.time() - t0, 2), "decisions_skipped": skipped,
+            "seconds": round(time.time() - t0, 2), "prewarmed": prewarmed, "decisions_skipped": skipped,
             "warnings": warnings}

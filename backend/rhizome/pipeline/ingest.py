@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from .. import rawstore
@@ -202,6 +203,14 @@ def ingest_file(path: Path, repair: bool = False) -> IngestResult:
             result = ingest_path(s, path, repair=repair)
     except ModelUnavailable as e:  # not the file's fault: leave it in the inbox for after the fix
         log.error("inbox: %s left in place: %s", path.name, e)
+        return IngestResult(ok=False, report=str(e))
+    except OperationalError as e:
+        if "locked" not in str(e).lower() and "busy" not in str(e).lower():
+            log.exception("ingest failed for %s", path)
+            file_done(path, None, error=f"{type(e).__name__}: {e}\n\n{traceback.format_exc(limit=8)}")
+            return IngestResult(ok=False, report=str(e))
+        # a long job holds the write lock: not the file's fault; the periodic rescan retries it
+        log.warning("inbox: %s left in place, library busy: %s", path.name, e)
         return IngestResult(ok=False, report=str(e))
     except Exception as e:  # keep the inbox flowing; the report tells the user what happened
         log.exception("ingest failed for %s", path)
