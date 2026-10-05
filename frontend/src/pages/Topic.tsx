@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, type TopicItem } from "../api";
 import { EntityLink, Loading, TypeBadge } from "../components/common";
@@ -13,9 +13,17 @@ export default function TopicPage({ id }: { id: number }) {
   const { t } = useTranslation();
   const [role, setRole] = useState("");
   const page = useLoad(() => api.topicAssets(id, role || undefined), [id, role]);
+  const [more, setMore] = useState<Record<string, TopicItem[]>>({});
+  useEffect(() => setMore({}), [id, role]);
   const p = page.data;
+  async function showMore(col: (typeof COLUMNS)[number]) {
+    if (!p) return;
+    const have = p.columns[col].length + (more[col]?.length ?? 0);
+    const r = await api.topicAssets(id, role || undefined, col, have);
+    setMore({ ...more, [col]: [...(more[col] ?? []), ...r.columns[col]] });
+  }
   return (
-    <div className="stack">
+    <div className={`stack ${page.loading && p ? "reloading" : ""}`}>
       <Loading error={page.error} loading={page.loading && !p} />
       {p && (
         <>
@@ -56,10 +64,10 @@ export default function TopicPage({ id }: { id: number }) {
           <div className="columns">
             {COLUMNS.map((col) => (
               <section key={col} className={`column t-${col}`}>
-                <header><b>{t(`column.${col}`)}</b><span className="n">{p.columns[col].length}</span></header>
+                <header><b>{t(`column.${col}`)}</b><span className="n">{p.totals?.[col] ?? p.columns[col].length}</span></header>
                 {p.columns[col].length === 0 && <div className="empty-col empty" style={{ border: "none", background: "none", padding: "1rem" }}>{t("topic.no_items")}</div>}
                 <ul>
-                  {p.columns[col].map((it: TopicItem) => (
+                  {[...p.columns[col], ...(more[col] ?? [])].map((it: TopicItem) => (
                     <li key={it.id} className={it.contested ? "contested" : ""}>
                       <EntityLink e={it} />
                       {it.contested && <span className="pill warn">{t("topic.contested")}</span>}
@@ -72,6 +80,10 @@ export default function TopicPage({ id }: { id: number }) {
                     </li>
                   ))}
                 </ul>
+                {(p.totals?.[col] ?? 0) > p.columns[col].length + (more[col]?.length ?? 0) && (
+                  <button className="link" onClick={() => showMore(col)}>
+                    {t("common.show_more", { n: (p.totals[col] - p.columns[col].length - (more[col]?.length ?? 0)) })}</button>
+                )}
               </section>
             ))}
           </div>

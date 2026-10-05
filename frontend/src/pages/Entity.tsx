@@ -83,12 +83,18 @@ function EditMenu({ card, onDone }: { card: Card; onDone: () => void }) {
 
 function EdgeGroups({ card }: { card: Card }) {
   const { t } = useTranslation();
-  const groups = Object.entries(card.edges).sort(([a], [b]) => EDGE_ORDER.indexOf(a) - EDGE_ORDER.indexOf(b));
+  const [extra, setExtra] = useState<Record<string, EdgeView[]>>({});
+  const groups = Object.entries(card.edges).sort(([a], [b]) => EDGE_ORDER.indexOf(a) - EDGE_ORDER.indexOf(b))
+    .map(([type, edges]) => [type, [...edges, ...(extra[type] ?? [])]] as [string, EdgeView[]]);
+  async function more(type: string, have: number) {
+    const r = await api.entityEdges(card.id, type, have);
+    setExtra({ ...extra, [type]: [...(extra[type] ?? []), ...r.edges.filter((e) => !card.edges[type].some((x) => x.id === e.id))] });
+  }
   return (
     <div className="edge-groups">
       {groups.map(([type, edges]) => (
         <section key={type} className="edge-group" style={{ "--ec": edgeToken(type) } as React.CSSProperties}>
-          <header><i className="dot" /><b>{t(`edge.${type}`)}</b><span className="n">{edges.length}</span></header>
+          <header><i className="dot" /><b>{t(`edge.${type}`)}</b><span className="n">{card.edge_counts?.[type] ?? edges.length}</span></header>
           <ul>
             {edges.map((e: EdgeView) => (
               <li key={e.id} className={e.status === "rejected" ? "rejected" : ""}>
@@ -104,6 +110,10 @@ function EdgeGroups({ card }: { card: Card }) {
               </li>
             ))}
           </ul>
+          {(card.edge_counts?.[type] ?? 0) > edges.length && (
+            <button className="link" onClick={() => more(type, edges.length)}>
+              {t("common.show_more", { n: (card.edge_counts?.[type] ?? 0) - edges.length })}</button>
+          )}
         </section>
       ))}
     </div>

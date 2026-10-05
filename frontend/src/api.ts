@@ -67,7 +67,7 @@ export interface ExportView {
 }
 export interface Card extends Hit {
   attrs: Record<string, any>; aliases: { alias: string; lang: string; source: string }[];
-  edges: Record<string, EdgeView[]>; created_at: string;
+  edges: Record<string, EdgeView[]>; edge_counts?: Record<string, number>; created_at: string;
   work?: { openalex_id: string | null; dois: string[]; year: number | null; tier: number } | null;
   exports?: ExportView[];
 }
@@ -84,6 +84,7 @@ export interface TopicItem extends Hit { roles: string[]; works: number; contest
 export interface TopicPage {
   topic: Hit & { attrs: Record<string, any> }; children: Hit[]; parents: Hit[]; subtree_size: number;
   columns: Record<"dataset" | "method" | "idea" | "claim" | "work", TopicItem[]>;
+  totals: Record<"dataset" | "method" | "idea" | "claim" | "work", number>; limit: number;
 }
 export interface ReviewItem {
   id: number; kind: string; payload: Record<string, any>; score: number; actions: string[]; created_at: string;
@@ -118,7 +119,10 @@ export const api = {
   entity: (id: number) => req<Card>("GET", `/entity/${id}`),
   neighbors: (id: number, hops = 1, offset = 0) => req<GraphView>("GET", `/entity/${id}/neighbors`, undefined, { hops, offset }),
   related: (id: number) => req<{ related: any[] }>("GET", `/entity/${id}/related`),
-  topicAssets: (id: number, role?: string) => req<TopicPage>("GET", `/topic/${id}/assets`, undefined, { role }),
+  topicAssets: (id: number, role?: string, column?: string, offset = 0) =>
+    req<TopicPage>("GET", `/topic/${id}/assets`, undefined, { role, column, offset: offset || undefined }),
+  entityEdges: (id: number, type: string, offset: number, limit = 100) =>
+    req<{ edges: EdgeView[]; total: number }>("GET", `/entity/${id}/edges`, undefined, { type, offset, limit }),
   topicMap: (includeCandidates = false) => req<TopicMap>("GET", "/topic-map", undefined, { include_candidates: includeCandidates }),
   createTopic: (b: { name: string; definition?: string; examples?: string[]; counter_examples?: string[]; parent?: string }) =>
     req<{ topic_id: number; job_id: number | null }>("POST", "/topic", b),

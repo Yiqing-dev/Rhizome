@@ -432,3 +432,5 @@ table.decisions tr.revoked td:last-child { text-decoration: none; }
 .edit-menu { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 0.4rem 0.8rem; }
 .edit-menu summary { cursor: pointer; font-weight: 600; }
 .edit-menu .row { margin-top: 0.5rem; }
+
+.reloading { opacity: 0.55; transition: opacity 0.15s; pointer-events: none; }

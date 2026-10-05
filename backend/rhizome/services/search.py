@@ -7,13 +7,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from sqlalchemy import or_, select, text
+from sqlalchemy import case, func, literal, or_, select, text
 from sqlalchemy.orm import Session
 
 from ..db.models import Edge, Entity, EntityAlias, Work
 from ..db.session import has_fts
 from ..ml import get_reranker
-from ..text import norm, tokens
+from ..text import norm, search_units
 from ..pipeline.graph import embed_texts, entity_text, knn
 
 DEFAULT_TYPES = ("work", "dataset", "method", "idea", "claim", "topic")
@@ -49,10 +49,13 @@ def _fts_query(q: str) -> str | None:
     """OR of the most specific words: deduplicated, no stopwords, at most MAX_FTS_TERMS (longest
     first). A pasted analysis plan or script would otherwise become an OR of hundreds of terms and
     take tens of seconds on a large library; the vector and rerank steps cover the rest."""
-    terms = [t for t in dict.fromkeys(norm(q).split()) if len(t) >= 3 and t not in _STOP]
+    units, _like = search_units(q)
+    latin = [t for t in dict.fromkeys(u for u in units if u.isascii()) if len(t) >= 3 and t not in _STOP]
+    latin = sorted(latin, key=len, reverse=True)[:MAX_FTS_TERMS]
+    cjk = [u for u in units if not u.isascii()]  # 3-character windows, already capped
+    terms = latin + cjk
     if not terms:
         return None
-    terms = sorted(terms, key=len, reverse=True)[:MAX_FTS_TERMS]
     return " OR ".join('"' + t.replace('"', '""') + '"' for t in terms)
 
 
@@ -67,16 +70,20 @@ def keyword_ids(s: Session, q: str, types: Iterable[str], k: int = 200) -> list[
             "order by bm25(entity_fts) limit :k"),
             {"q": fq, "k": k, **{f"t{i}": t for i, t in enumerate(types)}}).all()
         ids = [r[0] for r in rows]
-    if len(ids) < k:
-        # short CJK terms (< 3 chars) and the Postgres backend: alias / name substring match
-        short = [t for t in tokens(q) if t] or [norm(q)]
-        conds = [EntityAlias.norm.contains(t) for t in short[:6] if t]
-        if conds:
-            rows = s.execute(
-                select(Entity.id).join(EntityAlias, EntityAlias.entity_id == Entity.id)
-                .where(Entity.type.in_(types), or_(*conds)).distinct().limit(k)
-            ).scalars().all()
-            ids += [i for i in rows if i not in set(ids)]
+    _units, like = search_units(q)
+    if not has_fts(s):  # the Postgres backend: substring match on aliases for every term
+        like = [u for u in _units if len(u) >= 2] + like
+    if like and len(ids) < k:
+        # 2-character Chinese terms (trigrams cannot match them): alias substring match, ranked by
+        # how many of the terms an entity matches, after the full-text hits
+        hits = func.sum(sum((case((EntityAlias.norm.contains(t), 1), else_=0) for t in like[:8]), literal(0)))
+        rows = s.execute(
+            select(Entity.id, hits.label("n")).join(EntityAlias, EntityAlias.entity_id == Entity.id)
+            .where(Entity.type.in_(types), or_(*[EntityAlias.norm.contains(t) for t in like[:8]]))
+            .group_by(Entity.id).order_by(hits.desc(), Entity.id).limit(k)
+        ).all()
+        seen = set(ids)
+        ids += [i for i, _ in rows if i not in seen]
     return ids[:k]
 
 
@@ -182,7 +189,13 @@ def search(s: Session, q: str, f: Filters | None = None, limit: int = 20, offset
     relevance: dict[int, float] = {}
     if rerank and head:
         top = head[:RERANK_TOP]
-        rr = get_reranker().score(q, [entity_text(ents[i]) for i in top])
+        # aliases count: people search by other names (a Chinese name, an abbreviation)
+        aliases: dict[int, list[str]] = {}
+        for eid, alias in s.execute(select(EntityAlias.entity_id, EntityAlias.alias)
+                                    .where(EntityAlias.entity_id.in_(top))).all():
+            aliases.setdefault(eid, []).append(alias)
+        rr = get_reranker().score(q, [entity_text(ents[i]) + "\n" + "\n".join(aliases.get(i, [])[:20])
+                                      for i in top])
         for i, sc in zip(top, rr):
             relevance[i] = sc
             scores[i] = 1.0 + sc  # reranked results always above the un-reranked tail

@@ -310,12 +310,21 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
             return {"related": related_to_work(s, entity_id)}
         return {"related": [h for h in recall(s, entity_text(e), limit=8, min_relevance=0.0) if h["id"] != e.id]}
 
+    @app.get("/entity/{entity_id}/edges", dependencies=A)
+    def entity_edges(entity_id: int, type: str, offset: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500),
+                     s: Session = Depends(db)) -> dict[str, Any]:
+        from ..services.views import entity_edges as ee
+
+        return ee(s, entity_id, type, offset, limit)
+
     # ---- topics ----
     @app.get("/topic/{topic_id}/assets", dependencies=A)
-    def topic_assets(topic_id: int, role: str | None = None, s: Session = Depends(db)) -> dict[str, Any]:
+    def topic_assets(topic_id: int, role: str | None = None, column: str | None = None,
+                     offset: int = Query(0, ge=0), limit: int = Query(150, ge=1, le=500),
+                     s: Session = Depends(db)) -> dict[str, Any]:
         from ..services.views import topic_assets as ta
 
-        out = ta(s, topic_id, role=role)
+        out = ta(s, topic_id, role=role, column=column, offset=offset, limit=limit)
         if out is None:
             raise HTTPException(404, _("api.not_found"))
         return out

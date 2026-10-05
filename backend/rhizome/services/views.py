@@ -9,7 +9,7 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from .. import rawstore
@@ -27,22 +27,53 @@ def _edge_view(ed: Edge, other: Entity, direction: str) -> dict[str, Any]:
                       "status": other.status}}
 
 
+EDGES_PER_TYPE = 50
+
+
+def _edges_page(s: Session, entity_id: int, direction: str, etype: str | None, offset: int, limit: int):
+    """(Edge, other Entity) rows of one direction; per type when etype is None (window function)."""
+    me, other_col = (Edge.src, Edge.dst) if direction == "out" else (Edge.dst, Edge.src)
+    rank_order = (case((Edge.status == "confirmed", 0), (Edge.status == "auto", 1), else_=2), Edge.id)
+    if etype is not None:
+        return s.execute(select(Edge, Entity).join(Entity, Entity.id == other_col)
+                         .where(me == entity_id, Edge.type == etype).order_by(*rank_order)
+                         .offset(offset).limit(limit)).all()
+    rn = func.row_number().over(partition_by=Edge.type, order_by=rank_order).label("rn")
+    ranked = select(Edge.id.label("eid"), rn).where(me == entity_id).subquery()
+    return s.execute(select(Edge, Entity).join(ranked, ranked.c.eid == Edge.id)
+                     .join(Entity, Entity.id == other_col)
+                     .where(ranked.c.rn > offset, ranked.c.rn <= offset + limit).order_by(Edge.type, ranked.c.rn)).all()
+
+
+def entity_edges(s: Session, entity_id: int, etype: str, offset: int = 0, limit: int = 100) -> dict[str, Any]:
+    """One edge type of an entity, both directions, paged (the card shows the first ones)."""
+    out = [_edge_view(ed, o, "out") for ed, o in _edges_page(s, entity_id, "out", etype, 0, offset + limit)]
+    inn = [_edge_view(ed, o, "in") for ed, o in _edges_page(s, entity_id, "in", etype, 0, offset + limit)]
+    both = (out + inn)[offset:offset + limit]
+    total = sum(s.execute(select(func.count()).where(col == entity_id, Edge.type == etype)).scalar_one()
+                for col in (Edge.src, Edge.dst))
+    return {"type": etype, "edges": both, "total": total, "offset": offset}
+
+
 def entity_card(s: Session, entity_id: int, touch_access: bool = True) -> dict[str, Any] | None:
     e = s.get(Entity, entity_id)
     if e is None:
         return None
     aliases = s.execute(select(EntityAlias).where(EntityAlias.entity_id == e.id)).scalars().all()
     edges: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    rows = s.execute(select(Edge, Entity).join(Entity, Entity.id == Edge.dst).where(Edge.src == e.id)).all()
-    rows_in = s.execute(select(Edge, Entity).join(Entity, Entity.id == Edge.src).where(Edge.dst == e.id)).all()
-    for ed, other in rows:
-        edges[ed.type].append(_edge_view(ed, other, "out"))
-    for ed, other in rows_in:
-        edges[ed.type].append(_edge_view(ed, other, "in"))
+    # a hub (an organism, a popular method) has thousands of edges: per type, the first
+    # EDGES_PER_TYPE (confirmed first) and the total; entity_edges() pages through the rest
+    for direction in ("out", "in"):
+        for ed, other in _edges_page(s, e.id, direction, None, 0, EDGES_PER_TYPE):
+            edges[ed.type].append(_edge_view(ed, other, direction))
+    counts: Counter = Counter()
+    for col in (Edge.src, Edge.dst):
+        for etype, n in s.execute(select(Edge.type, func.count()).where(col == e.id).group_by(Edge.type)).all():
+            counts[etype] += n
     card: dict[str, Any] = {
         **summarize(e), "attrs": e.attrs or {}, "created_at": e.created_at.isoformat() if e.created_at else None,
         "aliases": [{"alias": a.alias, "lang": a.lang, "source": a.source} for a in aliases],
-        "edges": dict(edges),
+        "edges": dict(edges), "edge_counts": dict(counts),
     }
     if e.type == "work":
         w = s.get(Work, e.id)
@@ -107,51 +138,63 @@ def neighbors(s: Session, entity_id: int, hops: int = 1, edge_types: list[str] |
     }
 
 
-def topic_assets(s: Session, topic_id: int, role: str | None = None) -> dict[str, Any] | None:
+PER_COLUMN = 150
+TOPIC_COLUMNS = ("dataset", "method", "idea", "claim", "work")
+
+
+def _topic_members(sub_ids: list[int]):
+    """(entity id, role, via work) rows for a topic subtree, as a SQL subquery: entities linked to
+    the topic directly, and assets of the papers on the topic. Never materialised as a Python id
+    list (a broad topic has tens of thousands of members: SQLite caps bound variables)."""
+    from sqlalchemy import literal, union_all
+
+    direct = select(Edge.src.label("eid"), Edge.type.label("role"), literal(None).label("via")).where(
+        Edge.dst.in_(sub_ids), Edge.type.in_(("about", "applicable_to")), Edge.status != "rejected")
+    works = (select(Edge.src).join(Entity, Entity.id == Edge.src)
+             .where(Edge.dst.in_(sub_ids), Edge.type.in_(("about", "applicable_to")), Edge.status != "rejected",
+                    Entity.type == "work"))
+    via = select(Edge.dst.label("eid"), Edge.type.label("role"), Edge.src.label("via")).where(
+        Edge.src.in_(works), Edge.type.in_(SOURCE_EDGE_TYPES), Edge.status != "rejected")
+    return union_all(direct, via).subquery()
+
+
+def topic_assets(s: Session, topic_id: int, role: str | None = None, column: str | None = None,
+                 offset: int = 0, limit: int = PER_COLUMN) -> dict[str, Any] | None:
+    """Topic page: data / methods / ideas / claims / papers under a topic subtree, aggregated in
+    SQL; each column returns at most ``limit`` items plus its total (``column`` + ``offset`` page
+    one column)."""
+    from sqlalchemy import and_, case, distinct, exists
+
     topic = s.get(Entity, topic_id)
     if topic is None or topic.type != "topic":
         return None
     sub = topic_subtree(s, topic_id)
-    linked = s.execute(select(Edge.src, Edge.type, Edge.dst).where(
-        Edge.dst.in_(sub), Edge.type.in_(("about", "applicable_to")), Edge.status != "rejected")).all()
-    ids = {src for src, _, _ in linked}
-    ents = {e.id: e for e in s.execute(select(Entity).where(Entity.id.in_(ids))).scalars()}
-    work_ids = {i for i in ids if ents[i].type == "work"}
-    roles: dict[int, set[str]] = defaultdict(set)
-    for src, etype, _ in linked:
-        roles[src].add(etype)
-
-    # assets that come from works on this topic
-    rows = s.execute(select(Edge.dst, Edge.type, Edge.src).where(
-        Edge.src.in_(work_ids), Edge.type.in_(SOURCE_EDGE_TYPES), Edge.status != "rejected")).all()
-    via_work: dict[int, set[int]] = defaultdict(set)
-    for dst, etype, src in rows:
-        roles[dst].add(etype)
-        via_work[dst].add(src)
-    all_ids = ids | set(via_work)
-    ents.update({e.id: e for e in s.execute(select(Entity).where(Entity.id.in_(all_ids - set(ents)))).scalars()})
-
-    contested = set(s.execute(select(Edge.dst).where(Edge.dst.in_(all_ids), Edge.type == "contradicts",
-                                                     Edge.status != "rejected")).scalars())
-    years = {w.entity_id: w.year for w in s.execute(select(Work).where(Work.entity_id.in_(work_ids))).scalars()}
-    columns: dict[str, list[dict[str, Any]]] = {"dataset": [], "method": [], "idea": [], "claim": [], "work": []}
-    for i in all_ids:
-        e = ents.get(i)
-        if e is None or e.type not in columns:
-            continue
-        if role and role not in roles[i]:
-            continue
-        item = summarize(e)
-        item.update(roles=sorted(roles[i]), works=len(via_work.get(i, ())) or (1 if e.type == "work" else 0),
-                    contested=i in contested, year=years.get(i))
-        columns[e.type].append(item)
-    for col, items in columns.items():
-        if col == "claim":
-            items.sort(key=lambda x: (not x["contested"], -x["works"], x["name"]))
-        elif col == "work":
-            items.sort(key=lambda x: (-(x["year"] or 0), x["name"]))
-        else:
-            items.sort(key=lambda x: (-x["works"], x["name"]))
+    m = _topic_members(sub)
+    roles = func.group_concat(distinct(m.c.role)).label("roles")
+    nworks = func.count(distinct(m.c.via)).label("works")
+    agg = select(m.c.eid, roles, nworks).group_by(m.c.eid)
+    if role:
+        agg = agg.having(func.sum(case((m.c.role == role, 1), else_=0)) > 0)
+    agg = agg.subquery()
+    contested = exists().where(and_(Edge.dst == Entity.id, Edge.type == "contradicts", Edge.status != "rejected"))
+    base = (select(Entity, agg.c.roles, agg.c.works, Work.year, contested.label("contested"))
+            .join(agg, agg.c.eid == Entity.id).outerjoin(Work, Work.entity_id == Entity.id)
+            .where(Entity.status != "rejected"))
+    totals = dict(s.execute(select(Entity.type, func.count()).join(agg, agg.c.eid == Entity.id)
+                            .where(Entity.status != "rejected", Entity.type.in_(TOPIC_COLUMNS))
+                            .group_by(Entity.type)).all())
+    order = {"claim": (contested.desc(), agg.c.works.desc(), Entity.canonical_name),
+             "work": (Work.year.desc(), Entity.canonical_name)}
+    columns: dict[str, list[dict[str, Any]]] = {c: [] for c in TOPIC_COLUMNS}
+    for col in ([column] if column in TOPIC_COLUMNS else TOPIC_COLUMNS):
+        rows = s.execute(base.where(Entity.type == col)
+                         .order_by(*order.get(col, (agg.c.works.desc(), Entity.canonical_name)))
+                         .offset(offset if column else 0).limit(limit)).all()
+        for e, rs, works, year, is_contested in rows:
+            item = summarize(e)
+            item.update(roles=sorted((rs or "").split(",")) if rs else [],
+                        works=works or (1 if e.type == "work" else 0), contested=bool(is_contested), year=year)
+            columns[col].append(item)
     children = s.execute(select(Entity).join(Edge, Edge.src == Entity.id).where(
         Edge.dst == topic_id, Edge.type == "is_a", Edge.status != "rejected")).scalars().all()
     parents = s.execute(select(Entity).join(Edge, Edge.dst == Entity.id).where(
@@ -159,7 +202,8 @@ def topic_assets(s: Session, topic_id: int, role: str | None = None) -> dict[str
     touch(s, topic.key)
     return {"topic": {**summarize(topic), "attrs": topic.attrs or {}},
             "children": [summarize(c) for c in children], "parents": [summarize(p) for p in parents],
-            "subtree_size": len(sub), "columns": columns}
+            "subtree_size": len(sub), "columns": columns,
+            "totals": {c: int(totals.get(c, 0)) for c in TOPIC_COLUMNS}, "limit": limit}
 
 
 def topic_map(s: Session, include_candidates: bool = False) -> dict[str, Any]:

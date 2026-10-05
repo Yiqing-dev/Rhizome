@@ -13,7 +13,7 @@ import hashlib
 
 import numpy as np
 
-from ..text import char_ngrams, tokens
+from ..text import char_ngrams, lex_tokens, tokens
 
 
 def _h(feature: str) -> int:
@@ -49,7 +49,7 @@ class LexicalReranker:
 
     @staticmethod
     def _sim(a: str, b: str) -> float:
-        ta, tb = set(tokens(a)), set(tokens(b))
+        ta, tb = set(lex_tokens(a)), set(lex_tokens(b))  # Chinese as character pairs, not single characters
         jac = len(ta & tb) / len(ta | tb) if ta and tb else 0.0
         ga, gb = set(char_ngrams(a)), set(char_ngrams(b))
         dice = 2 * len(ga & gb) / (len(ga) + len(gb)) if ga and gb else 0.0

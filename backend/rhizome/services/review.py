@@ -38,8 +38,11 @@ def list_items(s: Session, kind: str | None = None, limit: int = 50, offset: int
 
 
 def _context(g: Graph, it: ReviewItem) -> dict[str, Any]:
-    """Both sides' aliases, definition and three representative connections."""
-    from .views import entity_card
+    """Both sides' aliases, definition and three representative connections (cheap queries: a
+    queue page asks for this for every item, and a side may be a hub with thousands of edges)."""
+    from sqlalchemy import or_
+
+    from ..db.models import Edge, Entity, EntityAlias
 
     ctx = {}
     for side in ("a", "b", "key", "claim", "topic", "new_claim"):
@@ -49,13 +52,17 @@ def _context(g: Graph, it: ReviewItem) -> dict[str, Any]:
         e = g.by_key(key)
         if e is None:
             continue
-        card = entity_card(g.s, e.id, touch_access=False)
-        conns = [x for es in card["edges"].values() for x in es][:3]
-        ctx[side] = {"id": e.id, "name": e.canonical_name, "type": e.type,
-                     "aliases": [a["alias"] for a in card["aliases"]][:8],
-                     "definition": (e.attrs or {}).get("definition"),
-                     "connections": [{"type": c["type"], "direction": c["direction"], "name": c["other"]["name"]}
-                                     for c in conns]}
+        aliases = g.s.execute(select(EntityAlias.alias).where(EntityAlias.entity_id == e.id)
+                              .order_by(EntityAlias.id).limit(8)).scalars().all()
+        conns = []
+        for ed in g.s.execute(select(Edge).where(or_(Edge.src == e.id, Edge.dst == e.id), Edge.status != "rejected")
+                              .order_by(Edge.id).limit(3)).scalars():
+            out = ed.src == e.id
+            other = g.s.get(Entity, ed.dst if out else ed.src)
+            if other is not None:
+                conns.append({"type": ed.type, "direction": "out" if out else "in", "name": other.canonical_name})
+        ctx[side] = {"id": e.id, "name": e.canonical_name, "type": e.type, "aliases": list(aliases),
+                     "definition": (e.attrs or {}).get("definition"), "connections": conns}
     return ctx
 
 

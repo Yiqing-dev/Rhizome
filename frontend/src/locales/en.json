@@ -55,7 +55,8 @@
     "not_found": "Not found.",
     "no_results": "No results.",
     "prev": "Previous",
-    "next": "Next"
+    "next": "Next",
+    "show_more": "Show {{n}} more"
   },
   "search": {
     "placeholder": "Search datasets, methods, ideas, claims…",

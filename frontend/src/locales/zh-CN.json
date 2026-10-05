@@ -55,7 +55,8 @@
     "not_found": "未找到。",
     "no_results": "没有结果。",
     "prev": "上一页",
-    "next": "下一页"
+    "next": "下一页",
+    "show_more": "再显示 {{n}} 项"
   },
   "search": {
     "placeholder": "检索数据集、方法、思路、论断…",
