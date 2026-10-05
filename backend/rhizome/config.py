@@ -3,20 +3,30 @@
 
 Everything that depends on the user's environment (paths, servers, model choices, language)
 lives here and is persisted in ``<data_dir>/settings.json``. Nothing environment-specific is
-hard-coded elsewhere. Precedence: environment variables (``RHIZOME_*``) > settings.json > defaults.
+hard-coded elsewhere.
+
+Precedence: explicit arguments (``Settings(...)``, ``--data-dir``, ``--snapshot``, test fixtures)
+> environment variables (``RHIZOME_*``) > settings.json > defaults.
+
+settings.json holds only what the user changed (:func:`update_settings`), so improved defaults in a
+later version reach existing installs, and unknown keys from a newer version are kept.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import sys
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
+
+log = logging.getLogger(__name__)
 
 
 def platform_data_dir() -> Path:
@@ -79,8 +89,25 @@ def set_data_dir_pointer(target: Path | None) -> Path:
         if pointer.exists():
             pointer.unlink()
     else:
-        pointer.write_text(json.dumps({"data_dir": str(Path(target).resolve())}, ensure_ascii=False), "utf-8")
+        _atomic_write(pointer, json.dumps({"data_dir": str(Path(target).resolve())}, ensure_ascii=False))
     return pointer
+
+
+def _atomic_write(path: Path, text: str, backup: bool = False) -> None:
+    """tmp + fsync + replace: a crash or full disk never leaves a half-written file behind."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+        f.flush()
+        os.fsync(f.fileno())
+    if backup and path.exists():
+        bak = path.with_name(path.name + ".bak")
+        try:
+            os.replace(path, bak)
+        except OSError:
+            pass
+    os.replace(tmp, path)
 
 
 class RemoteTarget(BaseModel):
@@ -142,7 +169,7 @@ class Settings(BaseSettings):
         dotenv_settings: PydanticBaseSettingsSource,
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
-        return (env_settings, init_settings)
+        return (init_settings, env_settings, _FileSource(settings_cls))
 
     # ---- derived paths -------------------------------------------------
     @property
@@ -180,29 +207,137 @@ class Settings(BaseSettings):
 
 
 SETTINGS_FILE = "settings.json"
+SETTINGS_VERSION = 1
+
+# values read from settings.json for the Settings() being built (lowest-priority source)
+_file_values: ContextVar[dict[str, Any]] = ContextVar("rhizome_settings_file", default={})
+# problems found while loading settings.json, per data dir (shown in /system and the CLI)
+_problems: dict[str, list[str]] = {}
+
+
+class _FileSource(PydanticBaseSettingsSource):
+    def get_field_value(self, field, field_name):  # pragma: no cover - __call__ is used instead
+        return None, field_name, False
+
+    def __call__(self) -> dict[str, Any]:
+        return dict(_file_values.get())
 
 
 def _settings_path(data_dir: Path) -> Path:
     return data_dir / SETTINGS_FILE
 
 
+def _read_raw(data_dir: Path) -> tuple[dict[str, Any], list[str]]:
+    """settings.json as written (falls back to settings.json.bak when it is unreadable)."""
+    problems: list[str] = []
+    p = _settings_path(data_dir)
+    for cand in (p, p.with_name(p.name + ".bak")):
+        if not cand.exists():
+            continue
+        try:
+            data = json.loads(cand.read_text(encoding="utf-8-sig"))
+            if not isinstance(data, dict):
+                raise ValueError("not a JSON object")
+            if cand != p:
+                problems.append(f"{p.name} unreadable; using {cand.name}")
+            return data, problems
+        except (OSError, ValueError) as e:
+            problems.append(f"{cand.name}: {e}")
+    return {}, problems
+
+
+def _build(data_dir: Path, file_values: dict[str, Any], problems: list[str]) -> Settings:
+    """Settings from env + file; a field that does not validate is dropped (and reported) instead of
+    making the app, the CLI and the MCP server fail to start."""
+    values = {k: v for k, v in file_values.items() if k != "data_dir"}
+    for _ in range(len(values) + 1):
+        token = _file_values.set(values)
+        try:
+            return Settings(data_dir=data_dir)
+        except ValidationError as e:
+            bad = {str(err["loc"][0]) for err in e.errors() if err.get("loc")} & set(values)
+            if not bad:
+                raise
+            for k in sorted(bad):
+                problems.append(f"{SETTINGS_FILE}: ignored invalid value for {k}")
+                values.pop(k)
+        finally:
+            _file_values.reset(token)
+    return Settings(data_dir=data_dir)  # pragma: no cover
+
+
 def load_settings(data_dir: Path | None = None) -> Settings:
     data_dir = data_dir or default_data_dir()
-    file_values: dict[str, Any] = {}
-    p = _settings_path(data_dir)
-    if p.exists():
-        file_values = json.loads(p.read_text(encoding="utf-8-sig"))
-    file_values["data_dir"] = data_dir
-    return Settings(**file_values)
+    file_values, problems = _read_raw(data_dir)
+    st = _build(data_dir, file_values, problems)
+    _problems[str(data_dir)] = problems
+    for msg in problems:
+        log.warning(msg)
+    return st
+
+
+def settings_problems(settings: Settings | None = None) -> list[str]:
+    return list(_problems.get(str((settings or get_settings()).data_dir), []))
+
+
+def _defaults() -> dict[str, Any]:
+    return Settings.model_construct().model_dump(mode="json", exclude={"data_dir"}) | {
+        "thresholds": Thresholds().model_dump(mode="json")}
+
+
+def update_settings(patch: dict[str, Any], data_dir: Path | None = None) -> Settings:
+    """Persist only what changed: merge ``patch`` into the raw settings.json (``None`` resets a key,
+    nested dicts merge), drop values equal to the defaults, keep unknown keys, validate, write
+    atomically with a .bak, and make the result current."""
+    data_dir = data_dir or get_settings().data_dir
+    raw, _ = _read_raw(data_dir)
+    for k, v in patch.items():
+        if k == "data_dir":
+            continue
+        if v is None:
+            raw.pop(k, None)
+        elif isinstance(v, dict) and isinstance(raw.get(k), dict):
+            merged = {**raw[k], **v}
+            raw[k] = {kk: vv for kk, vv in merged.items() if vv is not None}
+        else:
+            raw[k] = v
+    defaults = _defaults()
+    for k in list(raw):
+        if k == "thresholds" and isinstance(raw[k], dict):
+            raw[k] = {kk: vv for kk, vv in raw[k].items() if defaults["thresholds"].get(kk) != vv}
+            if not raw[k]:
+                raw.pop(k)
+        elif k in defaults and raw[k] == defaults[k]:
+            raw.pop(k)
+    token = _file_values.set({k: v for k, v in raw.items() if k != "settings_version"})
+    try:
+        Settings(data_dir=data_dir)  # validate before writing; raises on a bad value
+    finally:
+        _file_values.reset(token)
+    raw["settings_version"] = SETTINGS_VERSION
+    _atomic_write(_settings_path(data_dir), json.dumps(raw, indent=2, ensure_ascii=False), backup=True)
+    st = load_settings(data_dir).model_copy(update=_overrides)
+    if _current is None or _current.data_dir == data_dir:
+        set_settings(st)
+    return st
 
 
 def save_settings(settings: Settings) -> None:
-    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    """Persist the fields of ``settings`` that differ from the defaults (prefer update_settings)."""
     data = settings.model_dump(mode="json", exclude={"data_dir"})
-    _settings_path(settings.data_dir).write_text(json.dumps(data, indent=2, ensure_ascii=False), "utf-8")
+    update_settings(data, settings.data_dir)
 
 
 _current: Settings | None = None
+# per-process overrides (`--lang`, `serve --port`): applied in memory, never written to settings.json
+_overrides: dict[str, Any] = {}
+
+
+def set_overrides(**values: Any) -> Settings:
+    _overrides.update({k: v for k, v in values.items() if v is not None})
+    st = get_settings().model_copy(update=_overrides)
+    set_settings(st)
+    return st
 
 
 def get_settings() -> Settings:

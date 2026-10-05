@@ -13,7 +13,7 @@ from typing import Any, Optional
 
 import typer
 
-from .config import Settings, get_settings, load_settings, save_settings, set_settings
+from .config import get_settings, load_settings, set_overrides, set_settings, update_settings
 from .i18n import _
 
 app = typer.Typer(help="Rhizome - personal literature asset graph", no_args_is_help=True,
@@ -35,9 +35,9 @@ def main(data_dir: Optional[Path] = typer.Option(None, envvar="RHIZOME_DATA_DIR"
          as_json: bool = typer.Option(False, "--json", help="Machine-readable output"),
          lang: Optional[str] = typer.Option(None, help="Interface language: en | zh_CN")) -> None:
     st = load_settings(data_dir) if data_dir else get_settings()
-    if lang:
-        st = st.model_copy(update={"language": lang})
     set_settings(st)
+    if lang:
+        st = set_overrides(language=lang)
     _state["json"] = as_json
     _state["snapshot"] = snapshot
     from .logging_setup import setup_logging
@@ -75,10 +75,7 @@ def serve(host: Optional[str] = None, port: Optional[int] = None,
 
     from .api.app import create_app
 
-    st = get_settings()
-    if host or port:
-        st = st.model_copy(update={k: v for k, v in (("host", host), ("port", port)) if v})
-        set_settings(st)
+    st = set_overrides(host=host, port=port) if (host or port) else get_settings()
     import os
 
     from .system import clear_server_marker, watch_parent, write_server_marker
@@ -493,20 +490,21 @@ def settings_show() -> None:
 
 @settings_app.command("set")
 def settings_set(key: str, value: str) -> None:
-    """Set a setting, e.g. `rhz settings set language zh_CN` or `thresholds.merge_auto 0.92`."""
-    st = get_settings()
-    data = st.model_dump()
+    """Set a setting, e.g. `rhz settings set language zh_CN` or `thresholds.merge_auto 0.92`.
+    `rhz settings set <key> default` goes back to the built-in default."""
     try:
         parsed: Any = json.loads(value)
     except json.JSONDecodeError:
         parsed = value
-    cur = data
+    if value == "default":
+        parsed = None
+    patch: dict[str, Any] = {}
+    cur = patch
     parts = key.split(".")
     for p in parts[:-1]:
-        cur = cur[p]
+        cur = cur.setdefault(p, {})
     cur[parts[-1]] = parsed
-    new = Settings(**data)
-    save_settings(new)
+    update_settings(patch)
     typer.echo(f"{key} = {parsed!r}")
 
 

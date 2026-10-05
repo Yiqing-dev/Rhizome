@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from .. import __version__, jobs
-from ..config import Settings, get_settings, save_settings, set_settings, ui_language
+from ..config import Settings, get_settings, set_settings, settings_problems, ui_language, update_settings
 from ..db.models import EDGE_TYPES, Entity, HumanDecision, Job
 from ..db.session import session_scope
 from ..i18n import _
@@ -450,20 +450,16 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         cur = get_settings()
         data = cur.model_dump(mode="json")
         data["ui_language"] = ui_language()
+        data["problems"] = settings_problems(cur)
         return data
 
     @app.patch("/settings", dependencies=W)
     def patch_settings(body: SettingsPatch) -> dict[str, Any]:
-        cur = get_settings()
-        merged = cur.model_dump()
-        for k, v in body.model_dump(exclude_none=True).items():
-            if k == "thresholds":
-                merged["thresholds"] = {**merged["thresholds"], **v}
-            else:
-                merged[k] = v
-        new = Settings(**merged)
-        save_settings(new)
-        set_settings(new)
+        # only the fields the client sent; null resets one to its default
+        try:
+            update_settings(body.model_dump(exclude_unset=True))
+        except ValueError as e:
+            raise HTTPException(422, str(e))
         from ..inference import reset_backend
         from ..ml import reset_models
 

@@ -9,6 +9,25 @@ ROOT = Path(__file__).resolve().parents[2]
 EXAMPLES = ROOT / "rxf-spec" / "examples"
 
 
+@pytest.fixture(autouse=True)
+def _isolated_env(tmp_path, monkeypatch):
+    """No RHIZOME_* variable from the developer's shell reaches a test (it could point the suite at a
+    real library), and the OS default data dir / pointer file live in tmp."""
+    import os
+
+    for k in list(os.environ):
+        if k.startswith("RHIZOME_"):
+            monkeypatch.delenv(k)
+    monkeypatch.setenv("RHIZOME_OFFLINE", "1")
+    home = tmp_path / "_home"
+    for var in ("APPDATA", "XDG_DATA_HOME", "HOME", "USERPROFILE"):
+        monkeypatch.setenv(var, str(home))
+    import rhizome.config as config
+
+    monkeypatch.setattr(config, "_current", None)
+    monkeypatch.setattr(config, "_overrides", {})
+
+
 @pytest.fixture()
 def settings(tmp_path, monkeypatch):
     from rhizome.config import Settings, set_settings
@@ -19,6 +38,7 @@ def settings(tmp_path, monkeypatch):
 
     monkeypatch.setenv("RHIZOME_OFFLINE", "1")
     st = Settings(data_dir=tmp_path / "data", offline=True, language="en")
+    assert st.data_dir == tmp_path / "data"  # explicit arguments always win over the environment
     set_settings(st)
     st.ensure_dirs()
     dispose_all()
