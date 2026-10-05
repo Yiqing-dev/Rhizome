@@ -18,8 +18,16 @@ from .recall import touch
 _scheduler = Scheduler()
 
 
+ROLLOVER_HOUR = 4  # a review at 1 am still belongs to the evening's day
+
+
 def _day_start(now: datetime) -> datetime:
-    return now.replace(hour=0, minute=0, second=0, microsecond=0)
+    """Start of the current review day in *local* time (naive UTC in, naive UTC out)."""
+    local = now.replace(tzinfo=timezone.utc).astimezone()
+    start = local.replace(hour=ROLLOVER_HOUR, minute=0, second=0, microsecond=0)
+    if local < start:
+        start -= timedelta(days=1)
+    return start.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _counts_today(s: Session, now: datetime) -> tuple[int, int]:
@@ -43,7 +51,8 @@ def due_cards(s: Session, limit: int = 20, now: datetime | None = None) -> list[
     new_room = max(0, min(st.review_daily_new - introduced, room - len(due), limit - len(due)))
     if new_room:
         due += list(s.execute(select(ReviewCard).where(alive, ReviewCard.introduced_at.is_(None))
-                              .order_by(ReviewCard.priority.desc(), ReviewCard.id).limit(new_room)).scalars())
+                              .order_by(ReviewCard.priority.desc(), ReviewCard.created_at.desc().nulls_last(),
+                                        ReviewCard.id).limit(new_room)).scalars())
     names = dict(s.execute(select(Entity.key, Entity.canonical_name)
                            .where(Entity.key.in_([c.entity_key for c in due]))).all())
     return [{"id": c.id, "q": c.q, "a": c.a, "entity_key": c.entity_key, "entity_name": names.get(c.entity_key),
@@ -69,6 +78,11 @@ def _alive_cards():
 
 
 def due_count(s: Session) -> int:
+    """What a review session would serve now (the daily caps applied), for the home page."""
+    return len(due_cards(s, limit=get_settings().review_daily_max))
+
+
+def backlog_count(s: Session) -> int:
     now = utcnow()
     return s.execute(select(func.count()).select_from(ReviewCard).where(
         _alive_cards(), or_(ReviewCard.introduced_at.is_(None), ReviewCard.due <= now))).scalar_one()

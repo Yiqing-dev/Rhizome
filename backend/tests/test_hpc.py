@@ -136,7 +136,7 @@ def test_sync_is_one_ssh_session(settings, monkeypatch):
     from rhizome.services import snapshot as sn
 
     t = RemoteTarget(name="hpc", host="me@login.example.edu", path="~/.rhizome/rhizome.db",
-                     control_path="~/.ssh/cm-%r@%h:%p", timeout=7)
+                     control_path="~/.ssh/cm-%r@%h:%p", timeout=10)
     (cmd,) = sn.sync(settings, t, dry_run=True)
     assert cmd[0] == "ssh" and "scp" not in cmd and cmd[-2] == "me@login.example.edu"
     script = cmd[-1]
@@ -156,7 +156,7 @@ def test_sync_is_one_ssh_session(settings, monkeypatch):
     monkeypatch.setattr(sn.subprocess, "run", fake_run)
     with pytest.raises(sn.SyncError, match="255"):
         sn.sync(settings, t)
-    assert calls[0][1].startswith(b"SQLite format 3") and calls[0][2] == 7
+    assert calls[0][1].startswith(b"SQLite format 3") and calls[0][2] == 10
 
     monkeypatch.setattr(sys, "platform", "win32")
     assert sn.sync_warnings(t) and not sn.sync_warnings(RemoteTarget(name="x", host="h"))

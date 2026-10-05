@@ -13,7 +13,7 @@ from typing import Any, Optional
 
 import typer
 
-from .config import get_settings, load_settings, set_overrides, set_settings, update_settings
+from .config import get_settings, load_settings, redact_url, set_overrides, set_settings, update_settings
 from .i18n import _
 
 app = typer.Typer(help="Rhizome - personal literature asset graph", no_args_is_help=True,
@@ -141,7 +141,12 @@ def serve(host: Optional[str] = None, port: Optional[int] = None,
              db.stat().st_size / 1048576 if db.exists() else 0, current_revision(get_engine(st)), url,
              bool(getattr(sys, "frozen", False)), parent or "-")
     typer.echo(_("cli.serving", url=url))
-    typer.echo(_("cli.open_ui", url=f"{url}/#token={application.state.token}"))
+    import os as _os
+
+    application.state.enforce_host = True  # a browser on this machine: Host must be loopback
+    # the desktop shell passes the token in and captures this output into a log: never echo it
+    shown = url if _os.environ.get("RHIZOME_API_TOKEN") else f"{url}/#token={application.state.token}"
+    typer.echo(_("cli.open_ui", url=shown))
     write_server_marker(url)  # lets the CLI / MCP server find this instance on a non-default port
     try:
         uvicorn.run(application, host=st.host, port=st.port, log_level="warning")
@@ -250,10 +255,10 @@ def search(q: str, type: Optional[str] = typer.Option(None, "--type", "-t", help
            organism: Optional[str] = None, modality: Optional[str] = None,
            year_min: Optional[int] = None, year_max: Optional[int] = None,
            edge_type: Optional[str] = typer.Option(None, help="e.g. proposes, produces, evaluates"),
-           limit: int = 20) -> None:
+           limit: int = 20, offset: int = 0) -> None:
     """Hybrid search over assets."""
     hits = _client(create=False).search(q, types=type, organism=organism, modality=modality, year_min=year_min,
-                            year_max=year_max, edge_type=edge_type, limit=limit)
+                                        year_max=year_max, edge_type=edge_type, limit=limit, offset=offset)
     if _out(hits):
         return
     if not hits:
@@ -692,7 +697,8 @@ def diag(output: Path = typer.Option(None, "-o")) -> None:
         raw = rawstore.check(s) if _state["snapshot"] is None else None
     info = {"version": __version__, "python": sys.version, "platform": sys.platform,
             "sqlite": sqlite3.sqlite_version, "snapshot": str(_state["snapshot"] or ""), "stats": stats, "raw": raw,
-            "settings": st.model_dump(mode="json", exclude={"contact_email", "remotes"}),
+            "settings": {**st.model_dump(mode="json", exclude={"contact_email", "remotes"}),
+                         "database_url": redact_url(st.database_url)},
             "remotes": [r.name for r in st.remotes]}
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("info.json", json.dumps(info, indent=2, ensure_ascii=False, default=str))

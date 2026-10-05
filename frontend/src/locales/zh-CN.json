@@ -108,7 +108,8 @@
     "show_report": "查看报告",
     "fix": {
       "transfer_flattened": "收回摊平的 transfer",
-      "topic_new_flag": "删除 topics 里的 new"
+      "topic_new_flag": "删除 topics 里的 new",
+      "rxf_version_type": "把带引号的 rxf_version 当作数字"
     },
     "inbox_pending": "收件箱里有 {{n}} 个文件等待处理（资料库忙或模型不可用时会自动重试）：{{files}}",
     "inbox_ignored": "收件箱里有 {{n}} 个文件不是 RXF 导出，已跳过：{{files}}",

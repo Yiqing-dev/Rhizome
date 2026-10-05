@@ -21,7 +21,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from .. import __version__, jobs
-from ..config import Settings, get_settings, set_settings, settings_problems, token_path, ui_language, update_settings
+from ..config import (Settings, get_settings, redact_url, set_settings, settings_problems, token_path, ui_language,
+                      update_settings)
 from ..db.models import EDGE_TYPES, Entity, HumanDecision, Job
 from ..db.session import session_scope
 from ..i18n import _
@@ -37,8 +38,7 @@ def get_or_create_token(settings: Settings) -> str:
     data dir as well so the CLI and the MCP server (other processes) can reach the running app."""
     p = token_path(settings)
     env = os.environ.get("RHIZOME_API_TOKEN")
-    if not env and p.exists():
-        return p.read_text("utf-8-sig").strip()
+    # a fresh token on every start (the CLI and the MCP server re-read the file when they connect)
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     tok = env or secrets.token_urlsafe(32)
     p.write_text(tok, "utf-8")
@@ -182,11 +182,33 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
                                                       "tauri://localhost", "http://tauri.localhost"],
                        allow_methods=["*"], allow_headers=["*"])
 
-    def auth(request: Request) -> None:
+    def _authed(request: Request) -> bool:
         header = request.headers.get("authorization", "")
         supplied = header[7:] if header.lower().startswith("bearer ") else request.headers.get("x-rhizome-token")
-        if not supplied or not secrets.compare_digest(supplied, api_token):
+        return bool(supplied) and supplied.isascii() and secrets.compare_digest(supplied.encode(), api_token.encode())
+
+    def auth(request: Request) -> None:
+        if not _authed(request):
             raise HTTPException(401, _("api.unauthorized"))
+
+    @app.middleware("http")
+    async def _loopback_host(request: Request, call_next):
+        # bound to loopback: a page on another site that resolves its own name to 127.0.0.1 (DNS
+        # rebinding) arrives with that name in Host and is refused before any route runs
+        # (enforced once `rhz serve` listens; in-process test clients have no real Host)
+        if getattr(app.state, "enforce_host", False) and settings.host in ("127.0.0.1", "localhost", "::1"):
+            host = request.headers.get("host", "").rsplit(":", 1)[0] if not request.headers.get("host", "").startswith("[") \
+                else request.headers.get("host", "").split("]")[0] + "]"
+            if host not in ("127.0.0.1", "localhost", "[::1]", "::1", ""):
+                return JSONResponse({"detail": "bad host"}, status_code=421)
+        response = await call_next(request)
+        # the shell must never be cached across upgrades; hashed assets may be cached forever
+        path = request.url.path
+        if path.startswith("/assets/"):
+            response.headers.setdefault("Cache-Control", "public, max-age=31536000, immutable")
+        elif path == "/" or path.startswith("/ui/"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
 
     def db() -> Iterator[Session]:
         with session_scope(read_only=read_only) as s:
@@ -212,10 +234,14 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
     W = [Depends(auth), Depends(writable)]
 
     @app.get("/health")
-    def health() -> dict[str, Any]:
+    def health(request: Request) -> dict[str, Any]:
+        """Liveness for anyone on the machine; version and language only for a caller with the
+        token (an unauthenticated page must not be able to fingerprint the app)."""
         moved = getattr(app.state, "moved_to", None)
-        return {"ok": True, "version": __version__, "read_only": read_only or bool(moved), "moved_to": moved,
-                "language": ui_language()}
+        out: dict[str, Any] = {"ok": True, "app": "rhizome", "read_only": read_only or bool(moved), "moved_to": moved}
+        if _authed(request):
+            out.update(version=__version__, language=ui_language())
+        return out
 
     # ---- ingest ----
     @app.post("/ingest", dependencies=W)
@@ -380,7 +406,10 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
 
         g = Graph(s)
         payload = body.model_dump(exclude={"retro_tag", "k"})
-        d = decisions.record(g, "create_topic", payload)
+        try:
+            d = decisions.record(g, "create_topic", payload)
+        except decisions.DecisionError as e:
+            raise HTTPException(422, str(e))
         topic = g.by_alias("topic", body.name) or g.by_key(free_key("topic", body.name))
         job = jobs.enqueue(s, "retro_tag", {"topic": topic.key, "k": body.k}) if body.retro_tag else None
         return {"topic_id": topic.id, "key": topic.key, "decision_id": d.id, "job_id": job.id if job else None}
@@ -436,12 +465,14 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         return {"id": d.id, "op": d.op, "rebuild_job": job}
 
     @app.get("/decisions", dependencies=A)
-    def list_decisions(limit: int = 100, offset: int = 0, s: Session = Depends(db)) -> dict[str, Any]:
-        from sqlalchemy import select
+    def list_decisions(limit: int = Query(100, le=200), offset: int = 0, s: Session = Depends(db)) -> dict[str, Any]:
+        from sqlalchemy import func, select
 
         rows = s.execute(select(HumanDecision).order_by(HumanDecision.id.desc()).offset(offset).limit(limit)).scalars()
+        total = s.execute(select(func.count()).select_from(HumanDecision)).scalar_one()
         return {"decisions": [{"id": d.id, "op": d.op, "payload": d.payload, "created_at": d.created_at.isoformat(),
-                               "revoked_at": d.revoked_at.isoformat() if d.revoked_at else None} for d in rows]}
+                               "revoked_at": d.revoked_at.isoformat() if d.revoked_at else None} for d in rows],
+                "total": total, "offset": offset}
 
     @app.delete("/decision/{decision_id}", dependencies=W)
     def revoke(decision_id: int, s: Session = Depends(db)) -> dict[str, Any]:
@@ -551,6 +582,7 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
     def get_settings_ep() -> dict[str, Any]:
         cur = get_settings()
         data = cur.model_dump(mode="json")
+        data["database_url"] = redact_url(cur.database_url)
         data["ui_language"] = ui_language()
         data["problems"] = settings_problems(cur)
         return data
@@ -559,6 +591,8 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
     def patch_settings(body: SettingsPatch) -> dict[str, Any]:
         # only the fields the client sent; null resets one to its default
         patch = body.model_dump(exclude_unset=True)
+        if "remotes" in patch:  # ssh targets and options run commands: settings.json / CLI only
+            raise HTTPException(422, _("api.settings_file_only", field="remotes"))
         from ..ml.registry import BUILTIN, NEEDS, _importable
 
         for kind in BUILTIN:

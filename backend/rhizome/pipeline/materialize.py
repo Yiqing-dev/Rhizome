@@ -111,9 +111,13 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
     work = resolve_work(g, openalex_id=meta.get("openalex_id"), doi=p.doi, title=p.title, year=p.year)
     w = g.s.get(Work, work.id)
     w.tier = max(w.tier or 0, ex.tier or 1)  # T2: a deep export with the PDF attached
-    g.update_attrs(work, tldr=doc.tldr, paper_types=p.type, venue=p.venue, authors=p.authors, url=p.url,
-                   depth="deep" if doc.depth == "deep" or work.attrs.get("depth") == "deep" else "light",
-                   rxf_extraction=ex.id)
+    was_deep = (work.attrs or {}).get("depth") == "deep"
+    if doc.depth == "deep" or not was_deep:  # a later light export never replaces a deep one's summary
+        g.update_attrs(work, tldr=doc.tldr, paper_types=p.type, venue=p.venue, authors=p.authors, url=p.url,
+                       rxf_extraction=ex.id)
+    else:
+        g.fill_attrs(work, {"paper_types": p.type, "venue": p.venue, "authors": p.authors, "url": p.url})
+    g.update_attrs(work, depth="deep" if doc.depth == "deep" or was_deep else "light")
     out = Materialized(work=work)
     eid = ex.id
     # file-local id -> library entity (None when the item was not stored, e.g. a fabricated accession)
@@ -147,8 +151,9 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
         out.topics.append(r.entity)
 
     for c in doc.claims:
-        attrs = {"evidence_type": c.evidence_type, "boundary": c.boundary}
-        cr = resolve_claim(g, c.text, attrs)
+        # evidence type and boundary belong to this paper's statement of the claim (the edge),
+        # not to the claim entity shared by every paper that makes it
+        cr = resolve_claim(g, c.text, {})
         eattrs = {"evidence_type": c.evidence_type, "boundary": c.boundary, "logic_jump": c.logic_jump,
                   "strength": _strength(c.evidence_type, c.logic_jump)}
         edge(work, cr.entity, c.stance, evidence=c.evidence, attrs=eattrs,
@@ -246,7 +251,7 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
     ex.meta = {**meta, "insight_keys": [me.key for _, me in insights]}
 
     if doc.depth == "deep":
-        _make_cards(g, doc, work, out.assets, lookup)
+        _make_cards(g, doc, work, out.assets, lookup, dropped=lambda ref: by_id and ref in ids and ids[ref] is None)
     g.reindex(work)  # attrs (tldr, depth) were attached after create(); index the final text
     return out
 
@@ -444,10 +449,12 @@ def reconcile_cards(g: Graph) -> dict[str, int]:
     return out
 
 
-def _make_cards(g: Graph, doc: RxfDocument, work: Entity, assets: list[Entity], lookup) -> None:
+def _make_cards(g: Graph, doc: RxfDocument, work: Entity, assets: list[Entity], lookup, dropped=lambda ref: False) -> None:
     covered: set[str] = set()
     for rc in doc.review_cards:
         target = lookup(rc.about, ("method", "dataset", "idea", "claim", "topic")) if rc.about else None
+        if target is None and rc.about and dropped(rc.about):
+            continue  # about a fabricated accession that was not stored: no card about the paper instead
         target = target or work
         covered.add(target.key)
         upsert_card(g, target.key, rc.q, rc.a, "rxf", priority=10 if target.attrs.get("origin") == "user" else 0)
@@ -455,13 +462,14 @@ def _make_cards(g: Graph, doc: RxfDocument, work: Entity, assets: list[Entity], 
     for e in assets:
         if e.key in covered or e.type == "claim" or (e.attrs or {}).get("no_cards"):
             continue
+        prio = 10 if (e.attrs or {}).get("origin") == "user" else 0  # your ideas first, whoever wrote the card
         qa = backend.make_card(_card_context(e, work))
         if qa:
-            upsert_card(g, e.key, qa[0], qa[1], "local_llm")
+            upsert_card(g, e.key, qa[0], qa[1], "local_llm", priority=prio)
             continue
         qa = template_card(e, work)
         if qa:
-            upsert_card(g, e.key, qa[0], qa[1], "template", priority=10 if e.attrs.get("origin") == "user" else 0)
+            upsert_card(g, e.key, qa[0], qa[1], "template", priority=prio)
 
 
 def _card_context(e: Entity, work: Entity) -> str:

@@ -13,6 +13,7 @@ from typing import Any, Protocol
 
 import httpx
 
+from . import __version__
 from .config import Settings, get_settings
 
 
@@ -411,11 +412,39 @@ def connect(settings: Settings | None = None, snapshot: Path | None = None, pref
 
         tp = token_path(st)
         if tp.exists():
-            for base in dict.fromkeys(filter(None, [running_server_url(), st.base_url])):
+            token = tp.read_text("utf-8-sig").strip()
+            marker = running_server_url()
+            # the default port is tried only when nothing better is known (an explicit api_url,
+            # or a live marker): a stranger's server on :8765 must not be mistaken for the app
+            bases = [marker] if marker else [st.base_url]
+            if st.api_url:
+                bases.insert(0, st.base_url)
+            for base in dict.fromkeys(filter(None, bases)):
                 try:
-                    r = httpx.get(base + "/health", timeout=2.0)
-                    if r.status_code == 200 and not r.json().get("read_only"):
-                        return HttpClient(base, tp.read_text("utf-8-sig").strip())
-                except httpx.HTTPError:
+                    r = httpx.get(base + "/health", timeout=2.0, headers={"Authorization": f"Bearer {token}"})
+                    h = r.json() if r.status_code == 200 else {}
+                    if h.get("app") != "rhizome" or h.get("read_only"):
+                        continue
+                    if h.get("version") and h["version"] != __version__:
+                        _version_warning(h["version"])
+                    return HttpClient(base, token)
+                except (httpx.HTTPError, ValueError):
                     continue
     return LocalClient(st, create=create)
+
+
+_warned_versions: set[str] = set()
+
+
+def _version_warning(server: str) -> None:
+    if server in _warned_versions:
+        return
+    _warned_versions.add(server)
+    import logging
+    import sys
+
+    from .i18n import _
+
+    msg = _("cli.version_mismatch", server=server, client=__version__)
+    logging.getLogger(__name__).warning(msg)
+    print(msg, file=sys.stderr)

@@ -108,7 +108,8 @@
     "show_report": "Show report",
     "fix": {
       "transfer_flattened": "fold the flattened transfer back",
-      "topic_new_flag": "drop new from topics"
+      "topic_new_flag": "drop new from topics",
+      "rxf_version_type": "read the quoted rxf_version as a number"
     },
     "inbox_pending": "{{n}} inbox files are waiting (retried automatically while the library is busy or a model is missing): {{files}}",
     "inbox_ignored": "{{n}} inbox files are not RXF exports and were skipped: {{files}}",

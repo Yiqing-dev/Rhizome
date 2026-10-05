@@ -49,6 +49,11 @@ def record(g: Graph, op: str, payload: dict[str, Any]) -> HumanDecision:
     if op not in OPS:
         raise DecisionError(f"unknown op {op}")
     _validate(op, payload)
+    # a repeated request (double click, retried call) is the same decision, not a second row
+    last = g.s.execute(select(HumanDecision).where(HumanDecision.revoked_at.is_(None))
+                       .order_by(HumanDecision.id.desc()).limit(1)).scalar_one_or_none()
+    if last is not None and last.op == op and last.payload == dict(payload):
+        return last
     d = HumanDecision(op=op, payload=dict(payload))
     if not apply(g, d, strict=True):
         raise DecisionError(f"{op} had no effect")
@@ -95,6 +100,12 @@ def _validate(op: str, p: dict[str, Any]) -> None:
     missing = [k for k in required if k not in p]
     if missing:
         raise DecisionError(f"{op}: missing {', '.join(missing)}")
+    blank = [k for k in required if isinstance(p.get(k), str) and not p[k].strip()]
+    if blank:
+        raise DecisionError(f"{op}: {', '.join(blank)} must not be empty")
+    for k in ("name", "alias", "text", "new_name"):
+        if isinstance(p.get(k), str):
+            p[k] = p[k].strip()
     if op in ("edge_status", "add_edge") and p["type"] not in EDGE_TYPES:
         raise DecisionError(f"unknown edge type {p['type']}")
     if op == "edge_status" and p["status"] not in ("confirmed", "rejected", "auto"):

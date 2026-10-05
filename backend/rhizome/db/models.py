@@ -213,6 +213,7 @@ class ReviewCard(Base):
     due: Mapped[datetime | None] = mapped_column(DateTime, index=True)
     introduced_at: Mapped[datetime | None] = mapped_column(DateTime)
     suspended: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, default=utcnow)  # newest new cards first
 
 
 class ReviewLog(Base):

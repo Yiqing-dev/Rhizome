@@ -206,6 +206,37 @@
 | F5 F6 | 搜索分页：浏览模式的过滤全部下推到 SQL 并返回精确总数，文本搜索返回 `has_more`；界面"加载更多"、诚实的计数文案；搜索页按去掉 offset 的查询串作 key，顶栏搜索后表单同步 |
 | F9 | `decode_rxf`：UTF-8/UTF-16（带 BOM）/明显的 GB18030，其余给出"另存为 UTF-8"的本地化提示（API 422、收件箱报告、CLI 均如此）；拖放区有忙碌状态，导入中忽略再次拖放，嗅探放进 try |
 
+## low 组（一）：后端安全与 API 卫生（2026-10-05）
+
+| 编号 | 修改 |
+| --- | --- |
+| S1 | `RemoteTarget` 字段校验（不以 `-` 开头、无空白/控制字符、ssh_options 单 token 且禁止 ProxyCommand/LocalCommand）；ssh 命令里主机前加 `--`；`PATCH /settings` 拒绝修改 remotes（只能改文件或用 CLI） |
+| S2 | `GET /settings` 与 `rhz diag` 的 `database_url` 隐去密码（`redact_url`） |
+| S3 | 桌面模式（设 RHIZOME_API_TOKEN）下 `rhz serve` 的启动行不再打印 token |
+| S5 | `server.json` 的 pid 已死则忽略标记；`/health` 带 `app: rhizome`，客户端要求它且捕获非 JSON；默认端口只在显式配置或无标记时探测 |
+| S6 | 每次 `rhz serve` 生成新 token（CLI/MCP 连接时重读文件） |
+| S7 | `rhz serve` 监听回环时拒绝非回环 Host（421，防 DNS rebinding）；`/health` 未认证只返回 ok/app/read_only，版本和语言需要 token |
+| S8 | MCP 工具带 ToolAnnotations（读工具 readOnlyHint，decide/correct/undo destructiveHint）；`rhz_decide` 返回里附 undo 提示 |
+| S9 | 非 ASCII 的 bearer 值返回 401 而不是 500 |
+| A8 | 重复提交同一决策返回已有记录，不再新增审计行 |
+| A9 | `rhz_ingest` 增加 `repair` 参数，可修复时返回 "repair=true 重新调用" 的提示 |
+| A10 | `rhz_search` 增加 year_max/edge_type/offset，CLI `search --offset`，`/decisions` 上限 200 并返回 total |
+| A11 | HTTP 客户端发现服务端版本不同会在 stderr 警告一次 |
+| A12 | 决策的文本字段不能为空（去首尾空白）；`POST /topic` 把 DecisionError 映射为 422 |
+| A13 | 同一导出再次带 PDF 提交时附上 PDF（`pdf_attached`），不再静默丢弃 |
+| A14 | 附件必须以 `%PDF` 开头；RXF 5 MB、PDF 200 MB 上限 |
+| X3 | 缺失必填字段按 jsonschema 的每条错误只报一次，计数正确 |
+| U6 | 带引号的 `"1"` 或 `1.0` 的 rxf_version 自动按数字读取并记为修复；错误信息用 repr |
+| N11 | OpenAlex 响应结构异常只记日志并按 transient 处理，不再中止导入 |
+| M9 | 复习"一天"按本地时间、凌晨 4 点翻日；新卡按优先级和创建时间（迁移 0005 `review_card.created_at`）排序 |
+| M14 | 本地模型生成的卡也保留用户想法的优先级 |
+| M16 | 首页"待复习"数按每日上限计算 |
+| D16 | 后来的 light 导出不覆盖 deep 导出的 tldr/作者/期刊（只补空） |
+| D22 | about 指向被判定虚构而未入库的条目的复习卡不再挂到论文上 |
+| D23 | evidence_type/boundary 只记在边上，不再写进论断实体 |
+| D14 | 由 D15 的按导出替换边记录覆盖 |
+| F15 | `/` 与 `/ui/*` 发 `Cache-Control: no-cache`，`/assets/*` immutable |
+
 ## 还需要你来做的（M0）
 
 - 定稿导出指令：`rxf-spec/instructions/` 里是按设计文档整理的版本，加了一条“含问号的文本不要写进花括号”——

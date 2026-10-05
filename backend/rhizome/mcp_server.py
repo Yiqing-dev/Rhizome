@@ -18,6 +18,7 @@ from typing import Any, Callable
 
 import httpx
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from .client import Client, connect
 from .config import get_settings
@@ -35,6 +36,9 @@ page through rhz_queue, propose a decision per item with a one-line reason, and 
 rhz_decide after the user confirms."""
 
 mcp = FastMCP("rhizome", instructions=INSTRUCTIONS)
+READ = ToolAnnotations(readOnlyHint=True)
+WRITE = ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=False)
+DESTRUCTIVE = ToolAnnotations(readOnlyHint=False, destructiveHint=True)
 _client: Client | None = None
 _signature: tuple | None = None
 
@@ -99,17 +103,24 @@ def _j(obj: Any) -> str:
     return json.dumps(obj, ensure_ascii=False, default=str)
 
 
-@mcp.tool()
-def rhz_ingest(rxf_yaml: str, filename: str = "claude-desktop.yaml", replace: bool = False) -> str:
+@mcp.tool(annotations=WRITE)
+def rhz_ingest(rxf_yaml: str, filename: str = "claude-desktop.yaml", replace: bool = False, repair: bool = False) -> str:
     """Store a paper discussion in Rhizome. `rxf_yaml` is a complete RXF v1 YAML document.
     Returns the work key, suspected hallucinated IDs, and related papers the user has read;
     on validation failure returns the error report to fix and resubmit. If the result lists
-    `existing_exports`, the paper was stored before: when this export is a correction of that one
-    (the user fixed something), ask the user and call again with replace=true."""
-    return _j(_call(lambda c: c.ingest(rxf_yaml, filename, replace=replace)))
+    `repairable`, the problems are known export drifts: call again with repair=true (the original
+    text is kept, the fixes are recorded). If the result lists `existing_exports`, the paper was
+    stored before: when this export is a correction of that one (the user fixed something), ask
+    the user and call again with replace=true."""
+    out = _call(lambda c: c.ingest(rxf_yaml, filename, replace=replace, repair=repair))
+    if isinstance(out, dict) and out.get("repairable") and not out.get("ok"):
+        from .i18n import _
+
+        out["hint"] = _("rxf.report_repairable_mcp", fixes=", ".join(out["repairable"]))
+    return _j(out)
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ)
 def rhz_rxf_guide(lang: str | None = None) -> str:
     """The RXF export instructions (skeleton + rules) and the user's current topic vocabulary.
     Call it before writing an RXF document when the conversation has no Rhizome Project
@@ -120,22 +131,25 @@ def rhz_rxf_guide(lang: str | None = None) -> str:
     return instructions(lang) + "\n\n## rhizome-vocab.yaml\n\n```yaml\n" + vocab.strip() + "\n```\n"
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ)
 def rhz_recall(context: str, limit: int = 5) -> str:
     """Find assets the user has read but may have forgotten that are relevant to `context`
     (an analysis plan, a code snippet, a draft paragraph). Ranked by relevance x forgetting."""
     return _j(_call(lambda c: c.recall(context, limit)))
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ)
 def rhz_search(query: str, types: str | None = None, organism: str | None = None, modality: str | None = None,
-               year_min: int | None = None, limit: int = 10) -> str:
-    """Hybrid search. `types`: comma-separated subset of work,dataset,method,idea,claim,topic."""
+               year_min: int | None = None, year_max: int | None = None, edge_type: str | None = None,
+               limit: int = 10, offset: int = 0) -> str:
+    """Hybrid search. `types`: comma-separated subset of work,dataset,method,idea,claim,topic;
+    `edge_type`: proposes | uses | produces | evaluates | supports | contradicts; page with offset."""
     return _j(_call(lambda c: c.search(query, types=types, organism=organism, modality=modality,
-                                       year_min=year_min, limit=limit)))
+                                       year_min=year_min, year_max=year_max, edge_type=edge_type,
+                                       limit=limit, offset=offset)))
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ)
 def rhz_get(entity: str) -> str:
     """Get a paper or asset card by key (e.g. 'dataset:GSE12345'; keys are the durable handles) or
     by a numeric id from an earlier result."""
@@ -147,7 +161,7 @@ def rhz_get(entity: str) -> str:
     return _j(card)
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ)
 def rhz_related(entity: str) -> str:
     """Papers / assets related to an entity (for a paper: which read papers relate and along which
     dimension). `entity` is a key (e.g. 'work:doi:10.1/x', 'method:repo:github.com/a/b'; keys are
@@ -160,21 +174,25 @@ def rhz_related(entity: str) -> str:
     return _j(_call(run))
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ)
 def rhz_queue(kind: str | None = None, limit: int = 20, offset: int = 0) -> str:
     """Page through the review queue. kinds: merge, topic_relation, contradiction, retro_tag, synthesis.
     Each item lists the allowed actions and both sides' aliases and connections."""
     return _j(_call(lambda c: c.queue(kind, limit, offset)))
 
 
-@mcp.tool()
+@mcp.tool(annotations=DESTRUCTIVE)
 def rhz_decide(item_id: int, action: str, note: str | None = None) -> str:
     """Resolve a review item after the user confirmed. For synthesis items marked useful, `note`
-    becomes the text of the new Idea (what the connection is and which problem it may help)."""
-    return _j(_call(lambda c: c.resolve(item_id, action, note)))
+    becomes the text of the new Idea (what the connection is and which problem it may help).
+    The answer names the decision id; tell the user it can be undone with rhz_undo."""
+    out = _call(lambda c: c.resolve(item_id, action, note))
+    if isinstance(out, dict) and out.get("decision_id"):
+        out["undo"] = f"rhz_undo({out['decision_id']})"
+    return _j(out)
 
 
-@mcp.tool()
+@mcp.tool(annotations=DESTRUCTIVE)
 def rhz_correct(op: str, payload: dict) -> str:
     """Correct the library, only after the user explicitly confirmed this exact change.
     op / payload (entities by key, e.g. 'method:repo:github.com/a/b'):
@@ -186,14 +204,14 @@ def rhz_correct(op: str, payload: dict) -> str:
     return _j(_call(lambda c: c.decide(op, payload)))
 
 
-@mcp.tool()
+@mcp.tool(annotations=DESTRUCTIVE)
 def rhz_undo(decision_id: int) -> str:
     """Revert one of the user's decisions (a merge, rename, rejection, ...), after the user asked
     for it. The library is rebuilt without it."""
     return _j(_call(lambda c: c.revoke(decision_id)))
 
 
-@mcp.tool()
+@mcp.tool(annotations=READ)
 def rhz_digest(days: int = 7) -> str:
     """Weekly digest: unlinked cross-field asset pairs and new contradictions, for you to explain."""
     return _j(_call(lambda c: c.digest(days)))

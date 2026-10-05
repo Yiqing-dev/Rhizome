@@ -127,11 +127,13 @@ def _problems(err: jsonschema.ValidationError) -> list[ValidationProblem]:
         return [ValidationProblem(_path(path), err.message, "unexpected_field", field=str(k))
                 for k in inst if k not in allowed]
     if v == "required" and isinstance(inst, dict):
+        # jsonschema raises one error per missing key: report that key only (not every missing
+        # key again for each error, which multiplied the counts)
         props = (err.schema or {}).get("properties", {})
+        m = re.match(r"'(.+?)' is a required property", err.message)
+        keys = [m.group(1)] if m else [k for k in err.validator_value if k not in inst][:1]
         out = []
-        for k in err.validator_value:
-            if k in inst:
-                continue
+        for k in keys:
             allowed = _enum_of(props.get(k, {}))  # "add relation" alone costs the model a round trip
             out.append(ValidationProblem(_path(path), err.message, "missing_field", field=str(k),
                                          value=", ".join(allowed) if allowed else None))
@@ -175,12 +177,19 @@ def load_rxf(text: str, repair: bool = False) -> LoadResult:
     # YAML -> JSON round trip normalises types the schema should see (no Python-only objects).
     data = json.loads(json.dumps(data, default=str))
     version = data.get("rxf_version")
-    if version not in SCHEMAS:
-        return LoadResult(None, data, [ValidationProblem("rxf_version", _("rxf.unknown_version", version=version),
-                                                         "other", field="rxf_version")])
     applied: list[str] = []
+    if isinstance(version, str) and version.strip().isdigit():  # "1" (quoted by the model)
+        version = data["rxf_version"] = int(version.strip())
+        applied.append("rxf_version_type")
+    elif isinstance(version, float) and version.is_integer():  # 1.0
+        version = data["rxf_version"] = int(version)
+        applied.append("rxf_version_type")
+    if version not in SCHEMAS:
+        return LoadResult(None, data, [ValidationProblem("rxf_version", _("rxf.unknown_version", version=repr(version)),
+                                                         "other", field="rxf_version")])
     if repair:
-        data, applied = _repair(data)
+        data, more = _repair(data)
+        applied += more
     res = _validate(version, data)
     res.repairs = applied
     if not res.ok and not repair:

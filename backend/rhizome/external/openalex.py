@@ -59,7 +59,11 @@ def fetch(doi: str | None = None, openalex_id: str | None = None) -> tuple[dict 
     except (httpx.HTTPError, ValueError) as e:
         log.warning("OpenAlex lookup failed for %s: %s", ref, e)
         return None, "transient"
-    return _trim(w), "ok"
+    try:
+        return _trim(w), "ok"
+    except Exception as e:  # noqa: BLE001 - an unexpected payload shape must not fail the import
+        log.warning("OpenAlex record for %s could not be read (%s: %s)", ref, type(e).__name__, e)
+        return None, "transient"
 
 
 def _trim(w: dict) -> dict:
@@ -70,9 +74,10 @@ def _trim(w: dict) -> dict:
         "year": w.get("publication_year"),
         "type": w.get("type"),
         "venue": ((w.get("primary_location") or {}).get("source") or {}).get("display_name"),
-        "authors": [a["author"]["display_name"] for a in w.get("authorships", [])[:50]],
+        "authors": [a.get("author", {}).get("display_name") for a in (w.get("authorships") or [])[:50]
+                    if isinstance(a, dict) and (a.get("author") or {}).get("display_name")],
         "abstract": _abstract(w.get("abstract_inverted_index")),
-        "referenced_works": [short_id(x) for x in w.get("referenced_works", [])],
+        "referenced_works": [short_id(x) for x in (w.get("referenced_works") or []) if isinstance(x, str)],
         "oa_url": (w.get("open_access") or {}).get("oa_url"),
         "ids": {k: v for k, v in (w.get("ids") or {}).items() if isinstance(v, str)},
     }

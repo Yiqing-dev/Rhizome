@@ -154,7 +154,7 @@ def sync_command(target: RemoteTarget) -> list[str]:
     tmp_remote = target.path + ".uploading"
     script = (f"umask 077 && mkdir -p {_rq(remote_dir)} && cat > {_rq(tmp_remote)} && "
               f"chmod 600 {_rq(tmp_remote)} && mv -f {_rq(tmp_remote)} {_rq(target.path)}")
-    return ["ssh", *ssh_base(target), target.host, script]
+    return ["ssh", *ssh_base(target), "--", target.host, script]
 
 
 def sync_warnings(target: RemoteTarget) -> list[str]:

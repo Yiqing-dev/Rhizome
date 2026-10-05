@@ -363,3 +363,21 @@ msgstr "恢复了 {recovered} 份导出；{already_present} 份已存在；{fail
 
 msgid "rxf.encoding"
 msgstr "这个文件不是 UTF-8 编码的文本（{detail}）。请把导出另存为 UTF-8（编辑器里：另存为 → 编码选 UTF-8）后再导入。"
+
+msgid "cli.version_mismatch"
+msgstr "正在运行的应用是 Rhizome {server}，这条命令是 {client}；两边版本一致之前结果可能不同。"
+
+msgid "api.settings_file_only"
+msgstr "{field} 只能在 settings.json 里或用 rhz settings set 修改（它会在这台电脑上运行命令）。"
+
+msgid "ingest.too_large"
+msgstr "{what} 太大（{mb} MB）。"
+
+msgid "ingest.not_pdf"
+msgstr "附带的文件不是 PDF（开头不是 %PDF），这次导出没有导入。"
+
+msgid "rxf.report_repairable_mcp"
+msgstr "这些是已知的导出偏差（{fixes}）：请加 repair=true 再次调用 rhz_ingest；原文保留，修复会被记录。"
+
+msgid "rxf.repair.rxf_version_type"
+msgstr "把带引号的 rxf_version 当作数字读取"

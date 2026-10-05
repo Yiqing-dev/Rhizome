@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from .. import rawstore
 from ..config import get_settings
-from ..db.models import Entity, Extraction, RawObject, utcnow
+from ..db.models import Entity, Extraction, RawObject, Work, utcnow
 from ..external import openalex
 from ..external.ids import accession_format_ok, is_url, normalize_doi, normalize_repo
 from ..external.verify import check_accession, check_repo, taxonomy_lookup
@@ -46,6 +46,7 @@ class IngestResult:
     replaced: list[int] = field(default_factory=list)  # exports retracted because replace=True
     rebuild_job: int | None = None
     repairable: list[str] = field(default_factory=list)  # fixes that would make a failed file valid
+    pdf_attached: bool | None = None  # a re-sent export with its PDF: attached (True) or already had one (False)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -88,6 +89,8 @@ def _check_ids(doc: RxfDocument) -> tuple[dict[str, str], list[str]]:
 
 
 _FETCH = object()
+MAX_TEXT_CHARS = 5_000_000
+MAX_PDF_BYTES = 200_000_000
 
 
 def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes | None = None,
@@ -97,6 +100,15 @@ def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes
     row holds the repaired document and records the fixes in ``meta.repairs``. ``openalex_record``
     (a stored response or None) and ``captured_at`` replay a capture from raw/ without going
     online and with its original time."""
+    from ..i18n import _
+
+    if len(text) > MAX_TEXT_CHARS:
+        return IngestResult(ok=False, report=_("ingest.too_large", what="RXF", mb=round(len(text) / 1e6, 1)))
+    if pdf is not None:
+        if not pdf.startswith(b"%PDF"):
+            return IngestResult(ok=False, report=_("ingest.not_pdf"))
+        if len(pdf) > MAX_PDF_BYTES:
+            return IngestResult(ok=False, report=_("ingest.too_large", what="PDF", mb=round(len(pdf) / 1e6, 1)))
     res = load_rxf(text, repair=repair)
     if not res.ok:
         return IngestResult(ok=False, problems=res.problems, report=report_for(filename, res),
@@ -109,8 +121,21 @@ def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes
     raw = s.get(RawObject, sha)
     if raw is not None and raw.kind == "rxf":
         e = g.by_key(raw.work_key) if raw.work_key else None  # follows human merges
-        return IngestResult(ok=True, duplicate=True, work_key=e.key if e else raw.work_key,
-                            work_id=e.id if e else None)
+        out = IngestResult(ok=True, duplicate=True, work_key=e.key if e else raw.work_key, work_id=e.id if e else None)
+        if pdf:  # the same export again, now with its PDF: attach it instead of dropping it
+            ex = next((x for x in s.execute(select(Extraction).where(Extraction.kind == "rxf")).scalars()
+                       if (x.input_hashes or [None])[0] == sha), None)
+            if ex is not None and len(ex.input_hashes or []) == 1:
+                pdf_sha = rawstore.put(s, pdf, "pdf", Path(filename).with_suffix(".pdf").name, ex.work_key)
+                ex.input_hashes = [sha, pdf_sha]
+                if doc.depth == "deep":
+                    w = s.get(Work, ex.work_key and (e.id if e else -1)) if e else None
+                    if w is not None:
+                        w.tier = max(w.tier or 0, 2)
+                out.pdf_attached = True
+            else:
+                out.pdf_attached = False
+        return out
 
     max_before = s.execute(select(func.coalesce(func.max(Entity.id), 0))).scalar_one()
 

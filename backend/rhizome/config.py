@@ -15,6 +15,7 @@ later version reach existing installs, and unknown keys from a newer version are
 from __future__ import annotations
 
 import json
+import re
 import logging
 import os
 import sys
@@ -137,8 +138,13 @@ def _atomic_write(path: Path, text: str, backup: bool = False) -> None:
     os.replace(tmp, path)
 
 
+_BAD_CHARS = re.compile(r"[\s\x00-\x1f\x7f]")
+
+
 class RemoteTarget(BaseModel):
-    """A remote machine (e.g. an HPC login node) that receives read-only snapshots."""
+    """A remote machine (e.g. an HPC login node) that receives read-only snapshots. The fields end
+    up on an ssh command line: no leading '-' (an option in disguise) and no whitespace or control
+    characters anywhere."""
 
     name: str
     host: str  # user@host or an ssh config alias
@@ -146,7 +152,24 @@ class RemoteTarget(BaseModel):
     # Reuse an already-authenticated SSH connection (ControlMaster) for 2FA servers.
     control_path: str | None = None
     ssh_options: list[str] = Field(default_factory=list)
-    timeout: int = 1800  # seconds for the whole upload (one ssh session)
+    timeout: int = Field(1800, ge=10, le=86400)  # seconds for the whole upload (one ssh session)
+
+    @field_validator("name", "host", "path", "control_path")
+    @classmethod
+    def _plain(cls, v: str | None, info) -> str | None:
+        if v is None:
+            return v
+        if not v or v.startswith("-") or _BAD_CHARS.search(v):
+            raise ValueError(f"{info.field_name}: must not be empty, start with '-' or contain whitespace")
+        return v
+
+    @field_validator("ssh_options")
+    @classmethod
+    def _options(cls, v: list[str]) -> list[str]:
+        for o in v:
+            if not o or _BAD_CHARS.search(o) or o in ("-o", "ProxyCommand") or "ProxyCommand" in o or "LocalCommand" in o:
+                raise ValueError("ssh_options: one token per entry, no whitespace, no ProxyCommand / LocalCommand")
+        return v
 
 
 class Thresholds(BaseModel):
@@ -405,6 +428,18 @@ def save_settings(settings: Settings) -> None:
 _current: Settings | None = None
 # per-process overrides (`--lang`, `serve --port`): applied in memory, never written to settings.json
 _overrides: dict[str, Any] = {}
+
+
+def redact_url(url: str | None) -> str | None:
+    """A database URL without its password (for /settings, rhz diag and logs)."""
+    if not url:
+        return url
+    try:
+        from sqlalchemy.engine import make_url
+
+        return make_url(url).render_as_string(hide_password=True)
+    except Exception:  # noqa: BLE001 - an unparsable URL is not worth a crash here
+        return "<redacted>"
 
 
 def token_path(settings: Settings) -> Path:

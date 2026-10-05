@@ -363,3 +363,21 @@ msgstr "Recovered {recovered} capture(s); {already_present} already present; {fa
 
 msgid "rxf.encoding"
 msgstr "This file is not UTF-8 text ({detail}). Save the export as UTF-8 (in the editor: Save as → encoding UTF-8) and import it again."
+
+msgid "cli.version_mismatch"
+msgstr "The running app is Rhizome {server} but this command is {client}; results may differ until both are the same version."
+
+msgid "api.settings_file_only"
+msgstr "{field} can only be changed in settings.json or with rhz settings set (it runs commands on this computer)."
+
+msgid "ingest.too_large"
+msgstr "The {what} is too large ({mb} MB)."
+
+msgid "ingest.not_pdf"
+msgstr "The attached file is not a PDF (it does not start with %PDF); the export was not imported."
+
+msgid "rxf.report_repairable_mcp"
+msgstr "These are known export drifts ({fixes}): call rhz_ingest again with repair=true; the original text is kept and the fixes are recorded."
+
+msgid "rxf.repair.rxf_version_type"
+msgstr "read a quoted rxf_version as a number"

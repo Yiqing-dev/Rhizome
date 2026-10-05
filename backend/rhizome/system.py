@@ -41,11 +41,19 @@ def clear_server_marker() -> None:
 
 
 def running_server_url() -> str | None:
+    """The URL of the app's backend, or None when the marker is stale (its process is gone: the
+    desktop shell terminates the backend without letting it clean up)."""
     p = get_settings().data_dir / SERVER_FILE
     try:
-        return json.loads(p.read_text("utf-8-sig")).get("url") if p.exists() else None
+        if not p.exists():
+            return None
+        m = json.loads(p.read_text("utf-8-sig"))
     except (OSError, ValueError):
         return None
+    pid = m.get("pid")
+    if isinstance(pid, int) and pid > 0 and not pid_alive(pid):
+        return None
+    return m.get("url")
 
 
 # ---- info / folders -------------------------------------------------------------------------
