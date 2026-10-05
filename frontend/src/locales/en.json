@@ -353,5 +353,10 @@
     "url": "URL",
     "oa_url": "Open access",
     "openalex_type": "OpenAlex type"
+  },
+  "models": {
+    "unavailable": "The models chosen in settings ({{models}}) cannot be loaded by this program, so importing and searching will fail. The installed desktop app runs the built-in models only.",
+    "use_builtin": "Use built-in models and rebuild",
+    "switched": "Switched to the built-in models; rebuilding in the background."
   }
 }

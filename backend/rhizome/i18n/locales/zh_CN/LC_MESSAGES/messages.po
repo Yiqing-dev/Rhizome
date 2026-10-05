@@ -204,3 +204,6 @@ msgstr "检索：{acc}"
 
 msgid "api.backup_failed"
 msgstr "备份失败：{error}"
+
+msgid "ml.unavailable"
+msgstr "设置里选择的{kind}模型 {model} 在当前程序里无法加载（缺少 {module}）。安装版桌面应用只能使用内置模型：在 设置 → 本地模型 里点“改用内置模型”，然后重算；或者改用 pip 安装的 rhz serve。"

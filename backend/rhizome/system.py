@@ -94,7 +94,14 @@ def info() -> dict[str, Any]:
         "claude_desktop": claude_desktop_snippet(),
         "claude_config_paths": [str(p) for p in claude_config_paths()],
         "backups": _backups(st),
+        "model_problems": _model_problems(st),
     }
+
+
+def _model_problems(st) -> list[dict[str, str]]:
+    from .ml import model_problems
+
+    return model_problems(st)
 
 
 def _backups(st) -> dict[str, Any]:

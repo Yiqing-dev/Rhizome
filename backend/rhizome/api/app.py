@@ -150,6 +150,14 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
             worker.stop()
 
     app = FastAPI(title="Rhizome", version=__version__, lifespan=lifespan)
+
+    from fastapi.responses import JSONResponse
+
+    from ..ml import ModelUnavailable
+
+    @app.exception_handler(ModelUnavailable)
+    async def _model_unavailable(request: Request, exc: ModelUnavailable) -> JSONResponse:
+        return JSONResponse(status_code=503, content={"detail": str(exc), "model_unavailable": True})
     app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173",
                                                       "tauri://localhost", "http://tauri.localhost"],
                        allow_methods=["*"], allow_headers=["*"])
@@ -464,8 +472,14 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
     @app.patch("/settings", dependencies=W)
     def patch_settings(body: SettingsPatch) -> dict[str, Any]:
         # only the fields the client sent; null resets one to its default
+        patch = body.model_dump(exclude_unset=True)
+        from ..ml.registry import BUILTIN, NEEDS, _importable
+
+        for kind in BUILTIN:
+            if patch.get(kind) not in (None, BUILTIN[kind]) and not _importable(NEEDS[kind]):
+                raise HTTPException(422, _("ml.unavailable", kind=kind, model=patch[kind], module=NEEDS[kind]))
         try:
-            update_settings(body.model_dump(exclude_unset=True))
+            update_settings(patch)
         except ValueError as e:
             raise HTTPException(422, str(e))
         from ..inference import reset_backend

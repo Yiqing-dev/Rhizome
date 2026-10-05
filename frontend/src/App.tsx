@@ -48,6 +48,34 @@ function LangToggle() {
   );
 }
 
+/** A model named in settings.json that this program cannot load (e.g. bge-m3 chosen from a pip
+ * install, while the desktop app has only the built-in models): every ingest and search fails,
+ * so say it on every page and offer the fix. */
+function ModelBanner() {
+  const { t } = useTranslation();
+  const [problems, setProblems] = useState<{ kind: string; model: string }[]>([]);
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    api.system().then((s) => setProblems(s.model_problems ?? [])).catch(() => undefined);
+  }, []);
+  if (!problems.length) return null;
+  const useBuiltin = async () => {
+    await api.patchSettings({ embedder: null, reranker: null, nli: null });
+    await api.runJob("rebuild");
+    setDone(true);
+  };
+  return (
+    <div className={`notice banner ${done ? "ok" : "error"}`}>
+      {done ? t("models.switched") : (
+        <div className="row wrap">
+          <span className="grow">{t("models.unavailable", { models: problems.map((p) => p.model).join(", ") })}</span>
+          <button className="primary" onClick={useBuiltin}>{t("models.use_builtin")}</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const { t, i18n } = useTranslation();
   const route = useRoute();
@@ -92,6 +120,7 @@ export default function App() {
         </div>
       </header>
       <main>
+        <ModelBanner />
         <Suspense fallback={<div className="muted">{t("common.loading")}</div>}>{page}</Suspense>
       </main>
     </div>

@@ -122,3 +122,6 @@
 - 预注册 benchmark 问题和门槛：按 `rhz bench` 的格式写 `questions.yaml`，放在仓库之外（含个人数据）。
 - 准备 G3 标注集（约 100 对实体、50 对论断），用来校准规范化阈值和 NLI。
 - 选定真实模型后：`pip install "rhizome[models]"`，`rhz settings set embedder bge-m3`，然后 `rhz rebuild`。
+  **安装版桌面应用不含 torch / sentence-transformers，只能用内置模型**；用真实模型时改用 pip 安装的
+  `rhz serve`，并把 Claude Desktop 的 MCP 指向这个 `rhz`。两者共用同一个资料库时，安装版会在每个页面顶部提示
+  “模型无法加载”，可一键改回内置模型并重算。

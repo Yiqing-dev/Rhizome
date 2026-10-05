@@ -145,8 +145,7 @@ export default function SettingsPage() {
                 <button className="link" onClick={() => api.openFolder("inbox")}>{t("settings.open")}</button></dd>
               <dt>{t("settings.logs")}</dt>
               <dd className="row wrap"><code className="mono">{si?.logs}</code>
-                <button className="link" onClick={() => api.openFolder("logs")}>{t("settings.open")}</button>
-                <button className="link" onClick={() => api.openFolder("backups")}>{t("settings.open_backups")}</button></dd>
+                <button className="link" onClick={() => api.openFolder("logs")}>{t("settings.open")}</button></dd>
               {si?.app_dir && (<><dt>{t("settings.app_dir")}</dt><dd><code className="mono">{si.app_dir}</code></dd></>)}
             </dl>
             {si?.portable ? <p className="hint">{t("settings.portable_hint")}</p> : (

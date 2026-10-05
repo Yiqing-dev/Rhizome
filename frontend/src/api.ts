@@ -100,6 +100,7 @@ export interface SystemInfo {
   inbox: string; logs: string; models_dir: string; models_available: boolean; local_llm_available: boolean;
   cli: string[]; claude_desktop: Record<string, unknown>; claude_config_paths: string[];
   backups: BackupStatus;
+  model_problems: { kind: string; model: string; missing: string }[];
 }
 export interface BackupStatus { dir: string; count: number; bytes: number; last: string | null; last_daily: string | null; error?: string }
 

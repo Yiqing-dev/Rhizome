@@ -195,9 +195,14 @@ def ingest_file(path: Path, repair: bool = False) -> IngestResult:
 
     from ..db.session import session_scope
 
+    from ..ml import ModelUnavailable
+
     try:
         with session_scope() as s:
             result = ingest_path(s, path, repair=repair)
+    except ModelUnavailable as e:  # not the file's fault: leave it in the inbox for after the fix
+        log.error("inbox: %s left in place: %s", path.name, e)
+        return IngestResult(ok=False, report=str(e))
     except Exception as e:  # keep the inbox flowing; the report tells the user what happened
         log.exception("ingest failed for %s", path)
         file_done(path, None, error=f"{type(e).__name__}: {e}\n\n{traceback.format_exc(limit=8)}")

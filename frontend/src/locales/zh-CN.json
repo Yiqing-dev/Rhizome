@@ -353,5 +353,10 @@
     "url": "URL",
     "oa_url": "开放获取",
     "openalex_type": "OpenAlex 类型"
+  },
+  "models": {
+    "unavailable": "设置里选的模型（{{models}}）在这个程序里无法加载，导入和检索会失败。安装版桌面应用只能用内置模型。",
+    "use_builtin": "改用内置模型并重算",
+    "switched": "已改用内置模型，正在后台重算。"
   }
 }

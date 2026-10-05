@@ -204,3 +204,6 @@ msgstr "Search: {acc}"
 
 msgid "api.backup_failed"
 msgstr "Backup failed: {error}"
+
+msgid "ml.unavailable"
+msgstr "The {kind} model {model} chosen in settings cannot be loaded by this program ({module} is not installed). The installed desktop app runs the built-in models only: click \"Use built-in models\" in Settings → Local models and rebuild, or run the pip-installed rhz serve instead."
