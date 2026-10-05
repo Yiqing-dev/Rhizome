@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api, ApiError, errorText, type Card, type EdgeView, type ExportView } from "../api";
 import LocalGraph from "../components/LocalGraph";
 import { EntityLink, Legend, Loading, TypeBadge, edgeToken } from "../components/common";
+import { showToast } from "../components/Toast";
 import { GraphIcon } from "../components/icons";
 import { useLoad } from "../hooks";
 import { fmtDate } from "../i18n";
@@ -12,19 +13,27 @@ import { href } from "../router";
 const EDGE_ORDER = ["about", "applicable_to", "proposes", "uses", "produces", "evaluates", "supports", "contradicts",
   "extends", "relates_to", "cites", "is_a", "of_organism", "of_modality"];
 
-function EdgeActions({ card, e }: { card: Card; e: EdgeView }) {
+function EdgeActions({ card, e, onChanged }: { card: Card; e: EdgeView; onChanged: () => void }) {
   const { t } = useTranslation();
-  const [status, setStatus] = useState(e.status);
+  const [busy, setBusy] = useState(false);
   const src = e.direction === "out" ? card.key : e.other.key;
   const dst = e.direction === "out" ? e.other.key : card.key;
   const set = async (s: string) => {
-    await api.decide("edge_status", { src, dst, type: e.type, status: s });
-    setStatus(s);
+    if (busy) return;
+    setBusy(true);
+    try {
+      await api.decide("edge_status", { src, dst, type: e.type, status: s });
+      onChanged(); // the row's strike-through, pill and the graph follow the card, not local state
+    } catch (err) {
+      showToast(errorText(err, t));
+    } finally {
+      setBusy(false);
+    }
   };
   return (
     <span className="edge-actions">
-      {status !== "confirmed" && <button className="link" onClick={() => set("confirmed")}>{t("action.confirm")}</button>}
-      {status !== "rejected" && <button className="link danger" onClick={() => set("rejected")}>{t("action.reject")}</button>}
+      {e.status !== "confirmed" && <button className="link" disabled={busy} onClick={() => set("confirmed")}>{t("action.confirm")}</button>}
+      {e.status !== "rejected" && <button className="link danger" disabled={busy} onClick={() => set("rejected")}>{t("action.reject")}</button>}
     </span>
   );
 }
@@ -81,7 +90,7 @@ function EditMenu({ card, onDone }: { card: Card; onDone: () => void }) {
   );
 }
 
-function EdgeGroups({ card }: { card: Card }) {
+function EdgeGroups({ card, onChanged }: { card: Card; onChanged: () => void }) {
   const { t } = useTranslation();
   const [extra, setExtra] = useState<Record<string, EdgeView[]>>({});
   const groups = Object.entries(card.edges).sort(([a], [b]) => EDGE_ORDER.indexOf(a) - EDGE_ORDER.indexOf(b))
@@ -102,11 +111,14 @@ function EdgeGroups({ card }: { card: Card }) {
                 <span>
                   <TypeBadge type={e.other.type} /> <EntityLink e={e.other} />
                   {e.evidence ? <> · <span className="evidence">{e.evidence}</span></> : null}
+                  {e.attrs?.evidence_type ? <span className="pill">{t(`evidence.${e.attrs.evidence_type}`)}</span> : null}
+                  {e.attrs?.logic_jump ? <span className="pill warn">{t("paper.logic_jump")}</span> : null}
                   {e.attrs?.strength ? <span className={`pill s-${e.attrs.strength}`}>{t(`strength.${e.attrs.strength}`)}</span> : null}
+                  {e.attrs?.boundary ? <span className="muted small"> · {String(e.attrs.boundary)}</span> : null}
                   {e.attrs?.origin === "user" ? <span className="pill user">{t("origin.user")}</span> : null}
                   {e.status !== "auto" ? <span className="pill">{t(`status.${e.status}`)}</span> : null}
                 </span>
-                <EdgeActions card={card} e={e} />
+                <EdgeActions card={card} e={e} onChanged={onChanged} />
               </li>
             ))}
           </ul>
@@ -123,9 +135,23 @@ function EdgeGroups({ card }: { card: Card }) {
 function PaperCard({ card, onChanged }: { card: Card; onChanged: () => void }) {
   const { t, i18n } = useTranslation();
   const [showRaw, setShowRaw] = useState<number | null>(null);
+  const a = card.attrs;
+  const doi = card.work?.dois?.[0];
   return (
     <div className="stack">
       {card.attrs.suspect_ids?.length ? <div className="notice warn">{t("paper.suspect", { ids: card.attrs.suspect_ids.join(", ") })}</div> : null}
+      {(a.authors?.length || a.abstract || doi || a.oa_url || a.url || a.paper_types?.length) ? (
+        <section className="card" style={{ padding: "0.9rem 1.1rem" }}>
+          <div className="row wrap small">
+            {(a.paper_types ?? []).map((x: string) => <span key={x} className="pill" style={{ marginLeft: 0 }}>{t(`paper_type.${x}`, { defaultValue: x })}</span>)}
+            {doi ? <a href={`https://doi.org/${doi}`} target="_blank" rel="noreferrer">{t("paper.doi")}</a> : null}
+            {a.oa_url ? <a href={a.oa_url} target="_blank" rel="noreferrer">{t("paper.open_access")}</a> : null}
+            {a.url && a.url !== a.oa_url ? <a href={a.url} target="_blank" rel="noreferrer">{t("paper.link")}</a> : null}
+          </div>
+          {a.authors?.length ? <p className="muted small">{a.authors.slice(0, 12).join(", ")}{a.authors.length > 12 ? " …" : ""}</p> : null}
+          {a.abstract ? <details><summary>{t("paper.abstract")}</summary><p className="abstract">{a.abstract}</p></details> : null}
+        </section>
+      ) : null}
       {(card.exports ?? []).map((ex) => (
         <section className="card export" key={ex.extraction_id}>
           <div className="export-head">
@@ -154,7 +180,8 @@ function PaperCard({ card, onChanged }: { card: Card; onChanged: () => void }) {
           {ex.issues.length ? (<>
             <div className="section-label">{t("paper.issues")}</div>
             <ul className="issues">{ex.issues.map((x, i) => (
-              <li key={i}><span className={`pill ${x.severity === "minor" ? "" : "warn"}`} style={{ marginLeft: 0 }}>{t(`severity.${x.severity}`)}</span> {x.text}
+              <li key={i}><span className={`pill ${x.severity === "minor" ? "" : "warn"}`} style={{ marginLeft: 0 }}>{t(`severity.${x.severity}`)}</span>
+                {x.location ? <span className="evidence"> {x.location} </span> : " "}{x.text}
                 {x.test ? <span className="muted small"> — {x.test}</span> : null}</li>))}</ul>
           </>) : null}
           <div>
@@ -225,8 +252,18 @@ function Insight({ u, onChanged }: { u: ExportView["user_insights"][number]; onC
   );
 }
 
+/** The entity's name in the interface language when the canonical one is in the other (the
+ * zh/en alias language the exports carry finally shows). */
+function otherName(c: Card, lng: string): string | null {
+  const want = lng.startsWith("zh") ? "zh" : "en";
+  const hasCjk = /[\u4e00-\u9fff]/.test(c.name);
+  if ((want === "zh") === hasCjk) return null;
+  const alt = c.aliases.find((a) => a.lang === want && a.alias !== c.name);
+  return alt ? alt.alias : null;
+}
+
 export default function EntityPage({ id }: { id: number }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [hops, setHops] = useState(1);
   const card = useLoad(() => api.entity(id), [id]);
   const graph = useLoad(() => api.neighbors(id, hops), [id, hops]);
@@ -248,6 +285,7 @@ export default function EntityPage({ id }: { id: number }) {
               {c.attrs.verified === "verified" ? <span className="pill ok">{t("asset.verified")}</span> : null}
             </div>
             <h1>{c.name}</h1>
+            {otherName(c, i18n.language) && <p className="muted" style={{ margin: "-0.2rem 0 0.3rem" }}>{otherName(c, i18n.language)}</p>}
             <div className="idline">
               {c.work?.year ? <span>{c.work.year}</span> : null}
               {c.work?.dois?.map((d) => <span key={d}>{t("paper.doi")} <code>{d}</code></span>)}
@@ -259,7 +297,7 @@ export default function EntityPage({ id }: { id: number }) {
           {c.type === "work" ? <PaperCard card={c} onChanged={() => card.reload()} /> : <AssetAttrs card={c} />}
           <EditMenu card={c} onDone={card.reload} />
           <div className="two-col">
-            <EdgeGroups card={c} />
+            <EdgeGroups card={c} onChanged={() => { card.reload(); graph.reload(); }} />
             <div className="stack">
               <section className="graph-card">
                 <header>

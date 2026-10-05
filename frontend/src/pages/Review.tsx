@@ -4,8 +4,8 @@ import { useTranslation } from "react-i18next";
 import { api, ApiError, type ReviewItem } from "../api";
 import { EmptyState, Loading, TypeBadge } from "../components/common";
 import { CheckIcon } from "../components/icons";
-import { useKeys, useLoad } from "../hooks";
-import { href } from "../router";
+import { useKeys, useLoad, useBusy, useRefreshOnFocus } from "../hooks";
+import { href, go } from "../router";
 
 const KINDS = ["", "merge", "topic_relation", "contradiction", "retro_tag", "synthesis"];
 
@@ -27,26 +27,31 @@ function Side({ label, side }: { label: string; side?: ReviewItem["context"][str
 }
 
 /** Batch, keyboard-only: j/k move, 1–5 pick an action, s skip. */
-export default function ReviewPage() {
+export default function ReviewPage({ query }: { query?: URLSearchParams }) {
   const { t } = useTranslation();
-  const [kind, setKind] = useState("");
+  const kind = query?.get("kind") ?? "";  // the filter lives in the URL: Back and reload keep it
+  const setKind = (k: string) => go("review", { kind: k || undefined });
   const [cur, setCur] = useState(0);
   const [note, setNote] = useState("");
   const q = useLoad(() => api.review(kind || undefined), [kind]);
+  useRefreshOnFocus(q.reload);
+  const [, guard] = useBusy();
   const items = q.data?.items ?? [];
   const item = items[Math.min(cur, Math.max(0, items.length - 1))];
 
   const [err, setErr] = useState<string | null>(null);
   async function act(action: string) {
     if (!item) return;
-    try {
-      await api.resolve(item.id, action, note || undefined);
-      setErr(null);
-    } catch (e) {
-      setErr(String((e as ApiError).detail ?? e));
-    }
-    setNote("");
-    q.reload();
+    await guard(async () => {
+      try {
+        await api.resolve(item.id, action, note || undefined);
+        setErr(null);
+      } catch (e) {
+        setErr(String((e as ApiError).detail ?? e));
+      }
+      setNote("");
+      q.reload();
+    });
   }
 
   useKeys((e) => {
@@ -88,7 +93,8 @@ export default function ReviewPage() {
         <div className="review-layout">
           <ol className="queue">
             {items.map((it, i) => (
-              <li key={it.id} className={it === item ? "current" : ""} onClick={() => setCur(i)}>
+              <li key={it.id} className={it === item ? "current" : ""} onClick={() => setCur(i)} tabIndex={0}
+                  aria-current={it === item} onKeyDown={(e) => { if (e.key === "Enter") setCur(i); }}>
                 <span className="kind">{t(`review.kind.${it.kind}`)}</span>
                 <span>{label(it).slice(0, 80)}</span>
               </li>

@@ -4,14 +4,15 @@ import { useTranslation } from "react-i18next";
 import { api, type TopicItem } from "../api";
 import { EntityLink, Loading, TypeBadge } from "../components/common";
 import { useLoad } from "../hooks";
-import { href } from "../router";
+import { href, go } from "../router";
 
 const COLUMNS = ["dataset", "method", "idea", "claim", "work"] as const;
 const ROLES = ["about", "applicable_to", "proposes", "uses", "produces", "evaluates"];
 
-export default function TopicPage({ id }: { id: number }) {
+export default function TopicPage({ id, query }: { id: number; query?: URLSearchParams }) {
   const { t } = useTranslation();
-  const [role, setRole] = useState("");
+  const role = query?.get("role") ?? "";
+  const setRole = (r: string) => go(`topic/${id}`, { role: r || undefined });
   const page = useLoad(() => api.topicAssets(id, role || undefined), [id, role]);
   const [more, setMore] = useState<Record<string, TopicItem[]>>({});
   useEffect(() => setMore({}), [id, role]);

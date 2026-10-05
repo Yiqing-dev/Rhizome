@@ -113,7 +113,9 @@
     },
     "inbox_pending": "收件箱里有 {{n}} 个文件等待处理（资料库忙或模型不可用时会自动重试）：{{files}}",
     "inbox_ignored": "收件箱里有 {{n}} 个文件不是 RXF 导出，已跳过：{{files}}",
-    "importing": "正在导入 {{done}} / {{total}}…"
+    "importing": "正在导入 {{done}} / {{total}}…",
+    "recalling": "正在召回…",
+    "recall_chars": "已读取 {{n}} / {{max}} 字"
   },
   "action": {
     "confirm": "确认",
@@ -133,7 +135,10 @@
     "issues": "问题",
     "raw": "查看导出文档原文",
     "raw_hide": "收起导出文档原文",
-    "doi": "DOI"
+    "doi": "DOI",
+    "abstract": "摘要",
+    "open_access": "开放获取",
+    "link": "链接"
   },
   "depth": {
     "light": "轻量版导出",
@@ -267,7 +272,9 @@
     "suspend": "暂停这张卡",
     "never": "这个资产不再出卡",
     "sub_suspend": "s 暂停不合适的卡。",
-    "never_confirm": "不再为“{{name}}”生成卡片？它的其他卡片也会暂停。"
+    "never_confirm": "不再为“{{name}}”生成卡片？它的其他卡片也会暂停。",
+    "learning_wait": "还有 {{n}} 张卡稍后回来",
+    "learning_hint": "评为“重来”的卡在学习步骤后会再次出现（下一张约 {{min}} 分钟后）。保持页面打开或稍后回来。"
   },
   "digest": {
     "title": "每周综合",
@@ -450,5 +457,13 @@
     "read_only": "只读模式（远程快照）：可以检索和浏览，不能修改。",
     "moved": "资料库已迁移到 {{path}}。重启后在新位置继续；在此之前不能修改。",
     "restart": "立即重启"
+  },
+  "paper_type": {
+    "research": "研究",
+    "tool": "工具",
+    "resource": "资源",
+    "benchmark": "基准测试",
+    "review": "综述",
+    "protocol": "实验方案"
   }
 }

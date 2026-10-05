@@ -17,7 +17,7 @@
   --surface: #ffffff;
   --ink: #1c1f1a;
   --ink-2: #4b4f47;
-  --muted: #777b72;
+  --muted: #656a61;
   --line: #e4e1d6;
   --line-strong: #cfcbbd;
   --accent: #3e7d3b;
@@ -66,7 +66,7 @@
     --surface: #20241b;
     --ink: #ebe9df;
     --ink-2: #c6c4b8;
-    --muted: #8f9386;
+    --muted: #a3a79b;
     --line: #2e322a;
     --line-strong: #434839;
     --accent: #8ec97a;
@@ -438,3 +438,11 @@ table.decisions tr.revoked td:last-child { text-decoration: none; }
 .toasts { position: fixed; right: 1rem; bottom: 1rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 50; max-width: min(28rem, calc(100vw - 2rem)); }
 .toast { display: flex; gap: 0.5rem; align-items: flex-start; box-shadow: 0 6px 24px rgba(0,0,0,.18); }
 .toast pre { margin: 0; flex: 1; max-height: 12rem; overflow: auto; font-size: 0.85rem; }
+
+/* ---- contrast / keyboard access ---------------------------------------------------------- */
+:root:not([data-theme="light"]) .badge { color: color-mix(in srgb, var(--tc) 65%, white); }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .badge { color: color-mix(in srgb, var(--tc) 75%, black); } }
+:root[data-theme="light"] .badge { color: color-mix(in srgb, var(--tc) 75%, black); }
+.queue li:focus-visible, .drop:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+.warn-text { color: var(--warn); }
+.abstract { white-space: pre-wrap; line-height: 1.5; }

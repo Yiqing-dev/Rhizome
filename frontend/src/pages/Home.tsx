@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ApiError, type Hit } from "../api";
+import { api, ApiError, errorText, type Hit } from "../api";
 import { EmptyState, HitRow, Loading } from "../components/common";
 import { SparkIcon, UploadIcon } from "../components/icons";
-import { useLoad } from "../hooks";
+import { useLoad, useRefreshOnFocus } from "../hooks";
 import { fmtNum } from "../i18n";
 import { go, href } from "../router";
 
 const RXF_HEAD = /^[ \t]*rxf_version[ \t]*:/m;
 const TILE_TYPES = ["work", "dataset", "method", "idea", "claim", "topic"] as const;
+const RECALL_MAX = 4000; // the server reads this much of the context
 
 export default function Home() {
   const { t, i18n } = useTranslation();
@@ -17,8 +18,24 @@ export default function Home() {
   const [q, setQ] = useState("");
   const [ctx, setCtx] = useState("");
   const [recalled, setRecalled] = useState<Hit[] | null>(null);
+  const [recalling, setRecalling] = useState(false);
+  const [recallErr, setRecallErr] = useState<string | null>(null);
+  useRefreshOnFocus(stats.reload);
+  async function doRecall() {
+    if (recalling || !ctx.trim()) return;
+    setRecalling(true);
+    setRecallErr(null);
+    try {
+      setRecalled((await api.recall(ctx)).results);
+    } catch (e) {
+      setRecallErr(errorText(e, t));
+    } finally {
+      setRecalling(false);
+    }
+  }
   const [over, setOver] = useState(false);
   const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [ingestMsg, setIngestMsg] = useState<{ ok: boolean; text: string; related?: any[]; retry?: File[]; repairable?: string[] } | null>(null);
 
   const failed = useLoad(() => api.inboxFailed(), []);
@@ -138,11 +155,12 @@ export default function Home() {
             <p className="hint grow">{t("home.ingest_hint")}</p>
             <button onClick={() => api.openFolder("inbox")}>{t("home.open_inbox")}</button>
           </div>
-          <label className={`drop ${over ? "over" : ""} ${busy ? "busy" : ""}`} aria-busy={!!busy}
+          <label className={`drop ${over ? "over" : ""} ${busy ? "busy" : ""}`} aria-busy={!!busy} tabIndex={0} role="button"
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.current?.click(); } }}
             onDragOver={(e) => { e.preventDefault(); setOver(true); }}
             onDragLeave={() => setOver(false)}
             onDrop={(e) => { e.preventDefault(); setOver(false); onFiles(e.dataTransfer.files); }}>
-            <input type="file" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }} />
+            <input ref={fileInput} type="file" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }} />
             <UploadIcon />
             <span>{busy ? t("home.importing", { done: busy.done, total: busy.total }) : t("home.drop")}</span>
           </label>
@@ -193,11 +211,15 @@ export default function Home() {
           <h2><SparkIcon />{t("home.recall_title")}</h2>
           <p className="hint">{t("home.recall_hint")}</p>
           <textarea rows={5} value={ctx} onChange={(e) => setCtx(e.target.value)} placeholder={t("home.recall_placeholder")} />
-          <div className="row">
-            <button className="primary" onClick={async () => setRecalled((await api.recall(ctx)).results)} disabled={!ctx.trim()}>
-              {t("home.recall_go")}
+          <div className="row between wrap">
+            <button className="primary" onClick={doRecall} disabled={!ctx.trim() || recalling} aria-busy={recalling}>
+              {recalling ? t("home.recalling") : t("home.recall_go")}
             </button>
+            <span className={`muted small ${ctx.length > RECALL_MAX ? "warn-text" : ""}`}>
+              {t("home.recall_chars", { n: ctx.length, max: RECALL_MAX })}
+            </span>
           </div>
+          {recallErr && <div className="notice error">{recallErr}</div>}
           {recalled && (recalled.length
             ? <ul className="hits">{recalled.map((h) => <HitRow key={h.id} h={h} score={h.score} />)}</ul>
             : <EmptyState title={t("common.no_results")} hint={t("home.recall_empty_hint")} />)}

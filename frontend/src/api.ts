@@ -63,7 +63,13 @@ async function req<T>(method: string, path: string, body?: unknown, params?: Rec
   const ct = res.headers.get("content-type") ?? "";
   const data = ct.includes("json") ? await res.json() : await res.text();
   if (!res.ok) throw new ApiError(res.status, (data as { detail?: unknown })?.detail ?? data);
+  if (method !== "GET") changed(); // counters and lists elsewhere on the page refresh themselves
   return data as T;
+}
+
+/** Tell the open pages that the library changed (also dispatched by the file upload below). */
+export function changed(): void {
+  window.dispatchEvent(new Event("rhz:changed"));
 }
 
 export type EntityType = "work" | "dataset" | "method" | "idea" | "claim" | "topic" | "organism" | "modality";
@@ -163,13 +169,14 @@ export const api = {
     });
     const data = (res.headers.get("content-type") ?? "").includes("json") ? await res.json() : await res.text();
     if (!res.ok) throw new ApiError(res.status, (data as { detail?: unknown })?.detail ?? data);
+    changed();
     return data;
   },
   inboxFailed: () => req<{ files: FailedFile[] }>("GET", "/inbox/failed"),
   inboxRetry: (name: string, repair: boolean) => req<any>("POST", `/inbox/failed/${encodeURIComponent(name)}`, { repair }),
   recall: (text: string) => req<{ results: Hit[] }>("POST", "/recall", { text }),
   cardsDue: () => req<{ cards: DueCard[] }>("GET", "/cards/due"),
-  grade: (id: string, rating: number) => req<{ interval_days: number }>("POST", `/cards/${id}/grade`, { rating }),
+  grade: (id: string, rating: number) => req<{ interval_days: number; due: string }>("POST", `/cards/${id}/grade`, { rating }),
   suspendCard: (id: string, entity = false) => req<{ suspended: boolean; cards: number }>("POST", `/cards/${id}/suspend`, { suspended: true, entity }),
   dismissReview: (kind: string, topic?: string) => req<{ dismissed: number }>("POST", "/review/dismiss", { kind, topic }),
   digest: () => req<any>("GET", "/digest"),

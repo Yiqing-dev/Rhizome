@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { api, type JobView } from "./api";
 
 export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]): {
@@ -30,6 +30,8 @@ export function useKeys(handler: (e: KeyboardEvent) => void, deps: unknown[]): v
     const on = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      // a held key, an IME composition or a browser shortcut (Ctrl+1) must not grade or decide
+      if (e.repeat || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return;
       handler(e);
     };
     window.addEventListener("keydown", on);
@@ -59,4 +61,40 @@ export function useJob(kind: string, onDone?: (j: JobView) => void, payload?: Re
   const body = JSON.stringify(payload ?? {});
   const start = useCallback(async () => follow(await api.runJob(kind, JSON.parse(body))), [kind, body, follow]);
   return { job, running: !!job && (job.status === "queued" || job.status === "running"), start };
+}
+
+/** Re-run `reload` when the window comes back (another window, Claude or the inbox may have
+ * changed the library meanwhile) and when this app reports a change of its own ("rhz:changed",
+ * dispatched by api.ts after every write). */
+export function useRefreshOnFocus(reload: () => void): void {
+  useEffect(() => {
+    let last = Date.now();
+    const soft = () => {
+      if (document.visibilityState === "visible" && Date.now() - last > 2000) { last = Date.now(); reload(); }
+    };
+    const hard = () => { last = Date.now(); reload(); };
+    window.addEventListener("focus", soft);
+    document.addEventListener("visibilitychange", soft);
+    window.addEventListener("rhz:changed", hard);
+    return () => {
+      window.removeEventListener("focus", soft);
+      document.removeEventListener("visibilitychange", soft);
+      window.removeEventListener("rhz:changed", hard);
+    };
+  }, [reload]);
+}
+
+/** Guard an async action so a double key press or click runs it once at a time. */
+export function useBusy(): [React.MutableRefObject<boolean>, <T>(fn: () => Promise<T>) => Promise<T | undefined>] {
+  const busy = useRef(false);
+  const run = useCallback(async <T,>(fn: () => Promise<T>) => {
+    if (busy.current) return undefined;
+    busy.current = true;
+    try {
+      return await fn();
+    } finally {
+      busy.current = false;
+    }
+  }, []);
+  return [busy, run];
 }

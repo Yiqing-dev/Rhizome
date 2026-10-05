@@ -113,7 +113,9 @@
     },
     "inbox_pending": "{{n}} inbox files are waiting (retried automatically while the library is busy or a model is missing): {{files}}",
     "inbox_ignored": "{{n}} inbox files are not RXF exports and were skipped: {{files}}",
-    "importing": "Importing {{done}} / {{total}}…"
+    "importing": "Importing {{done}} / {{total}}…",
+    "recalling": "Recalling…",
+    "recall_chars": "{{n}} / {{max}} characters read"
   },
   "action": {
     "confirm": "confirm",
@@ -133,7 +135,10 @@
     "issues": "Issues",
     "raw": "Show export document",
     "raw_hide": "Hide export document",
-    "doi": "DOI"
+    "doi": "DOI",
+    "abstract": "Abstract",
+    "open_access": "Open access",
+    "link": "Link"
   },
   "depth": {
     "light": "Light export",
@@ -267,7 +272,9 @@
     "suspend": "Suspend this card",
     "never": "Never for this asset",
     "sub_suspend": "s suspends a bad card.",
-    "never_confirm": "Stop making cards about “{{name}}”? Its other cards are suspended too."
+    "never_confirm": "Stop making cards about “{{name}}”? Its other cards are suspended too.",
+    "learning_wait": "{{n}} card(s) coming back shortly",
+    "learning_hint": "Cards graded Again return after their learning step (next in about {{min}} min). Keep this page open or come back."
   },
   "digest": {
     "title": "Weekly digest",
@@ -450,5 +457,13 @@
     "read_only": "Read-only (a remote snapshot): browse and search, no changes.",
     "moved": "The library was moved to {{path}}. Restart to continue there; changes are paused until then.",
     "restart": "Restart now"
+  },
+  "paper_type": {
+    "research": "research",
+    "tool": "tool",
+    "resource": "resource",
+    "benchmark": "benchmark",
+    "review": "review",
+    "protocol": "protocol"
   }
 }

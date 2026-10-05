@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { api, errorText } from "./api";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { showToast, Toasts } from "./components/Toast";
 import { Logo, SearchIcon } from "./components/icons";
-import { useJob } from "./hooks";
+import { useJob, useRefreshOnFocus } from "./hooks";
 import { backendLang, setLanguage } from "./i18n";
 import { go, href, useRoute } from "./router";
 import Home from "./pages/Home";
@@ -158,17 +158,19 @@ export default function App() {
   useEffect(() => {
     document.documentElement.lang = i18n.language;
   }, [i18n.language]);
-  useEffect(() => {
+  const refreshQueue = useCallback(() => {
     api.stats().then((s) => setQueue(s.review_queue + 0)).catch(() => undefined);
-  }, [route.path.join("/")]);
+  }, []);
+  useEffect(refreshQueue, [route.path.join("/"), refreshQueue]);
+  useRefreshOnFocus(refreshQueue);
 
   let page;
   switch (head) {
     case "search": page = <SearchPage key={searchKey(route.query)} query={route.query} />; break;
-    case "entity": page = <EntityPage id={Number(id)} />; break;
-    case "topic": page = <TopicPage id={Number(id)} />; break;
+    case "entity": page = <EntityPage key={id} id={Number(id)} />; break;
+    case "topic": page = <TopicPage key={id} id={Number(id)} query={route.query} />; break;
     case "map": page = <MapPage />; break;
-    case "review": page = <ReviewPage />; break;
+    case "review": page = <ReviewPage query={route.query} />; break;
     case "cards": page = <CardsPage />; break;
     case "digest": page = <DigestPage />; break;
     case "settings": page = <SettingsPage />; break;

@@ -12,7 +12,14 @@ function parse(): Route {
 export function useRoute(): Route {
   const [r, setR] = useState(parse);
   useEffect(() => {
-    const on = () => setR(parse());
+    let last = parse().path.join("/");
+    const on = () => {
+      const next = parse();
+      const path = next.path.join("/");
+      if (path !== last) window.scrollTo(0, 0); // a new page starts at the top; a filter change keeps the scroll
+      last = path;
+      setR(next);
+    };
     window.addEventListener("hashchange", on);
     return () => window.removeEventListener("hashchange", on);
   }, []);
