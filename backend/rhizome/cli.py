@@ -322,7 +322,12 @@ def rebuild(no_backup: bool = False) -> None:
     init_db()
     with session_scope() as s:
         summary = do_rebuild(s, backup=not no_backup)
-    _out(summary) or typer.echo(_("cli.rebuild_done", summary=json.dumps(summary)))
+    if _out(summary):
+        return
+    typer.echo(_("cli.rebuild_done", summary=json.dumps({k: v for k, v in summary.items()
+                                                          if k not in ("warnings", "decisions_skipped")})))
+    for w in summary.get("warnings", []):
+        typer.secho(w, fg="yellow")
 
 
 @app.command()

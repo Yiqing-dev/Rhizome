@@ -80,28 +80,33 @@ def _validate(op: str, p: dict[str, Any]) -> None:
         raise DecisionError("status must be confirmed | rejected | auto")
 
 
-def apply(g: Graph, d: HumanDecision, strict: bool = False) -> bool:
+def apply(g: Graph, d: HumanDecision, strict: bool = False, skipped: list[dict] | None = None) -> bool:
+    """``strict`` (recording a new decision): any problem is an error for the caller. On replay a
+    stale decision (its entity no longer exists after a model or threshold change, or a later merge
+    turned its edge into a self-loop) is skipped and reported, never allowed to abort a rebuild."""
     p = d.payload
     try:
         fn = globals()[f"_op_{d.op}"]
         return bool(fn(g, p))
-    except DecisionError:
-        raise
-    except Exception as e:  # on replay a stale decision must never break a rebuild
+    except Exception as e:
         if strict:
+            if isinstance(e, DecisionError):
+                raise
             raise DecisionError(f"{d.op}: {e}") from e
         log.warning("decision %s (%s) not applied: %s", d.id, d.op, e)
+        if skipped is not None:
+            skipped.append({"id": d.id, "op": d.op, "reason": str(e)})
         return False
 
 
-def apply_all(g: Graph) -> int:
+def apply_all(g: Graph, skipped: list[dict] | None = None) -> int:
     n = 0
     g.invalidate_redirects()
     for d in g.s.execute(select(HumanDecision).where(HumanDecision.revoked_at.is_(None))
                          .order_by(HumanDecision.id)).scalars().all():
         g.clock = d.created_at  # entities a decision creates keep the date the decision was made
         try:
-            n += apply(g, d)
+            n += apply(g, d, skipped=skipped)
         finally:
             g.clock = None
     return n

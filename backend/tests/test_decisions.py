@@ -190,3 +190,23 @@ def test_rebuild_keeps_creation_dates(library, session):
                                                                         Entity.type != "modality")}
     assert dates and all(d == old for d in dates.values()), dates
     assert all(ed.created_at == old for ed in session.query(Edge))
+
+
+def test_stale_decisions_are_skipped_not_fatal(library, session):
+    """A confirmed edge between two topics that are later merged becomes a self-loop on replay;
+    a decision whose entity no longer exists (e.g. after a model change) must not abort a rebuild."""
+    from rhizome.db.models import HumanDecision
+    from rhizome.pipeline import decisions
+    from rhizome.pipeline.graph import Graph
+    from rhizome.pipeline.rebuild import rebuild
+
+    g = Graph(session)
+    a, b = g.by_key("topic:spatial domain detection"), g.by_key("topic:grn inference")
+    decisions.record(g, "add_edge", {"src": a.key, "dst": b.key, "type": "is_a"})
+    decisions.record(g, "merge", {"from": a.key, "into": b.key})
+    session.add(HumanDecision(op="rename", payload={"key": "claim:gone-after-model-change", "name": "x"}))
+    session.commit()
+    out = rebuild(session, backup=False)
+    ops = sorted(x["op"] for x in out["decisions_skipped"])
+    assert ops == ["add_edge", "rename"] and out["warnings"]
+    assert Graph(session).resolve_key(a.key) == b.key  # the merge itself still applies

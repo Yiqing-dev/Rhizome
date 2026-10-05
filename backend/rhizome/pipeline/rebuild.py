@@ -60,11 +60,17 @@ def rebuild(s: Session, backup: bool = True) -> dict:
                 log.exception("extraction %s failed to materialise: %s", ex.id, e)
         if phase[0] == "rxf":
             cites = link_citations(g)
-            applied = apply_all(g)
+            skipped: list[dict] = []
+            applied = apply_all(g, skipped)
     if any(x.kind == "retro_tag" for x in current):
-        applied = apply_all(g)  # decisions about retro-tag edges (e.g. rejections) win again
+        skipped = []
+        applied = apply_all(g, skipped)  # decisions about retro-tag edges (e.g. rejections) win again
+    if skipped:
+        warnings.append(f"{len(skipped)} decision(s) could not be replayed: "
+                        + ", ".join(f"#{x['id']} {x['op']}" for x in skipped))
     promoted = promote_topics(g)
     s.flush()
     return {"extractions": n, "cites": cites, "decisions_applied": applied, "topics_promoted": promoted,
             "entities": s.query(Entity).count(), "edges": s.query(Edge).count(),
-            "seconds": round(time.time() - t0, 2), "warnings": warnings}
+            "seconds": round(time.time() - t0, 2), "decisions_skipped": skipped,
+            "warnings": warnings}
