@@ -115,6 +115,26 @@
 | 收件箱 | 按内容识别 RXF（顶层有 `rxf_version:`），不看文件名和扩展名；`.pdf`、下载中的临时文件、隐藏文件不处理；文件名含空格和中文已测试 |
 | 测试 | 正例 `rxf-spec/examples/deep-with-ids.yaml`，负例 `rxf-spec/examples/invalid/export-drift.yaml`（摊平的 transfer、`new`、指向不存在 id 的引用），可修复样例 `backend/tests/fixtures/drift-repairable.yaml`；`backend/tests/test_rxf_ids.py` |
 
+## 第一周修复（工程审查后，2026-10-05，v0.1.3）
+
+按 `docs/engineering-review.zh.md` 第 5 节的顺序完成：
+
+| 编号 | 修改 |
+| --- | --- |
+| T14 | 设置优先级改为 显式参数 > 环境变量 > settings.json；测试清空所有 `RHIZOME_*` 和系统目录变量，不会再写进真实资料库 |
+| T1 | `ci.yml` 在 `claude/**` 推送时运行；release.yml 发布前用锁定依赖跑单元测试和 ruff；ruff 固定版本 |
+| D5(1)、D4 | 每日备份（启动时和每 30 分钟检查一次，超过 20 小时补做），按类型保留；备份目录可配置；重算前的备份 10 分钟内只做一次，失败只告警 |
+| D1 | 重放时过期的决策跳过并在重算结果里列出，不再中止重算 |
+| G7、G6 | settings.json 只保存改过的键，保留未知键，原子写入并留 .bak；坏字段跳过并报告 |
+| A3、G1 | MCP 在应用重启（新端口/新 token）后自动重连；Claude 配置不再固定资料库路径，迁移时清理旧路径 |
+| A7、P2 | 空上下文、无 import 脚本、notebook、作业调度指令；FTS 关键词去重、去停用词、最多 12 个 |
+| M2 | 无法加载的模型给出明确报错（API 503、页面横幅、一键改回内置），收件箱文件原地保留 |
+| D3 | 重算保持实体和待审项的编号；`rhz_related` 接受 key |
+| X1 | `GET /rxf/instructions`、设置页“聊天 Project 设置”、MCP 工具 `rhz_rxf_guide` |
+| D11 | 带 PDF 的深度导出记为 T2 |
+
+下一批（第一个月）从迁移基础设施开始：U1 → H2 → T4，必须在任何 0002 迁移之前完成。
+
 ## 还需要你来做的（M0）
 
 - 定稿导出指令：`rxf-spec/instructions/` 里是按设计文档整理的版本，加了一条“含问号的文本不要写进花括号”——
