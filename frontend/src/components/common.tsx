@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import type { EntityType, Hit, Source } from "../api";
+import { errorText, type EntityType, type Hit, type Source } from "../api";
 import { href } from "../router";
 import { EDGE_TYPES, ENTITY_TYPES } from "./colors";
 import { LeafIcon } from "./icons";
@@ -73,9 +73,7 @@ export function HitRow({ h, score }: { h: Hit; score?: number | null }) {
 export function Loading({ error, loading }: { error: unknown; loading: boolean }) {
   const { t } = useTranslation();
   if (error) {
-    const status = (error as { status?: number }).status;
-    const msg = status === 401 ? t("common.unauthorized") : status === 404 ? t("common.not_found") : t("common.error");
-    return <div className="notice error">{msg}</div>;
+    return <div className="notice error"><pre>{errorText(error, t)}</pre></div>;
   }
   return loading ? <div className="muted">{t("common.loading")}</div> : null;
 }

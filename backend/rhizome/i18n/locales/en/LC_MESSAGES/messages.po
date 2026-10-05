@@ -264,3 +264,21 @@ msgstr "This export replaces the earlier exports {ids} (restore with rhz decisio
 
 msgid "cli.existing_exports"
 msgstr "This paper already has exports {ids}. If this one is a correction, import it with --replace so what only the old exports said is removed."
+
+msgid "api.internal_error"
+msgstr "Internal error (id {id}). Details were written to the log (Settings → Storage → Logs)."
+
+msgid "config.library_missing"
+msgstr "Library not found: {path}. It may be on a disconnected drive, or the folder was renamed or moved. Reconnect the drive and try again; if the library is no longer there, run rhz data-dir --reset to go back to the default location (or delete {pointer}). Rhizome did not start, so that no empty library is created by mistake."
+
+msgid "api.library_moved"
+msgstr "The library was moved to {path}. Restart Rhizome (Settings has 'Restart now'); changes after that go to the new location."
+
+msgid "api.move_failed"
+msgstr "The move failed; the library is unchanged: {error}"
+
+msgid "api.move_explicit_dir"
+msgstr "The library location is set by RHIZOME_DATA_DIR or --data-dir ({path}); moving it here would have no effect. Change that setting instead."
+
+msgid "api.restart_manually"
+msgstr "This backend was not started by the desktop app; restart it by hand."

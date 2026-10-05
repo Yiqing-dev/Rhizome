@@ -264,3 +264,21 @@ msgstr "这份导出取代了之前的导出 {ids}（可用 rhz decisions / rhz 
 
 msgid "cli.existing_exports"
 msgstr "这篇论文已有导出 {ids}。如果这份是修正版，用 --replace 重新导入，旧导出里的错误内容才会被移除。"
+
+msgid "api.internal_error"
+msgstr "内部错误（编号 {id}）。详细信息已写入日志（设置 → 存储 → 日志）。"
+
+msgid "config.library_missing"
+msgstr "找不到资料库：{path}。它可能在一个未连接的硬盘上，或者文件夹被改名、移走了。连接硬盘后重试；如果资料库已经不在那里，运行 rhz data-dir --reset 改回默认位置（或删除 {pointer}）。为了不误建一个空资料库，Rhizome 没有继续启动。"
+
+msgid "api.library_moved"
+msgstr "资料库已迁移到 {path}。请重启 Rhizome（设置页有“立即重启”），之后的修改会写入新位置。"
+
+msgid "api.move_failed"
+msgstr "迁移失败，原资料库保持不变：{error}"
+
+msgid "api.move_explicit_dir"
+msgstr "资料库位置是由 RHIZOME_DATA_DIR 或 --data-dir 指定的（{path}），在这里迁移不会生效。请修改那个设置。"
+
+msgid "api.restart_manually"
+msgstr "这个后台不是由桌面应用启动的，请手动重启它。"

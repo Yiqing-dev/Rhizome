@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Sigma from "sigma";
 import type { TopicMap } from "../api";
 import { go } from "../router";
@@ -10,6 +10,7 @@ import { communityColor, cssVar, ink, tint } from "./colors";
 /** Topic layer only (WebGL), aggregated server-side; node size = assets per topic, colour = community. */
 export default function TopicGraph({ map, onHover }: { map: TopicMap; onHover?: (id: number | null) => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [failed, setFailed] = useState<string | null>(null);
   useEffect(() => {
     if (!ref.current) return;
     const g = new Graph({ type: "directed", multi: false });
@@ -29,11 +30,17 @@ export default function TopicGraph({ map, onHover }: { map: TopicMap; onHover?: 
       if (g.hasNode(s) && g.hasNode(d) && !g.hasEdge(s, d)) g.addEdge(s, d, { size: 1.4, color: edgeCol, type: "arrow" });
     });
     if (g.order > 1) forceAtlas2.assign(g, { iterations: 250, settings: { ...forceAtlas2.inferSettings(g), gravity: 1.5, scalingRatio: 6 } });
-    const sigma = new Sigma(g, ref.current, {
-      renderEdgeLabels: false, labelRenderedSizeThreshold: 0, labelColor: { color: ink() },
-      labelFont: getComputedStyle(document.documentElement).fontFamily.split(",")[0].replace(/"/g, ""), labelSize: 12,
-      labelWeight: "500", defaultEdgeType: "arrow",
-    });
+    let sigma: Sigma;
+    try {
+      sigma = new Sigma(g, ref.current, {
+        renderEdgeLabels: false, labelRenderedSizeThreshold: 0, labelColor: { color: ink() },
+        labelFont: getComputedStyle(document.documentElement).fontFamily.split(",")[0].replace(/"/g, ""), labelSize: 12,
+        labelWeight: "500", defaultEdgeType: "arrow",
+      });
+    } catch (e) {
+      setFailed(String((e as Error)?.message ?? e)); // no WebGL (old GPU driver, remote desktop)
+      return;
+    }
     let hovered: string | null = null;
     sigma.setSetting("nodeReducer", (node, data) => {
       if (!hovered) return data;
@@ -49,5 +56,13 @@ export default function TopicGraph({ map, onHover }: { map: TopicMap; onHover?: 
     sigma.on("clickNode", ({ node }) => go(`topic/${node}`));
     return () => sigma.kill();
   }, [map, onHover]);
+  if (failed) {
+    return (
+      <div className="graph tall stack-sm" style={{ overflow: "auto", padding: "1rem" }}>
+        <p className="muted small">{failed}</p>
+        <ul className="plain">{map.nodes.map((n) => <li key={n.id}><a href={`#/topic/${n.id}`}>{n.name}</a> <span className="muted small">{n.size}</span></li>)}</ul>
+      </div>
+    );
+  }
   return <div className="graph tall" ref={ref} />;
 }

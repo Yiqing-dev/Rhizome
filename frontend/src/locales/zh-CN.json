@@ -56,7 +56,10 @@
     "no_results": "没有结果。",
     "prev": "上一页",
     "next": "下一页",
-    "show_more": "再显示 {{n}} 项"
+    "show_more": "再显示 {{n}} 项",
+    "unreachable": "连不上后台服务（可能正在重启）。稍等几秒再试。",
+    "page_error": "这个页面出错了。其他页面仍然可以用。",
+    "copy_details": "复制详情"
   },
   "search": {
     "placeholder": "检索数据集、方法、思路、论断…",
@@ -103,7 +106,9 @@
     "fix": {
       "transfer_flattened": "收回摊平的 transfer",
       "topic_new_flag": "删除 topics 里的 new"
-    }
+    },
+    "inbox_pending": "收件箱里有 {{n}} 个文件等待处理（资料库忙或模型不可用时会自动重试）：{{files}}",
+    "inbox_ignored": "收件箱里有 {{n}} 个文件不是 RXF 导出，已跳过：{{files}}"
   },
   "action": {
     "confirm": "确认",
@@ -423,5 +428,10 @@
     "retract_confirm": "撤回后，这篇论文的导出不再参与图谱（原始文件保留），后台会重算。可以在决策历史里撤销。",
     "done": "已保存（决策 #{{id}}）。",
     "done_rebuild": "已保存（决策 #{{id}}），正在后台重算。"
+  },
+  "mode": {
+    "read_only": "只读模式（远程快照）：可以检索和浏览，不能修改。",
+    "moved": "资料库已迁移到 {{path}}。重启后在新位置继续；在此之前不能修改。",
+    "restart": "立即重启"
   }
 }

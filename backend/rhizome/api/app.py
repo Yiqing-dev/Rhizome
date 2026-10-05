@@ -133,11 +133,12 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         init_db(st)
     api_token = token or get_or_create_token(st)
     worker: jobs.Worker | None = None
+    inbox_stop = threading.Event()
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         nonlocal worker
-        stop = threading.Event()
+        stop = inbox_stop
         if start_worker and not read_only:
             worker = jobs.Worker()
             worker.start()
@@ -155,6 +156,14 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
     from fastapi.responses import JSONResponse
 
     from ..ml import ModelUnavailable
+
+    @app.exception_handler(Exception)
+    async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
+        """uvicorn prints unhandled errors to stderr only; put them in the log with an id the
+        user can quote, and answer with that id instead of a bare 500."""
+        rid = secrets.token_hex(4)
+        log.exception("request %s %s failed [%s]", request.method, request.url.path, rid)
+        return JSONResponse(status_code=500, content={"detail": _("api.internal_error", id=rid), "request_id": rid})
 
     @app.exception_handler(ModelUnavailable)
     async def _model_unavailable(request: Request, exc: ModelUnavailable) -> JSONResponse:
@@ -176,6 +185,8 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
     def writable(request: Request) -> None:
         if read_only:
             raise HTTPException(403, _("api.read_only"))
+        if getattr(app.state, "moved_to", None):  # the library was copied elsewhere: no more writes here
+            raise HTTPException(409, _("api.library_moved", path=app.state.moved_to))
         # During a rebuild the write lock is held for a long time: answer at once instead of
         # making the caller wait for the 30 s busy timeout and then fail. Queueing jobs and the
         # desktop-integration endpoints don't need the lock.
@@ -192,7 +203,9 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
 
     @app.get("/health")
     def health() -> dict[str, Any]:
-        return {"ok": True, "version": __version__, "read_only": read_only, "language": ui_language()}
+        moved = getattr(app.state, "moved_to", None)
+        return {"ok": True, "version": __version__, "read_only": read_only or bool(moved), "moved_to": moved,
+                "language": ui_language()}
 
     # ---- ingest ----
     @app.post("/ingest", dependencies=W)
@@ -565,9 +578,26 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
     @app.post("/system/data-dir", dependencies=W)
     def system_data_dir(body: dict[str, Any]) -> dict[str, Any]:
         try:
-            return sysint.move_data_dir(body.get("path"), copy=bool(body.get("copy", True)))
+            out = sysint.move_data_dir(body.get("path"), copy=bool(body.get("copy", True)))
         except ValueError as e:
             raise HTTPException(422, str(e)) from e
+        except OSError as e:  # disk full, permission denied, path too long
+            raise HTTPException(422, _("api.move_failed", error=str(e))) from e
+        if out.get("restart_required"):
+            # from now on this process would write into the old copy: stop writing here
+            app.state.moved_to = out["data_dir"]
+            inbox_stop.set()
+            if worker:
+                worker.stop()
+        return out
+
+    @app.post("/system/restart", dependencies=A)
+    def system_restart() -> dict[str, Any]:
+        """Ask the desktop shell to restart the app (it relaunches on exit code 75)."""
+        if not os.environ.get("RHIZOME_PARENT_PID"):
+            raise HTTPException(409, _("api.restart_manually"))
+        sysint.exit_for_restart()
+        return {"restarting": True}
 
     # ---- static frontend ----
     dist = Path(os.environ.get("RHIZOME_FRONTEND_DIST", Path(__file__).resolve().parent.parent / "web"))

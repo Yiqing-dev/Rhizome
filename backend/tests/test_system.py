@@ -48,8 +48,10 @@ def test_move_data_dir_copies_library(home, settings, library, session):
 
     session.commit()
     target = home / "elsewhere" / "Rhizome"
+    config.set_data_dir_pointer(settings.data_dir)  # the desktop app finds its library this way
     out = system.move_data_dir(str(target))
     assert out["copied"] and out["restart_required"]
+    assert not target.with_name(target.name + ".rhizome-moving").exists()
     assert (target / "rhizome.db").exists() and (target / "raw").is_dir()
     assert config.default_data_dir() == target.resolve()
     with pytest.raises(ValueError):
@@ -104,6 +106,9 @@ def test_moving_the_library_unpins_claude_config(home, settings, library, sessio
     cfg.write_text(json.dumps({"mcpServers": {
         "rhizome": {"command": "rhz.exe", "args": ["mcp"], "env": {"RHIZOME_DATA_DIR": str(settings.data_dir)}},
         "other": {"command": "x", "env": {"RHIZOME_DATA_DIR": "unrelated"}}}}), "utf-8")
+    from rhizome import config
+
+    config.set_data_dir_pointer(settings.data_dir)
     out = system.move_data_dir(str(home / "新 位置" / "Rhizome"))
     assert out["claude_config_updated"] == [str(cfg)]
     data = json.loads(cfg.read_text("utf-8"))
@@ -256,6 +261,7 @@ def test_move_library_and_claude_config_with_cjk_paths(home, settings, library, 
 
     session.commit()
     target = home / "我的 资料库" / "Rhizome"
+    config.set_data_dir_pointer(settings.data_dir)
     assert system.move_data_dir(str(target))["copied"]
     assert config.default_data_dir() == target.resolve()
     pointer = json.loads((config.platform_data_dir() / config.POINTER_FILE).read_text("utf-8"))
@@ -290,3 +296,47 @@ def test_files_saved_with_a_bom_are_read(home, settings, monkeypatch):
     system.install_claude_desktop()
     data = json.loads(cfg.read_text("utf-8"))
     assert "其他" in data["mcpServers"] and "rhizome" in data["mcpServers"]
+
+
+def test_move_refused_when_location_is_explicit(home, settings, monkeypatch):
+    from rhizome import system
+
+    monkeypatch.setenv("RHIZOME_DATA_DIR", str(settings.data_dir))
+    with pytest.raises(ValueError, match="RHIZOME_DATA_DIR"):
+        system.move_data_dir(str(home / "x"))
+
+
+def test_after_a_move_the_running_app_stops_writing(home, settings, library, session):
+    from fastapi.testclient import TestClient
+
+    from rhizome import config
+    from rhizome.api.app import create_app
+
+    session.commit()
+    config.set_data_dir_pointer(settings.data_dir)
+    app = create_app(settings, start_worker=False)
+    c = TestClient(app)
+    c.headers["Authorization"] = f"Bearer {app.state.token}"
+    r = c.post("/system/data-dir", json={"path": str(home / "moved" / "Rhizome")})
+    assert r.status_code == 200 and r.json()["restart_required"]
+    assert c.get("/health").json()["read_only"]
+    r = c.post("/decision", json={"op": "create_topic", "payload": {"name": "x"}})
+    assert r.status_code == 409
+    assert c.post("/system/restart").status_code == 409  # not started by the desktop shell
+
+
+def test_interrupted_copy_leaves_nothing_behind(home, settings, library, session, monkeypatch):
+    from rhizome import config, system
+
+    session.commit()
+    config.set_data_dir_pointer(settings.data_dir)
+    target = home / "half" / "Rhizome"
+
+    def disk_full(*a, **k):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(system.shutil, "copytree", disk_full)
+    with pytest.raises(OSError):
+        system.move_data_dir(str(target))
+    assert not target.exists() and not target.with_name("Rhizome.rhizome-moving").exists()
+    assert config.default_data_dir() == settings.data_dir  # pointer unchanged

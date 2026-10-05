@@ -56,7 +56,10 @@
     "no_results": "No results.",
     "prev": "Previous",
     "next": "Next",
-    "show_more": "Show {{n}} more"
+    "show_more": "Show {{n}} more",
+    "unreachable": "The backend is not reachable (it may be restarting). Try again in a few seconds.",
+    "page_error": "This page hit an error. The other pages still work.",
+    "copy_details": "Copy details"
   },
   "search": {
     "placeholder": "Search datasets, methods, ideas, claims…",
@@ -103,7 +106,9 @@
     "fix": {
       "transfer_flattened": "fold the flattened transfer back",
       "topic_new_flag": "drop new from topics"
-    }
+    },
+    "inbox_pending": "{{n}} inbox files are waiting (retried automatically while the library is busy or a model is missing): {{files}}",
+    "inbox_ignored": "{{n}} inbox files are not RXF exports and were skipped: {{files}}"
   },
   "action": {
     "confirm": "confirm",
@@ -423,5 +428,10 @@
     "retract_confirm": "The paper's exports stop contributing to the graph (raw files are kept) and the library is rebuilt. You can undo it under Decisions.",
     "done": "Saved (decision #{{id}}).",
     "done_rebuild": "Saved (decision #{{id}}); rebuilding in the background."
+  },
+  "mode": {
+    "read_only": "Read-only (a remote snapshot): browse and search, no changes.",
+    "moved": "The library was moved to {{path}}. Restart to continue there; changes are paused until then.",
+    "restart": "Restart now"
   }
 }

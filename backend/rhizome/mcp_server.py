@@ -196,13 +196,16 @@ def warm_up() -> None:
 def main() -> None:
     import sys
 
+    from .config import LibraryNotFound
     from .db.session import SchemaTooNew
+    from .logging_setup import setup_logging
 
     try:
+        setup_logging(get_settings(), role="mcp")
         warm_up()
-    except SchemaTooNew as e:  # Claude Desktop shows the server's stderr in its MCP log
+    except (SchemaTooNew, LibraryNotFound) as e:  # Claude Desktop shows the server's stderr in its MCP log
         print(str(e), file=sys.stderr)
-        raise SystemExit(3) from None
+        raise SystemExit(3 if isinstance(e, SchemaTooNew) else 4) from None
     mcp.run()
 
 

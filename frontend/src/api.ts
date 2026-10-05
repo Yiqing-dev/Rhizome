@@ -32,16 +32,34 @@ export class ApiError extends Error {
   }
 }
 
+/** Readable text for any error: FastAPI 422 lists, {report} / {detail} objects, plain strings,
+ * an unreachable backend. `t` translates the generic cases. */
+export function errorText(e: unknown, t: (k: string) => string): string {
+  if (!(e instanceof ApiError)) return e instanceof Error ? e.message : String(e);
+  if (e.status === 0) return t("common.unreachable");
+  if (e.status === 401) return t("common.unauthorized");
+  const d = e.detail as any;
+  if (typeof d === "string" && d.trim()) return d;
+  if (Array.isArray(d)) return d.map((x) => (x?.loc ? `${x.loc.join(".")}: ` : "") + (x?.msg ?? JSON.stringify(x))).join("\n");
+  if (d && typeof d === "object") return d.report ?? d.detail ?? d.error ?? JSON.stringify(d);
+  return e.status === 404 ? t("common.not_found") : `${t("common.error")} (HTTP ${e.status})`;
+}
+
 async function req<T>(method: string, path: string, body?: unknown, params?: Record<string, unknown>): Promise<T> {
   const url = new URL(BASE + path, window.location.origin);
   for (const [k, v] of Object.entries(params ?? {})) {
     if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
   }
-  const res = await fetch(url, {
-    method,
-    headers: { Authorization: `Bearer ${token()}`, ...(body ? { "Content-Type": "application/json" } : {}) },
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      headers: { Authorization: `Bearer ${token()}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    throw new ApiError(0, null); // the backend is not reachable (stopped, restarting)
+  }
   const ct = res.headers.get("content-type") ?? "";
   const data = ct.includes("json") ? await res.json() : await res.text();
   if (!res.ok) throw new ApiError(res.status, (data as { detail?: unknown })?.detail ?? data);
@@ -92,7 +110,8 @@ export interface ReviewItem {
     connections: { type: string; direction: string; name: string }[] }>;
 }
 export interface DueCard { id: string; q: string; a: string; entity_key: string; entity_name: string | null; origin: string; new: boolean }
-export interface Stats { entities: Record<string, number>; edges: number; review_queue: number; review_queue_by_kind: Record<string, number>; cards_due: number }
+export interface Stats { entities: Record<string, number>; edges: number; review_queue: number; review_queue_by_kind: Record<string, number>; cards_due: number;
+  inbox?: { watching: boolean; last_scan: string | null; pending: string[]; ignored: string[] } }
 
 export interface Decision { id: number; op: string; payload: Record<string, unknown>; created_at: string; revoked_at: string | null }
 export interface JobView {
@@ -113,7 +132,7 @@ export interface SystemInfo {
 export interface BackupStatus { dir: string; count: number; bytes: number; last: string | null; last_daily: string | null; error?: string }
 
 export const api = {
-  health: () => req<{ ok: boolean; version: string; read_only: boolean; language: string }>("GET", "/health"),
+  health: () => req<{ ok: boolean; version: string; read_only: boolean; moved_to?: string | null; language: string }>("GET", "/health"),
   stats: () => req<Stats>("GET", "/stats"),
   search: (q: string, f: Record<string, unknown> = {}) => req<{ results: Hit[] }>("GET", "/search", undefined, { q, ...f }),
   entity: (id: number) => req<Card>("GET", `/entity/${id}`),
@@ -157,6 +176,7 @@ export const api = {
   system: () => req<SystemInfo>("GET", "/system"),
   openFolder: (target: "data" | "inbox" | "logs" | "models" | "backups") => req<{ opened: string }>("POST", `/system/open/${target}`),
   backupNow: () => req<BackupStatus & { path: string | null }>("POST", "/system/backup"),
+  restart: () => req<{ restarting: boolean }>("POST", "/system/restart"),
   connectClaude: () => req<{ written: string[]; entry: Record<string, unknown> }>("POST", "/system/claude-desktop"),
   moveDataDir: (path: string | null, copy = true) =>
     req<{ data_dir: string; copied: boolean; restart_required: boolean; claude_config_updated?: string[] }>("POST", "/system/data-dir", { path, copy }),

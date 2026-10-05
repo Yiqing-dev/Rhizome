@@ -97,7 +97,15 @@ def info() -> dict[str, Any]:
         "model_problems": _model_problems(st),
         "index": _index_state(),
         "network": _network(),
+        "data_dir_source": _source(),
     }
+
+
+def _source() -> str:
+    from .config import data_dir_source
+
+    source, path = data_dir_source()
+    return source if path.resolve() == get_settings().data_dir.resolve() else "explicit"
 
 
 def _network() -> dict[str, Any]:
@@ -240,12 +248,38 @@ def install_claude_desktop() -> dict[str, Any]:
 _SKIP = {SERVER_FILE, "token"}
 
 
+RESTART_EXIT_CODE = 75
+
+
+def exit_for_restart(delay: float = 0.5) -> None:
+    """Exit shortly after the response is sent; the desktop shell sees the code and relaunches."""
+    import logging
+    import threading
+
+    def go() -> None:
+        logging.getLogger("rhizome.serve").info("restart requested")
+        clear_server_marker()
+        os._exit(RESTART_EXIT_CODE)
+
+    threading.Timer(delay, go).start()
+
+
 def move_data_dir(path: str | None, copy: bool = True) -> dict[str, Any]:
     """Point the app at another data directory (None = default). Existing data is copied when the
-    target is empty; nothing is deleted. Takes effect after restarting the app."""
+    target is empty; nothing is deleted. Takes effect after restarting the app.
+
+    The copy goes to '<target>.rhizome-moving' and is renamed at the end, so an interrupted copy
+    never leaves a half library that every retry would refuse."""
+    from .config import data_dir_source
+    from .i18n import _
+
     if portable_dir() is not None:
         raise ValueError("portable installation: data always lives next to the app")
     st = get_settings()
+    source, resolved = data_dir_source()
+    if source == "env" or resolved.resolve() != st.data_dir.resolve():
+        # RHIZOME_DATA_DIR or --data-dir wins over the pointer: moving it would change nothing
+        raise ValueError(_("api.move_explicit_dir", path=str(st.data_dir)))
     target = Path(path).expanduser() if path else platform_data_dir()
     if not target.is_absolute():
         raise ValueError("an absolute path is required")
@@ -257,22 +291,34 @@ def move_data_dir(path: str | None, copy: bool = True) -> dict[str, Any]:
             raise ValueError("target folder is not empty and does not contain a Rhizome library")
         copied = False  # switch to an existing library
     else:
-        target.mkdir(parents=True, exist_ok=True)
         copied = False
         if copy and st.data_dir.exists():
             from .db.session import copy_sqlite
 
-            for item in st.data_dir.iterdir():
-                if item.name in _SKIP or item.name.startswith("rhizome.db"):
-                    continue
-                if item.is_dir():
-                    shutil.copytree(item, target / item.name)
-                else:
-                    shutil.copy2(item, target / item.name)
-            db = st.data_dir / "rhizome.db"
-            if db.exists():
-                copy_sqlite(db, target / "rhizome.db")  # consistent copy while the app is running
+            staging = target.with_name(target.name + ".rhizome-moving")
+            if staging.exists():
+                shutil.rmtree(staging)  # left by an interrupted earlier attempt
+            staging.mkdir(parents=True)
+            try:
+                for item in st.data_dir.iterdir():
+                    if item.name in _SKIP or item.name.startswith("rhizome.db"):
+                        continue
+                    if item.is_dir():
+                        shutil.copytree(item, staging / item.name)
+                    else:
+                        shutil.copy2(item, staging / item.name)
+                db = st.data_dir / "rhizome.db"
+                if db.exists():
+                    copy_sqlite(db, staging / "rhizome.db")  # consistent copy while the app is running
+                if target.exists():
+                    target.rmdir()  # empty (checked above)
+                os.replace(staging, target)
+            except BaseException:
+                shutil.rmtree(staging, ignore_errors=True)
+                raise
             copied = True
+        else:
+            target.mkdir(parents=True, exist_ok=True)
     set_data_dir_pointer(None if target == platform_data_dir().resolve() else target)
     claude = unpin_claude_configs(st.data_dir)
     return {"data_dir": str(target), "copied": copied, "restart_required": True,
@@ -314,6 +360,14 @@ def watch_parent(pid: int, interval: float = 2.0) -> None:
     def loop() -> None:
         while pid_alive(pid):
             time.sleep(interval)
+        import logging
+
+        logging.getLogger("rhizome.serve").warning("desktop shell (pid %s) is gone: exiting", pid)
+        for h in logging.getLogger().handlers:
+            try:
+                h.flush()
+            except Exception:  # noqa: BLE001
+                pass
         clear_server_marker()
         os._exit(0)
 

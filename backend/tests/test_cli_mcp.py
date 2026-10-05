@@ -57,6 +57,8 @@ def test_sync_dry_run(settings):
     r = _rhz(settings, "sync", "hpc", "--dry-run")
     assert r.exit_code == 0, r.output
     assert "ControlPath=~/.ssh/cm-%r@%h:%p" in r.output and "scp" in r.output
+    # owner-only on a shared cluster: created 600 before the upload, checked again before the move
+    assert "umask 077" in r.output and r.output.count("chmod 600") == 2
 
 
 def test_mcp_tools_local(settings):

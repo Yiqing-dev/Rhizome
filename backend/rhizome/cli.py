@@ -29,11 +29,13 @@ _state: dict[str, Any] = {"json": False, "snapshot": None}
 
 
 @app.callback()
-def main(data_dir: Optional[Path] = typer.Option(None, envvar="RHIZOME_DATA_DIR", help="Data directory"),
+def main(ctx: typer.Context, data_dir: Optional[Path] = typer.Option(None, envvar="RHIZOME_DATA_DIR", help="Data directory"),
          snapshot: Optional[Path] = typer.Option(None, envvar="RHIZOME_SNAPSHOT",
                                                  help="Read-only snapshot file (remote machines)"),
          as_json: bool = typer.Option(False, "--json", help="Machine-readable output"),
          lang: Optional[str] = typer.Option(None, help="Interface language: en | zh_CN")) -> None:
+    if ctx.invoked_subcommand == "data-dir" and not data_dir:
+        return  # must work when the library it points at is missing
     st = load_settings(data_dir) if data_dir else get_settings()
     set_settings(st)
     if lang:
@@ -43,7 +45,8 @@ def main(data_dir: Optional[Path] = typer.Option(None, envvar="RHIZOME_DATA_DIR"
     from .logging_setup import setup_logging
 
     if snapshot is None:
-        setup_logging(st)
+        sub = ctx.invoked_subcommand
+        setup_logging(st, role=sub if sub in ("serve", "mcp") else "cli")
 
 
 def _client(prefer_http: bool = True):
@@ -84,8 +87,18 @@ def serve(host: Optional[str] = None, port: Optional[int] = None,
     if parent and parent.isdigit():
         watch_parent(int(parent))
 
+    import logging
+
+    from . import __version__
+    from .db.session import current_revision, get_engine
+
+    log = logging.getLogger("rhizome.serve")
     application = create_app(watch_inbox=watch_inbox)
     url = f"http://{st.host}:{st.port}"
+    db = st.data_dir / "rhizome.db"
+    log.info("start: Rhizome %s, data %s, db %.1f MB rev %s, %s, frozen=%s, parent=%s", __version__, st.data_dir,
+             db.stat().st_size / 1048576 if db.exists() else 0, current_revision(get_engine(st)), url,
+             bool(getattr(sys, "frozen", False)), parent or "-")
     typer.echo(_("cli.serving", url=url))
     typer.echo(_("cli.open_ui", url=f"{url}/#token={application.state.token}"))
     write_server_marker(url)  # lets the CLI / MCP server find this instance on a non-default port
@@ -93,6 +106,7 @@ def serve(host: Optional[str] = None, port: Optional[int] = None,
         uvicorn.run(application, host=st.host, port=st.port, log_level="warning")
     finally:
         clear_server_marker()
+        log.info("stop")
 
 
 @app.command()
@@ -529,6 +543,19 @@ def sync(remote: str, dry_run: bool = False) -> None:
         typer.echo(_("cli.synced", remote=remote))
 
 
+@app.command("data-dir")
+def data_dir_cmd(reset: bool = typer.Option(False, "--reset", help="Go back to the default location")) -> None:
+    """Show where the library is (and why), or go back to the default location."""
+    from .config import POINTER_FILE, data_dir_source, platform_data_dir, set_data_dir_pointer
+
+    if reset:
+        set_data_dir_pointer(None)
+        typer.echo(str(platform_data_dir()))
+        return
+    source, path = data_dir_source()
+    typer.echo(f"{path}  ({source}; pointer: {platform_data_dir() / POINTER_FILE})")
+
+
 @app.command()
 def backups() -> None:
     """List backups (newest first) with their schema revision."""
@@ -585,7 +612,7 @@ def diag(output: Path = typer.Option(None, "-o")) -> None:
             "remotes": [r.name for r in st.remotes]}
     with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("info.json", json.dumps(info, indent=2, ensure_ascii=False, default=str))
-        for log in sorted(st.logs_dir.glob("rhizome.log*")):
+        for log in sorted(st.logs_dir.glob("rhizome*.log*")):
             z.write(log, f"logs/{log.name}")
     typer.echo(_("cli.diag_done", path=output))
 
@@ -691,6 +718,7 @@ if __name__ == "__main__":  # pragma: no cover
 def run() -> None:
     """Console entry point (`rhz`, rhz.exe): known user-facing failures print their message, not a
     traceback."""
+    from .config import LibraryNotFound
     from .db.session import SchemaTooNew
 
     try:
@@ -698,3 +726,6 @@ def run() -> None:
     except SchemaTooNew as e:
         typer.secho(str(e), fg="red", err=True)
         raise SystemExit(3) from None
+    except LibraryNotFound as e:  # the desktop shell offers Retry / Use default on this exit code
+        typer.secho(str(e), fg="red", err=True)
+        raise SystemExit(4) from None

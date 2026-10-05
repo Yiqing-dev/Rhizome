@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api } from "./api";
+import { api, errorText } from "./api";
+import { ErrorBoundary } from "./components/ErrorBoundary";
+import { showToast, Toasts } from "./components/Toast";
 import { Logo, SearchIcon } from "./components/icons";
 import { useJob } from "./hooks";
 import { backendLang, setLanguage } from "./i18n";
@@ -116,8 +118,40 @@ function JobBanner() {
   return <div className="notice warn banner">{t("jobs.rebuilding_banner")}</div>;
 }
 
+/** Read-only (a snapshot) or moved library: say so on every page; offer the restart. */
+function ModeBanner() {
+  const { t } = useTranslation();
+  const [h, setH] = useState<{ read_only: boolean; moved_to?: string | null } | null>(null);
+  useEffect(() => {
+    api.health().then(setH).catch(() => undefined);
+    const id = window.setInterval(() => api.health().then(setH).catch(() => undefined), 30000);
+    return () => window.clearInterval(id);
+  }, []);
+  if (!h?.read_only) return null;
+  if (h.moved_to) {
+    return (
+      <div className="notice warn banner row wrap">
+        <span className="grow">{t("mode.moved", { path: h.moved_to })}</span>
+        <button className="primary" onClick={() => api.restart().catch((e) => showToast(errorText(e, t)))}>{t("mode.restart")}</button>
+      </div>
+    );
+  }
+  return <div className="notice warn banner">{t("mode.read_only")}</div>;
+}
+
 export default function App() {
   const { t, i18n } = useTranslation();
+  useEffect(() => {
+    // anything that fails without its own handling still reaches the user
+    const onRejection = (e: PromiseRejectionEvent) => showToast(errorText(e.reason, t));
+    const onError = (e: ErrorEvent) => showToast(e.message);
+    window.addEventListener("unhandledrejection", onRejection);
+    window.addEventListener("error", onError);
+    return () => {
+      window.removeEventListener("unhandledrejection", onRejection);
+      window.removeEventListener("error", onError);
+    };
+  }, [t]);
   const route = useRoute();
   const [head, id] = route.path;
   const [queue, setQueue] = useState<number>(0);
@@ -161,9 +195,14 @@ export default function App() {
         </div>
       </header>
       <main>
+        <ModeBanner />
         <ModelBanner />
         <JobBanner />
-        <Suspense fallback={<div className="muted">{t("common.loading")}</div>}>{page}</Suspense>
+        <ErrorBoundary resetKey={route.path.join("/")}
+          labels={{ title: t("common.page_error"), home: t("nav.home"), copy: t("common.copy_details") }}>
+          <Suspense fallback={<div className="muted">{t("common.loading")}</div>}>{page}</Suspense>
+        </ErrorBoundary>
+        <Toasts />
       </main>
     </div>
   );

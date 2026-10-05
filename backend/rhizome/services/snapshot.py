@@ -64,10 +64,15 @@ def sync(settings: Settings, target: RemoteTarget, dry_run: bool = False) -> lis
         snap = make_snapshot(settings, Path(td) / "rhizome.db")
         remote_dir = target.path.rsplit("/", 1)[0] if "/" in target.path else "."
         tmp_remote = target.path + ".uploading"
+        # the snapshot holds the whole library, personal ideas included: on a shared cluster it is
+        # readable by the owner only (the upload target is created 600 before scp fills it, and
+        # new folders 700; existing folders are left as they are)
         cmds = [
-            ["ssh", *ssh_base(target), target.host, f"mkdir -p {_rq(remote_dir)}"],
+            ["ssh", *ssh_base(target), target.host,
+             f"umask 077 && mkdir -p {_rq(remote_dir)} && : > {_rq(tmp_remote)} && chmod 600 {_rq(tmp_remote)}"],
             ["scp", *ssh_base(target), str(snap), f"{target.host}:{tmp_remote}"],
-            ["ssh", *ssh_base(target), target.host, f"mv {_rq(tmp_remote)} {_rq(target.path)}"],
+            ["ssh", *ssh_base(target), target.host,
+             f"chmod 600 {_rq(tmp_remote)} && mv {_rq(tmp_remote)} {_rq(target.path)}"],
         ]
         if not dry_run:
             for c in cmds:

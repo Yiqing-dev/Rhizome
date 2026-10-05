@@ -61,23 +61,50 @@ def portable_dir() -> Path | None:
     return None
 
 
-def default_data_dir() -> Path:
-    """Resolution order: RHIZOME_DATA_DIR > portable install > pointer file > OS default."""
+class LibraryNotFound(RuntimeError):
+    """The library the pointer file names is not there (unplugged or re-lettered drive, renamed
+    folder, %APPDATA% copied to a new PC). Never silently start a new empty library instead."""
+
+    def __init__(self, path: Path):
+        self.path = path
+        from .i18n import _
+
+        # settings cannot be loaded (that is the problem): language from the environment / locale
+        lang = _language_cache(os.environ.get("RHIZOME_LANGUAGE") or "auto")
+        super().__init__(_("config.library_missing", lang=lang, path=str(path),
+                           pointer=str(platform_data_dir() / POINTER_FILE)))
+
+
+def data_dir_source() -> tuple[str, Path]:
+    """(source, path) with source env | portable | pointer | default.
+    Resolution order: RHIZOME_DATA_DIR > portable install > pointer file > OS default."""
     env = os.environ.get("RHIZOME_DATA_DIR")
     if env:
-        return Path(env)
+        return "env", Path(env)
     port = portable_dir()
     if port is not None:
-        return port
+        return "portable", port
     pointer = platform_data_dir() / POINTER_FILE
     if pointer.exists():
         try:
             target = json.loads(pointer.read_text("utf-8-sig")).get("data_dir")
             if target:
-                return Path(target)
+                return "pointer", Path(target)
         except (OSError, ValueError):
             pass
-    return platform_data_dir()
+    return "default", platform_data_dir()
+
+
+def default_data_dir() -> Path:
+    return data_dir_source()[1]
+
+
+def check_data_dir() -> Path:
+    """The library location, refusing a pointer target that does not exist."""
+    source, path = data_dir_source()
+    if source == "pointer" and not path.is_dir():
+        raise LibraryNotFound(path)
+    return path
 
 
 def set_data_dir_pointer(target: Path | None) -> Path:
@@ -367,7 +394,7 @@ def set_overrides(**values: Any) -> Settings:
 def get_settings() -> Settings:
     global _current
     if _current is None:
-        _current = load_settings()
+        _current = load_settings(check_data_dir())
     return _current
 
 

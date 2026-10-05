@@ -156,6 +156,8 @@ export default function Home() {
               ) : null}
             </div>
           )}
+          {s?.inbox?.pending.length ? <p className="hint">{t("home.inbox_pending", { n: s.inbox.pending.length, files: s.inbox.pending.slice(0, 5).join("、") })}</p> : null}
+          {s?.inbox?.ignored.length ? <p className="hint">{t("home.inbox_ignored", { n: s.inbox.ignored.length, files: s.inbox.ignored.slice(0, 5).join("、") })}</p> : null}
           {failed.data?.files.length ? (
             <div className="stack-sm failed-inbox">
               <div className="eyebrow">{t("home.failed_title")}</div>

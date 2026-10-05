@@ -73,3 +73,35 @@ def test_broken_file_falls_back_to_backup_and_bad_fields_are_dropped(tmp_path):
     st = load_settings(d)
     assert st.language == "zh_CN" and st.embedder == "hashing"
     assert any("embedder" in p for p in config.settings_problems(st))
+
+
+def test_missing_library_is_refused_not_recreated(tmp_path, monkeypatch):
+    """A pointer to a library on an unplugged drive must not silently start a new empty one."""
+    import pytest
+    from typer.testing import CliRunner
+
+    from rhizome.cli import app
+
+    gone = tmp_path / "unplugged drive" / "Rhizome"
+    config.set_data_dir_pointer(gone)
+    monkeypatch.setattr(config, "_current", None)
+    with pytest.raises(config.LibraryNotFound):
+        config.get_settings()
+    assert not gone.exists()
+    r = CliRunner().invoke(app, ["search", "GRN"])
+    assert isinstance(r.exception, config.LibraryNotFound) and not gone.exists()
+    r = CliRunner().invoke(app, ["data-dir", "--reset"])
+    assert r.exit_code == 0 and config.data_dir_source()[0] == "default"
+
+
+def test_cli_entry_exit_code_for_missing_library(tmp_path, monkeypatch):
+    import subprocess
+    import sys
+
+    config.set_data_dir_pointer(tmp_path / "gone")
+    import os
+
+    env = {k: v for k, v in os.environ.items()}
+    out = subprocess.run([sys.executable, "-c", "from rhizome.cli import run; run()", "search", "x"],
+                         capture_output=True, text=True, env=env, timeout=120)
+    assert out.returncode == 4 and "gone" in out.stderr

@@ -23,7 +23,7 @@ log = logging.getLogger(__name__)
 SUFFIXES = (".yaml", ".yml", ".rxf")
 # companions and files still being written (browser downloads) are never ingested themselves
 SKIP_SUFFIXES = (".pdf", ".part", ".partial", ".crdownload", ".download", ".tmp", ".swp")
-RESCAN_SECONDS = 120
+RESCAN_SECONDS = 60
 _RXF_KEY = re.compile(r"^\s*(?:```[\w-]*\s*$\s*)?rxf_version\s*:", re.M)
 
 
@@ -74,29 +74,49 @@ def process(path: Path, on_result: Callable | None = None):
     return res
 
 
+# One lock for event handling and scans (a scan and an event for the same file must not race),
+# and the watcher's state for the home page.
+_LOCK = threading.Lock()
+STATUS: dict = {"watching": False, "last_scan": None, "pending": [], "ignored": []}
+
+
+def status() -> dict:
+    return {k: (list(v) if isinstance(v, list) else v) for k, v in STATUS.items()}
+
+
 def scan(on_result: Callable | None = None) -> int:
+    """Process every candidate in the inbox, then record what is still waiting (left in place:
+    library busy, model missing) and what was not recognised as RXF."""
     inbox = get_settings().inbox
     n = 0
-    for p in sorted(inbox.iterdir()) if inbox.exists() else []:
-        if p.is_file() and is_candidate(p):
-            try:
-                if process(p, on_result) is not None:
-                    n += 1
-            except Exception:  # a single bad file must not stop the scan or kill the watcher thread
-                log.exception("inbox: %s could not be processed", p)
+    with _LOCK:
+        for p in sorted(inbox.iterdir()) if inbox.exists() else []:
+            if p.is_file() and is_candidate(p):
+                try:
+                    if process(p, on_result) is not None:
+                        n += 1
+                except Exception:  # a single bad file must not stop the scan or kill the watcher thread
+                    log.exception("inbox: %s could not be processed", p)
+        pending, ignored = [], []
+        for p in sorted(inbox.iterdir()) if inbox.exists() else []:
+            if p.is_file() and is_candidate(p):
+                (pending if p.suffix.lower() in SUFFIXES or looks_like_rxf(p) else ignored).append(p.name)
+        from datetime import datetime, timezone
+
+        STATUS.update(last_scan=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                      pending=pending, ignored=ignored)
     return n
 
 
 class _Handler(FileSystemEventHandler):
     def __init__(self, on_result: Callable | None):
         self.on_result = on_result
-        self._lock = threading.Lock()
 
     def _handle(self, path: str) -> None:
         p = Path(path)
         if p.parent.resolve() != get_settings().inbox.resolve():
             return
-        with self._lock:
+        with _LOCK:
             try:
                 process(p, self.on_result)
             except Exception:
@@ -111,27 +131,46 @@ class _Handler(FileSystemEventHandler):
             self._handle(str(event.dest_path))
 
 
-def watch(on_result: Callable | None = None, stop: threading.Event | None = None) -> None:
-    inbox = get_settings().inbox
-    inbox.mkdir(parents=True, exist_ok=True)
-    scan(on_result)
-    handler = _Handler(on_result)
+def _start_observer(inbox: Path, handler: _Handler):
     obs = Observer()
     obs.schedule(handler, str(inbox), recursive=False)
     obs.start()
+    return obs
+
+
+def watch(on_result: Callable | None = None, stop: threading.Event | None = None) -> None:
+    """Watch first, then scan what is already there (files arriving during a long backlog are not
+    missed); rescan every RESCAN_SECONDS (files left in place, events lost while the laptop slept
+    or on a synced / network folder); restart the observer if it died."""
+    inbox = get_settings().inbox
+    inbox.mkdir(parents=True, exist_ok=True)
+    handler = _Handler(on_result)
+    obs = _start_observer(inbox, handler)
+    STATUS["watching"] = True
+    scan(on_result)
     last_scan = time.monotonic()
+    backoff = 1.0
     try:
         while not (stop and stop.is_set()):
             time.sleep(0.5)
-            # files left in place (library busy, model missing, events lost while asleep) get
-            # another chance; already processed files are gone from the inbox root
+            if not obs.is_alive():
+                log.warning("inbox watcher stopped; restarting in %.0f s", backoff)
+                STATUS["watching"] = False
+                time.sleep(backoff)
+                try:
+                    obs = _start_observer(inbox, handler)
+                    STATUS["watching"], backoff = True, 1.0
+                except Exception:  # noqa: BLE001 - e.g. the folder is on a disconnected drive
+                    log.exception("could not restart the inbox watcher")
+                    backoff = min(backoff * 2, 300.0)
+                    continue
             if time.monotonic() - last_scan > RESCAN_SECONDS:
                 last_scan = time.monotonic()
-                with handler._lock:
-                    try:
-                        scan(on_result)
-                    except Exception:  # noqa: BLE001
-                        log.exception("inbox rescan failed")
+                try:
+                    scan(on_result)
+                except Exception:  # noqa: BLE001
+                    log.exception("inbox rescan failed")
     finally:
+        STATUS["watching"] = False
         obs.stop()
         obs.join()

@@ -257,8 +257,10 @@ def home_stats(s: Session) -> dict[str, Any]:
                              .group_by(ReviewItem.kind)).all())
     from .cards import due_count
 
+    from .. import inbox
+
     return {"entities": by_type, "edges": s.query(Edge).count(), "review_queue": queue,
-            "review_queue_by_kind": by_kind, "cards_due": due_count(s)}
+            "review_queue_by_kind": by_kind, "cards_due": due_count(s), "inbox": inbox.status()}
 
 
 def work_sources(s: Session, entity_id: int) -> list[dict[str, Any]]:
