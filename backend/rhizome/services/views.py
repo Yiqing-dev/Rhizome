@@ -267,9 +267,18 @@ def topic_changes(s: Session, topic_id: int, since: datetime) -> dict[str, Any]:
     assets = s.execute(select(Edge, Entity).join(Entity, Entity.id == Edge.dst).where(
         Edge.src.in_(works), Edge.type.in_(SOURCE_EDGE_TYPES), Edge.status != "rejected")).all()
     contradictions = [ed for ed, _ in assets if ed.type == "contradicts"]
+    topic = s.get(Entity, topic_id)
+    total_works = s.execute(select(func.count(func.distinct(Edge.src))).join(Entity, Entity.id == Edge.src).where(
+        Edge.dst.in_(sub), Edge.status != "rejected", Entity.type == "work")).scalar_one()
+
+    def work_row(e: Entity) -> dict[str, Any]:
+        a = e.attrs or {}
+        return dict(summarize(e), year=a.get("year"), tldr=a.get("tldr") or [], depth=a.get("depth"))
+
     return {
-        "topic_id": topic_id, "since": since.isoformat(),
-        "new_works": [summarize(e) for ed, e in new_edges if e.type == "work"],
+        "topic_id": topic_id, "topic": summarize(topic) if topic else None, "since": since.isoformat(),
+        "subtree_size": len(sub), "works_total": total_works,
+        "new_works": [work_row(e) for ed, e in new_edges if e.type == "work"],
         "new_assets": [dict(summarize(e), edge=ed.type) for ed, e in assets],
         "new_direct": [dict(summarize(e), edge=ed.type) for ed, e in new_edges if e.type != "work"],
         "contradictions": len(contradictions),

@@ -380,6 +380,9 @@ class Graph:
         self._redirects: dict[str, str] | None = None
         # When set (replaying an extraction), new entities and edges are stamped with this time.
         self.clock: datetime | None = None
+        # Set while materialising an export: the language its non-Han aliases get (the document's
+        # declared language); None means the script decides (zh / en).
+        self.alias_lang: str | None = None
         # Set by rebuild: entities and review items get back the ids they had before (the UI, CLI
         # and MCP use ids as handles); new ones get ids above every id ever handed out.
         self.id_plan: dict[str, int] | None = None
@@ -529,8 +532,8 @@ class Graph:
                                                              EntityAlias.norm == n)).first()
         if exists:
             return False
-        self.s.add(EntityAlias(entity_id=e.id, alias=alias.strip(), norm=n, lang=lang or lang_of(alias),
-                               source=source))
+        self.s.add(EntityAlias(entity_id=e.id, alias=alias.strip(), norm=n,
+                               lang=lang or lang_of(alias, self.alias_lang or "en"), source=source))
         self.s.flush()
         if index:
             self._refresh_fts(e)

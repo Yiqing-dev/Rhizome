@@ -27,8 +27,21 @@ def norm(s: str) -> str:
     return " ".join(s.split())
 
 
-def lang_of(s: str) -> str:
-    return "zh" if _CJK.search(s) else "en"
+def lang_of(s: str, default: str = "en") -> str:
+    """Script-based language of a name: Han characters mean zh; anything else is `default`."""
+    return "zh" if _CJK.search(s) else default
+
+
+def alias_default(language: str | None) -> str | None:
+    """The alias language a document's `language` field implies for non-Han names: the declared
+    language itself (ja, de, ...), except that a Chinese export keeps Latin-script names English (the
+    export rules keep topic and method names English). None when nothing is declared."""
+    if not language:
+        return None
+    code = language.strip().lower().replace("_", "-").split("-")[0]
+    if not code.isalpha() or not 2 <= len(code) <= 3:
+        return None
+    return "en" if code == "zh" else code
 
 
 def tokens(s: str) -> list[str]:

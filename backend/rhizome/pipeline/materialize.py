@@ -15,7 +15,7 @@ from ..external.ids import effective_database, normalize_biotools, normalize_doi
 from ..i18n import _
 from ..inference import get_backend
 from ..rxf.schema import RxfDocument, parse_stored, uses_ids
-from ..text import norm, sha256
+from ..text import alias_default, norm, sha256
 from .canonicalize import is_user, resolve_claim, resolve_free, resolve_modality, resolve_organism
 from ..ml import get_reranker
 from .graph import Graph, embed_texts, knn
@@ -102,6 +102,14 @@ def materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
 
 def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
     doc = parse_stored(ex.output, ex.schema_version)
+    g.alias_lang = alias_default(doc.language)  # names this export adds carry its language
+    try:
+        return _materialize_doc(g, ex, doc)
+    finally:
+        g.alias_lang = None
+
+
+def _materialize_doc(g: Graph, ex: Extraction, doc: RxfDocument) -> Materialized:
     meta = ex.meta or {}
     checks: dict[str, str] = meta.get("checks", {})
     p = doc.paper
@@ -111,9 +119,10 @@ def _materialize_rxf(g: Graph, ex: Extraction) -> Materialized:
     was_deep = (work.attrs or {}).get("depth") == "deep"
     if doc.depth == "deep" or not was_deep:  # a later light export never replaces a deep one's summary
         g.update_attrs(work, tldr=doc.tldr, paper_types=p.type, venue=p.venue, authors=p.authors, url=p.url,
-                       rxf_extraction=ex.id)
+                       rxf_extraction=ex.id, language=doc.language)
     else:
-        g.fill_attrs(work, {"paper_types": p.type, "venue": p.venue, "authors": p.authors, "url": p.url})
+        g.fill_attrs(work, {"paper_types": p.type, "venue": p.venue, "authors": p.authors, "url": p.url,
+                            "language": doc.language})
     g.update_attrs(work, depth="deep" if doc.depth == "deep" or was_deep else "light")
     out = Materialized(work=work)
     eid = ex.id

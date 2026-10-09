@@ -41,7 +41,7 @@ All optional, defaults shown:
 | `assets.methods[].modality`, `.extends`, `.evidence`, `.biotools` | — | `of_modality` / `extends` edges, anchoring |
 | `paper.authors`, `.venue`, `.url` | — | card display when OpenAlex is unavailable |
 | `id` on topics, claims, datasets, methods, ideas, issues, user_insights, review_cards | — | in-file references from `links_to` / `about` |
-| `id`, `exported_at`, `language` at the top level | — | stored in L1; `language` will feed the alias `lang` field |
+| `id`, `exported_at`, `language` at the top level | — | stored in L1 and on the work; `language` sets the `lang` of non-Han aliases the export adds (Han script is always `zh`; a `zh` export keeps Latin names `en`) |
 | `assets.datasets[].public`, `assets.methods[].maintained` | — | `true` / `false` / `unknown` (`yes` / `no` from older exports are accepted) |
 | `assets.datasets[].database` | — | `GEO` `SRA` `ENA` `GSA` `CNGB` `ArrayExpress` `Zenodo` `other`; the accession is format-checked per database |
 | `assets.ideas[].transfer.to` | — | the file-local id of the target topic (a free name is still accepted) |

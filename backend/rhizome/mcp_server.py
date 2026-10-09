@@ -33,7 +33,8 @@ YAML document following the Project instructions (if this conversation has none,
 first: it returns the RXF skeleton, the rules and the user's topic vocabulary) and call rhz_ingest. If validation fails, fix the
 listed fields and call rhz_ingest again. For maintenance ("work through this week's review queue"),
 page through rhz_queue, propose a decision per item with a one-line reason, and only call
-rhz_decide after the user confirms."""
+rhz_decide after the user confirms. For "what changed under <topic> this month", call
+rhz_topic_changes and write the summary from its data."""
 
 mcp = FastMCP("rhizome", instructions=INSTRUCTIONS)
 READ = ToolAnnotations(readOnlyHint=True)
@@ -215,6 +216,28 @@ def rhz_undo(decision_id: int) -> str:
 def rhz_digest(days: int = 7) -> str:
     """Weekly digest: unlinked cross-field asset pairs and new contradictions, for you to explain."""
     return _j(_call(lambda c: c.digest(days)))
+
+
+@mcp.tool(annotations=READ)
+def rhz_topic_changes(topic: str, days: int = 30) -> str:
+    """What changed under a topic (its whole subtree) in the last `days`: the papers added, the
+    assets they brought (datasets, methods, ideas, claims with their edge type), assets linked to
+    the topic directly, and how many new contradictions. Input for the monthly topic summary: write
+    it from this data only, as "new this month / what it changes / open contradictions", citing
+    papers by title. `topic` is a topic key ('topic:grn inference'), its name, or a numeric id."""
+    def run(c):
+        if topic.isdigit():
+            return c.topic_changes(int(topic), days)
+        from .pipeline.canonicalize import free_key
+
+        card = c.get_by_key(topic if topic.startswith("topic:") else free_key("topic", topic), touch=False)
+        if card is None:  # an alias or a near miss: only an exact name counts, the rest are suggestions
+            hits = c.search(topic, types="topic", limit=5)
+            card = next((h for h in hits if h["name"].lower() == topic.lower()), None)
+            if card is None:
+                return {"ok": False, "error": f"no topic named {topic!r}", "candidates": [h["name"] for h in hits]}
+        return c.topic_changes(card["id"], days)
+    return _j(_call(run))
 
 
 def warm_up() -> None:

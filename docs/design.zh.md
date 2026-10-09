@@ -350,6 +350,7 @@ RXF 里的 user\_insights，也就是你在讨论中说出的判断和联想，�
 - `rhz_ingest`：在 Claude Desktop 里讨论完一篇论文后，说一句“存入 Rhizome”，Claude 就会生成 RXF 并直接提交，省掉保存文件这一步。
 - `rhz_recall`：讨论新的分析方案时，Claude 用当前上下文去查库，返回你读过但可能已经忘了的相关资产。
 - `rhz_search`、`rhz_get`、`rhz_related`：主动查询。
+- `rhz_digest`、`rhz_topic_changes`：每周综合的候选对，以及某个主题子树这个月新增的论文、资产和矛盾；文字说明由 Claude 据此写出。
 - `rhz_queue`、`rhz_decide`：维护类工具。你说一句“处理这周的审核队列”，Claude 分页读出待审项并给出判断，你确认后写回库里。回溯标注、每周综合的说明这类需要推理的批量工作，都走这条路，用的是你的订阅额度。
 
 本地部署时，只有 Claude Desktop 能连接本地 MCP。ChatGPT 和网页版 Claude 输出 RXF 后，保存进收件箱目录即可。

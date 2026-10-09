@@ -35,6 +35,7 @@ class Client(Protocol):
     def decide(self, op: str, payload: dict[str, Any]) -> dict[str, Any]: ...
     def digest(self, days: int = 7) -> dict[str, Any]: ...
     def topic_assets(self, topic_id: int, role: str | None = None) -> dict[str, Any] | None: ...
+    def topic_changes(self, topic_id: int, days: int = 30) -> dict[str, Any] | None: ...
     def create_topic(self, **body: Any) -> dict[str, Any]: ...
     def stats(self) -> dict[str, Any]: ...
     def vocab(self) -> str: ...
@@ -123,6 +124,12 @@ class HttpClient:
 
     def topic_assets(self, topic_id, role=None):
         return self._get(f"/topic/{topic_id}/assets", role=role)
+
+    def topic_changes(self, topic_id, days=30):
+        from datetime import datetime, timedelta
+
+        since = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        return self._get(f"/topic/{topic_id}/changes", since=since)
 
     def create_topic(self, **body):
         return self._post("/topic", body)
@@ -342,6 +349,17 @@ class LocalClient:
 
         with self._s() as s:
             return topic_assets(s, topic_id, role)
+
+    def topic_changes(self, topic_id, days=30):
+        from datetime import datetime, timedelta
+
+        from .db.models import Entity
+        from .services.views import topic_changes
+
+        with self._s() as s:
+            if s.get(Entity, topic_id) is None:
+                return None
+            return topic_changes(s, topic_id, datetime.utcnow() - timedelta(days=days))
 
     def create_topic(self, **body):
         self._rw()

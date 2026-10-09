@@ -99,7 +99,7 @@ environment-specific is a setting (`rhz settings show`, `rhz settings set langua
 ```
 
 Tools: `rhz_ingest`, `rhz_recall`, `rhz_search`, `rhz_get`, `rhz_related`, `rhz_queue`, `rhz_decide`,
-`rhz_digest`. The server talks to the running app over REST and falls back to in-process calls.
+`rhz_digest`, `rhz_topic_changes` (what changed under a topic this month, for Claude to summarise). The server talks to the running app over REST and falls back to in-process calls.
 Add "call `rhz_recall` before discussing an analysis plan" to your Project instructions.
 
 ### Remote machines (HPC)
