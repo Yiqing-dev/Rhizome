@@ -21,6 +21,19 @@ export default function SettingsPage() {
   const [backupMsg, setBackupMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const rebuild = useJob("rebuild");
+  const [apiKey, setApiKey] = useState("");
+  const [keyMsg, setKeyMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const keySource = sys.data?.secrets?.anthropic_api_key ?? null;
+  async function saveKey(value: string | null) {
+    try {
+      await api.setSecret("anthropic_api_key", value);
+      setApiKey("");
+      setKeyMsg({ ok: true, text: t(value ? "settings.anthropic_key_saved" : "settings.anthropic_key_removed") });
+      sys.reload();
+    } catch (e) {
+      setKeyMsg({ ok: false, text: String((e as ApiError).detail ?? e) });
+    }
+  }
   const ADV_KEY = "rhizome.settings.advanced";
   const [adv, setAdv] = useState(() => { try { return localStorage.getItem(ADV_KEY) === "1"; } catch { return false; } });
   const rememberAdv = (open: boolean) => { setAdv(open); try { localStorage.setItem(ADV_KEY, open ? "1" : "0"); } catch { /* ignore */ } };
@@ -264,8 +277,27 @@ export default function SettingsPage() {
                 <select value={s.inference_backend} onChange={(e) => patch({ inference_backend: e.target.value })}>
                   <option value="queue">{t("settings.inference_queue")}</option>
                   <option value="local" disabled={si ? !si.local_llm_available : false}>{t("settings.inference_local")}</option>
+                  <option value="anthropic" disabled={si ? !si.anthropic_available : false}>{t("settings.inference_anthropic")}</option>
                 </select></label>
             </div>
+            {s.inference_backend === "anthropic" && (
+              <div className="stack-sm anthropic">
+                <p className="hint">{t("settings.anthropic_hint")}</p>
+                <div className="form-grid">
+                  <label>{t("settings.anthropic_model")}
+                    <input defaultValue={s.anthropic_model} onBlur={(e) => patch({ anthropic_model: e.target.value.trim() || null })} /></label>
+                  <label>{t("settings.anthropic_key")}
+                    <input type="password" autoComplete="off" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+                      placeholder={keySource === "env" ? t("settings.anthropic_key_env") : keySource === "keyring" ? t("settings.anthropic_key_stored") : t("settings.anthropic_key_missing")} /></label>
+                </div>
+                <div className="row wrap">
+                  <button className="primary" disabled={!apiKey.trim()} onClick={() => saveKey(apiKey.trim())}>{t("settings.anthropic_key_save")}</button>
+                  {keySource === "keyring" && <button className="ghost" onClick={() => saveKey(null)}>{t("settings.anthropic_key_clear")}</button>}
+                  <span className="hint">{keySource === "env" ? t("settings.anthropic_key_env") : keySource === "keyring" ? t("settings.anthropic_key_stored") : t("settings.anthropic_key_missing")}</span>
+                </div>
+                {keyMsg && <div className={`notice ${keyMsg.ok ? "ok" : "error"}`}>{keyMsg.text}</div>}
+              </div>
+            )}
             <div className="row wrap">
               <button onClick={rebuild.start} disabled={rebuild.running}>{rebuild.running ? t("jobs.running") : t("settings.rebuild")}</button>
               <span className="hint">{t("settings.rebuild_hint")}</span>

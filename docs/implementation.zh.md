@@ -34,14 +34,14 @@
 | 词表导出 rhizome-vocab.yaml | ✅ | `services/vocab.py` |
 | 中英双语（前端 react-i18next，后端 gettext/Babel，CI 检查 key 对齐） | ✅ | `frontend/src/locales/`，`rhizome/i18n/`，`scripts/check_i18n.py` |
 | 设置（全部环境相关项） | ✅ | `config.py`，`<数据目录>/settings.json` |
-| 推理后端接口（队列 / 本地小模型 / 插件） | ◐ | `inference/`；Qwen3.5-2B 通过 llama-cpp-python 接入，未在 CI 运行 |
+| 推理后端接口（队列 / 本地小模型 / Anthropic API / 插件） | ◐ | `inference/`；Qwen3.5-2B 通过 llama-cpp-python 接入，未在 CI 运行；`anthropic` 后端用结构化输出回答三类判定（测试用假客户端，未对真实 API 联网验证） |
 | 夜间批任务、任务表 + 后台 worker | ✅ | `jobs.py` |
 | 迁移前自动备份、`rhz backup`、诊断包（不含论文内容） | ✅ | `db/session.py`，`cli.py diag` |
 | 检索回归集 / `rhz bench`（G2 门槛） | ✅ | `services/bench.py`，`tests/fixtures/bench-synthetic.yaml` |
 | Windows 桌面应用（Tauri 外壳 + PyInstaller 目录版后台 + NSIS 安装包，按用户安装、无需管理员） | ✅ | `desktop/`、`.github/workflows/release.yml`；CI 在干净的 Windows 上全程使用**中文 + 空格路径**：安装到 `C:\软件 工具\Rhizome 程序`，资料库在 `C:\研究 资料\Rhizome 资料库`，收件箱里中文文件名的论文自动摄入，一键写入 Claude Desktop 配置并用该命令跑通 MCP，杀掉外壳后后台自动退出，卸载后资料库保留 |
 | CI：Windows + Linux 测试、许可证检查、gitleaks、SPDX | ◐ | `.github/workflows/ci.yml`（第一次推送后才会真正运行） |
 | PostgreSQL 后端 | ◐ | 模型和迁移可移植；未在 Postgres 上跑测试；PG 下关键词检索退化为子串匹配 |
-| API key 存入系统凭据管理器 | ○ | 目前没有任何 API 插件，所以还没接 keyring；插件出现时一起做 |
+| API key 存入系统凭据管理器 | ✅ | `secrets.py`：环境变量优先，其次 keyring（Windows 凭据管理器 / macOS 钥匙串 / Secret Service）；`rhz settings secret anthropic_api_key`、设置页、`POST /settings/secret`；settings.json 和接口响应里永远不出现密钥 |
 | 每月主题变化摘要 | ✅ | `GET /topic/{id}/changes` 提供统计（新论文带 tldr、新资产带边类型、矛盾数）；MCP 工具 `rhz_topic_changes(topic, days)` 把它交给 Claude 写文字总结 |
 | Tauri 自动更新 | ○ | 未启用：需要签名密钥和发布地址，首次公开发布前再接 |
 | 代码签名 | ○ | 安装包未签名，首次运行 SmartScreen 会提示"未知发布者" |
@@ -325,6 +325,15 @@
 名称只按精确匹配解析，匹配不到时返回候选名。RXF 的 `language` 字段现在落到别名表：汉字别名一律 zh，
 其他文字的别名取导出声明的语言（ja、de…），中文导出里的拉丁字母名仍记为 en（导出规则要求主题和方法名用英文）；
 论文节点的 attrs 也记下 `language`。
+
+## Anthropic API 后端（2026-10-09）
+
+设置里的生成式判定新增 `anthropic`：三类窄判定（主题关系、上下位、复习题）各发一条结构化输出请求（`output_config.format` 为封闭 JSON
+Schema，effort low，开启服务端安全回退），论文文本不会为别的用途发出。默认模型 `claude-opus-5-5`，可在设置里改。密钥不进
+settings.json：环境变量 `ANTHROPIC_API_KEY` 优先，其次系统凭据存储（keyring）；设置页和 `rhz settings secret` 写入。SDK 或密钥
+缺失、认证失败、限流、网络错误时都退回审核队列（限流后暂停一分钟，认证失败后直到换密钥），不会让摄入或重算失败。
+三类判定的提示词和 schema 抽到 `inference/prompts.py`，本地小模型和 API 后端问的是同一个问题。安装包带上 `anthropic` 和
+`keyring`（`pip install ./backend[api]`）。
 
 ## 还需要你来做的（M0）
 

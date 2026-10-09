@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .prompts import BREADTH, CARD, TOPIC_RELATION
+
 
 class LocalLlamaBackend:
     name = "local"
@@ -32,34 +34,16 @@ class LocalLlamaBackend:
             return None
 
     def classify_topic_relation(self, asset_text, topic_def):
-        r = self._ask(
-            "Decide how a research asset relates to a topic. 'about': the asset is primarily on this topic. "
-            "'applicable_to': it is not about the topic but could be used for it. 'none': unrelated.",
-            f"TOPIC:\n{topic_def}\n\nASSET:\n{asset_text}",
-            {"type": "object", "properties": {
-                "relation": {"enum": ["about", "applicable_to", "none"]},
-                "confidence": {"type": "number", "minimum": 0, "maximum": 1}},
-             "required": ["relation", "confidence"]},
-        )
+        system, schema = TOPIC_RELATION
+        r = self._ask(system, f"TOPIC:\n{topic_def}\n\nASSET:\n{asset_text}", schema)
         return (r["relation"], float(r["confidence"])) if r else None
 
     def judge_breadth(self, a, b):
-        r = self._ask(
-            "Compare two research topics. 'broader': A is a broader topic that contains B. "
-            "'narrower': A is a sub-topic of B. 'none': neither.",
-            f"A: {a}\nB: {b}",
-            {"type": "object", "properties": {
-                "relation": {"enum": ["broader", "narrower", "none"]},
-                "confidence": {"type": "number", "minimum": 0, "maximum": 1}},
-             "required": ["relation", "confidence"]},
-        )
+        system, schema = BREADTH
+        r = self._ask(system, f"A: {a}\nB: {b}", schema)
         return (r["relation"], float(r["confidence"])) if r else None
 
     def make_card(self, asset_text):
-        r = self._ask(
-            "Write one flashcard that can be answered without the paper. Be concrete and short.",
-            asset_text,
-            {"type": "object", "properties": {"q": {"type": "string"}, "a": {"type": "string"}},
-             "required": ["q", "a"]},
-        )
+        system, schema = CARD
+        r = self._ask(system, asset_text, schema)
         return (r["q"], r["a"]) if r else None

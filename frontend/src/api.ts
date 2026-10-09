@@ -132,6 +132,7 @@ export interface FailedFile { name: string; report: string | null; repairable: s
 export interface SystemInfo {
   frozen: boolean; platform: string; app_dir: string | null; portable: boolean; data_dir: string; default_data_dir: string;
   inbox: string; logs: string; models_dir: string; models_available: boolean; local_llm_available: boolean;
+  anthropic_available: boolean; secrets: Record<string, "env" | "keyring" | null>;
   cli: string[]; claude_desktop: Record<string, unknown>; claude_config_paths: string[];
   backups: BackupStatus;
   model_problems: { kind: string; model: string; missing: string }[];
@@ -185,6 +186,7 @@ export const api = {
   digestAck: () => req<{ ack_at: string }>("POST", "/digest/ack"),
   settings: () => req<Record<string, any>>("GET", "/settings"),
   patchSettings: (b: Record<string, unknown>) => req<Record<string, any>>("PATCH", "/settings", b),
+  setSecret: (name: string, value: string | null) => req<{ name: string; source: "env" | "keyring" | null }>("POST", "/settings/secret", { name, value }),
   vocab: (includeCandidates = true, mark = false) => req<string>("GET", "/vocab", undefined, { include_candidates: includeCandidates, mark }),
   rxfInstructions: (lang: string) => req<string>("GET", "/rxf/instructions", undefined, { lang }),
   system: () => req<SystemInfo>("GET", "/system"),

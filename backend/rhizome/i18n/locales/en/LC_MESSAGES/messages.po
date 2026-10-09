@@ -405,3 +405,24 @@ msgstr "Exported {entities} entities, {edges} edges, {decisions} decisions and {
 
 msgid "cli.unknown_setting"
 msgstr "No setting named {name}. Settings: {keys}"
+
+msgid "cli.unknown_secret"
+msgstr "No secret named {name}. Secrets: {names}"
+
+msgid "cli.secret_prompt"
+msgstr "{name}"
+
+msgid "cli.secret_store_unavailable"
+msgstr "No credential store on this machine ({error}). Set the {var} environment variable instead."
+
+msgid "cli.secret_stored"
+msgstr "{name} stored in the system credential store"
+
+msgid "cli.secret_cleared"
+msgstr "{name} removed from the system credential store"
+
+msgid "cli.secret_env_wins"
+msgstr "Note: {var} is set in the environment and takes precedence."
+
+msgid "settings.secret_store_unavailable"
+msgstr "No credential store on this machine ({error}). Set the environment variable instead."

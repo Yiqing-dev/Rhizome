@@ -40,6 +40,8 @@ graph = ["graspologic>=3.4"]
 # psycopg is LGPL-3.0 (compatible with Apache-2.0 distribution as a dynamically used library).
 postgres = ["psycopg[binary]>=3.1", "pgvector>=0.2"]
 keyring = ["keyring>=24"]
+# The Anthropic API as an optional generative backend (MIT); the key lives in the credential store.
+api = ["anthropic>=1.0,<2", "keyring>=24"]
 # ruff is pinned: a new release adds rules, and lint must not turn red without a code change.
 dev = ["pytest>=8", "pip-licenses>=4.4", "ruff==0.15.20", "mypy>=1.10"]
 

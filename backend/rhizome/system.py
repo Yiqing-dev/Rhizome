@@ -19,6 +19,7 @@ from .config import (
     portable_dir,
     set_data_dir_pointer,
 )
+from .secrets import ENV_VARS, secret_source
 
 SERVER_FILE = "server.json"
 
@@ -76,6 +77,12 @@ def local_llm_available() -> bool:
         return False
 
 
+def anthropic_available() -> bool:
+    from .inference.anthropic_api import available
+
+    return available()
+
+
 def cli_command() -> list[str]:
     """How another program (Claude Desktop) should start this installation's CLI."""
     if getattr(sys, "frozen", False):
@@ -98,6 +105,8 @@ def info() -> dict[str, Any]:
         "models_dir": str(st.models_dir),
         "models_available": models_available(),
         "local_llm_available": local_llm_available(),
+        "anthropic_available": anthropic_available(),
+        "secrets": {name: secret_source(name) for name in ENV_VARS},
         "cli": cli_command(),
         "claude_desktop": claude_desktop_snippet(),
         "claude_config_paths": [str(p) for p in claude_config_paths()],

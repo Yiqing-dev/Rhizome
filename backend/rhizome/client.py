@@ -131,6 +131,9 @@ class HttpClient:
         since = (datetime.utcnow() - timedelta(days=days)).isoformat()
         return self._get(f"/topic/{topic_id}/changes", since=since)
 
+    def set_secret(self, name, value):
+        return self._post("/settings/secret", {"name": name, "value": value})
+
     def create_topic(self, **body):
         return self._post("/topic", body)
 

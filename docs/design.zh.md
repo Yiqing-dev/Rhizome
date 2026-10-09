@@ -397,7 +397,7 @@ RXF 里的 user\_insights，也就是你在讨论中说出的判断和联想，�
 | 原始文件 | 数据目录下的内容寻址存储 | 按 sha256 寻址，只追加 |
 | 后端 | FastAPI + Pydantic | 用 Pydantic 定义 RXF 和抽取 schema，同时导出 JSON Schema |
 | 任务队列 | 数据库内的任务表 + 后台 worker | 不额外引入 Redis；两种存储后端都适用 |
-| LLM | 内核不调用任何 LLM API；需要推理的工作通过 RXF 和 MCP 交给聊天里的 Claude / ChatGPT | 没有 API key，也没有运行成本；API 模式作为可选插件保留，默认关闭 |
+| LLM | 内核默认不调用任何 LLM API；需要推理的工作通过 RXF 和 MCP 交给聊天里的 Claude / ChatGPT | 没有 API key，也没有运行成本；可选的 Anthropic API 后端只回答三类窄判定，默认关闭，密钥存在系统凭据存储 |
 | Embedding | bge-m3（1024 维） | 中英混合；同时提供稠密和稀疏向量；本机 CPU 就能跑 |
 | 本地判定模型 | bge-reranker-v2-m3（规范化、检索重排）；mDeBERTa-v3-base-xnli（论断关系） | 在 CPU 上用 PyTorch 运行（固定到某个模型版本，向量索引按版本命名）；比生成式 LLM 更小、更快、输出更稳定 |
 | 本地小 LLM（可选） | Qwen3.5-2B，Q4\_K\_M 量化的 GGUF，约 1.3 GB | 用 llama.cpp 运行，开启 JSON schema 约束解码；只负责上下位判定、about / applicable\_to 分类和补题 |

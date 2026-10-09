@@ -405,3 +405,24 @@ msgstr "已导出 {entities} 个实体、{edges} 条边、{decisions} 条决策�
 
 msgid "cli.unknown_setting"
 msgstr "没有叫 {name} 的设置。可用设置：{keys}"
+
+msgid "cli.unknown_secret"
+msgstr "没有叫 {name} 的密钥。可用：{names}"
+
+msgid "cli.secret_prompt"
+msgstr "{name}"
+
+msgid "cli.secret_store_unavailable"
+msgstr "这台机器没有可用的凭据存储（{error}）。请改用环境变量 {var}。"
+
+msgid "cli.secret_stored"
+msgstr "{name} 已存入系统凭据存储"
+
+msgid "cli.secret_cleared"
+msgstr "{name} 已从系统凭据存储删除"
+
+msgid "cli.secret_env_wins"
+msgstr "注意：环境变量 {var} 已设置，会优先于存储的值。"
+
+msgid "settings.secret_store_unavailable"
+msgstr "这台机器没有可用的凭据存储（{error}）。请改用环境变量。"

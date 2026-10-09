@@ -381,7 +381,18 @@
     "lexical_only": "Built-in model: matching is lexical only (synonyms, acronyms and Chinese/English pairs are not merged; they are queued for review when the initials match).",
     "vocab_candidates": "include candidate topics",
     "advanced": "Advanced",
-    "advanced_hint": "Data folder, models, remote snapshots, review limits. Nothing here is needed day to day."
+    "advanced_hint": "Data folder, models, remote snapshots, review limits. Nothing here is needed day to day.",
+    "inference_anthropic": "Anthropic API (Claude)",
+    "anthropic_hint": "Only the three narrow judgements go to the API (topic relation, broader / narrower, flashcard text), each as one short request; paper text is never sent for anything else. Billed to your Anthropic account. The key is kept in the system credential store, never in settings.json. Safety fallbacks are on: a declined judgement is retried on a fallback model inside the same request.",
+    "anthropic_model": "Model",
+    "anthropic_key": "API key",
+    "anthropic_key_save": "Save key",
+    "anthropic_key_clear": "Remove stored key",
+    "anthropic_key_env": "Using ANTHROPIC_API_KEY from the environment",
+    "anthropic_key_stored": "A key is stored in the system credential store",
+    "anthropic_key_missing": "No key set: judgements go to the review queue",
+    "anthropic_key_saved": "Key stored in the system credential store.",
+    "anthropic_key_removed": "Stored key removed."
   },
   "lang": {
     "short_en": "EN",

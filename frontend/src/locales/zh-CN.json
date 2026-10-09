@@ -381,7 +381,18 @@
     "lexical_only": "内置模型只做字面匹配（同义词、缩写、中英文对应不会自动合并；首字母能对上的会进待审）。",
     "vocab_candidates": "包含候选主题",
     "advanced": "高级设置",
-    "advanced_hint": "数据目录、模型、远程快照、复习上限。日常使用不需要动这里。"
+    "advanced_hint": "数据目录、模型、远程快照、复习上限。日常使用不需要动这里。",
+    "inference_anthropic": "Anthropic API（Claude）",
+    "anthropic_hint": "只有三类窄判定走 API（主题关系、上下位、复习题文字），每次一条短请求；论文文本不会为别的用途发出。费用计入你的 Anthropic 账户。密钥存在系统凭据存储里，不进 settings.json。安全回退已开启：被拒绝的判定会在同一次请求里改由回退模型完成。",
+    "anthropic_model": "模型",
+    "anthropic_key": "API 密钥",
+    "anthropic_key_save": "保存密钥",
+    "anthropic_key_clear": "删除已存密钥",
+    "anthropic_key_env": "正在使用环境变量 ANTHROPIC_API_KEY",
+    "anthropic_key_stored": "系统凭据存储里已有密钥",
+    "anthropic_key_missing": "尚未设置密钥：判定会进入审核队列",
+    "anthropic_key_saved": "密钥已存入系统凭据存储。",
+    "anthropic_key_removed": "已删除存储的密钥。"
   },
   "lang": {
     "short_en": "EN",

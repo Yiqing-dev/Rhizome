@@ -29,7 +29,7 @@ writes `claude_desktop_config.json`, or use `"command": "<install>\\server\\rhz.
 When the app is running, the CLI and MCP server talk to it; otherwise they open the library directly.
 
 Not bundled: the optional model packages (bge-m3, reranker, NLI, local LLM) — the built-in lightweight
-models are used. The installer is not code-signed yet, so SmartScreen will warn on first run.
+models are used. The Anthropic API backend and the credential store (`anthropic`, `keyring`) are bundled. The installer is not code-signed yet, so SmartScreen will warn on first run.
 
 ## Build
 

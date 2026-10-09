@@ -107,6 +107,11 @@ class JobBody(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class SecretBody(BaseModel):
+    name: str
+    value: str | None = None  # None / empty removes the stored secret
+
+
 class SettingsPatch(BaseModel):
     language: str | None = None
     offline: bool | None = None
@@ -116,6 +121,7 @@ class SettingsPatch(BaseModel):
     reranker: str | None = None
     nli: str | None = None
     inference_backend: str | None = None
+    anthropic_model: str | None = None
     local_llm_path: str | None = None
     backup_dir: str | None = None
     backup_keep_daily: int | None = None
@@ -625,6 +631,22 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         reset_models()
         reset_backend()
         return {**get_settings_ep(), "rebuild_job": rebuild_job}
+
+    @app.post("/settings/secret", dependencies=W)
+    def set_secret_ep(body: SecretBody) -> dict[str, Any]:
+        """Store an API key in the operating system's credential store (never in settings.json);
+        the response never echoes the value."""
+        from ..inference import reset_backend
+        from ..secrets import SecretStoreUnavailable, secret_source, set_secret
+
+        try:
+            set_secret(body.name, body.value)
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        except SecretStoreUnavailable as e:
+            raise HTTPException(422, _("settings.secret_store_unavailable", error=str(e)))
+        reset_backend()
+        return {"name": body.name, "source": secret_source(body.name)}
 
     # ---- desktop integration ----
     from .. import system as sysint

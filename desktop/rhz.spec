@@ -25,6 +25,11 @@ hidden = []
 for pkg in ("rhizome", "uvicorn", "mcp", "alembic", "watchdog", "sqlalchemy.dialects.sqlite", "pydantic_settings",
             "truststore"):
     hidden += collect_submodules(pkg)
+# the optional API backend and the credential store (pip install ./backend[api]) ship when installed
+from importlib.util import find_spec
+for pkg in ("anthropic", "keyring"):
+    if find_spec(pkg) is not None:
+        hidden += collect_submodules(pkg)
 
 # heavy optional extras are never bundled (models download at runtime only when installed separately)
 excludes = ["torch", "transformers", "sentence_transformers", "onnxruntime", "llama_cpp", "graspologic",

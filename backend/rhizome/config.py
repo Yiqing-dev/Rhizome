@@ -225,8 +225,10 @@ class Settings(BaseSettings):
     reranker: Literal["lexical", "bge-reranker-v2-m3"] = "lexical"
     nli: Literal["none", "mdeberta"] = "none"
     local_llm_path: Path | None = None  # GGUF file for Qwen3.5-2B; None disables
-    # queue: defer to review queue / Claude via MCP. local: local small LLM. Plugins add more.
+    # queue: defer to review queue / Claude via MCP. local: local small LLM. anthropic: the Anthropic
+    # API (key in the credential store or ANTHROPIC_API_KEY, never here). Plugins add more.
     inference_backend: str = "queue"
+    anthropic_model: str = "claude-opus-5-5"
 
     thresholds: Thresholds = Field(default_factory=Thresholds)
     review_daily_new: int = 20

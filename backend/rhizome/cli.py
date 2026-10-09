@@ -864,6 +864,31 @@ def rxf_instructions(lang: Optional[str] = None) -> None:
 
 # ---- settings / models -------------------------------------------------------------------------
 
+@settings_app.command("secret")
+def settings_secret(name: str, clear: bool = typer.Option(False, "--clear", help="Remove the stored value")) -> None:
+    """Store an API key (e.g. anthropic_api_key) in the system credential store; the value is asked
+    for without echo. ANTHROPIC_API_KEY in the environment takes precedence when set."""
+    from .secrets import ENV_VARS, SecretStoreUnavailable, secret_source, set_secret
+
+    if name not in ENV_VARS:
+        typer.secho(_("cli.unknown_secret", name=name, names=", ".join(sorted(ENV_VARS))), fg="red", err=True)
+        raise typer.Exit(2)
+    value = None if clear else typer.prompt(_("cli.secret_prompt", name=name), hide_input=True)
+    try:
+        set_secret(name, value)
+    except SecretStoreUnavailable as e:
+        typer.secho(_("cli.secret_store_unavailable", error=str(e), var=ENV_VARS[name]), fg="red", err=True)
+        raise typer.Exit(2) from None
+    typer.echo(_("cli.secret_cleared" if clear else "cli.secret_stored", name=name))
+    if secret_source(name) == "env":
+        typer.secho(_("cli.secret_env_wins", var=ENV_VARS[name]), fg="yellow")
+    from .client import HttpClient
+
+    c = _client(prefer_http=True)
+    if isinstance(c, HttpClient):
+        c.set_secret(name, value)  # the running app picks it up at once
+
+
 @settings_app.command("show")
 def settings_show() -> None:
     typer.echo(json.dumps(get_settings().model_dump(mode="json"), indent=2, ensure_ascii=False))
