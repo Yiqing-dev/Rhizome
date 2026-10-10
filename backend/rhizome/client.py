@@ -36,6 +36,7 @@ class Client(Protocol):
     def digest(self, days: int = 7) -> dict[str, Any]: ...
     def topic_assets(self, topic_id: int, role: str | None = None) -> dict[str, Any] | None: ...
     def topic_changes(self, topic_id: int, days: int = 30) -> dict[str, Any] | None: ...
+    def apply_agent(self, min_confidence: float = 0.8) -> dict[str, Any]: ...
     def create_topic(self, **body: Any) -> dict[str, Any]: ...
     def stats(self) -> dict[str, Any]: ...
     def vocab(self) -> str: ...
@@ -133,6 +134,9 @@ class HttpClient:
 
     def set_secret(self, name, value):
         return self._post("/settings/secret", {"name": name, "value": value})
+
+    def apply_agent(self, min_confidence=0.8):
+        return self._post("/review/agent/apply", {"min_confidence": min_confidence})
 
     def create_topic(self, **body):
         return self._post("/topic", body)
@@ -278,6 +282,13 @@ class LocalClient:
 
         with self._s() as s:
             return list_items(s, kind, limit, offset)
+
+    def apply_agent(self, min_confidence=0.8):
+        self._rw()
+        from .services.review import apply_agent
+
+        with self._s() as s:
+            return apply_agent(s, min_confidence)
 
     def resolve(self, item_id, action, note=None):
         self._rw()

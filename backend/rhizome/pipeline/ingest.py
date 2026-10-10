@@ -226,6 +226,9 @@ def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes
         from ..services.recall import related_to_work
 
         result.related = related_to_work(s, out.work.id)
+    from .. import jobs
+
+    jobs.maybe_agent_review(s)  # new topic questions: the agent looks at them in the background
     return result
 
 

@@ -43,12 +43,13 @@ def _status_error(cls, status):
 
 
 def test_three_judgements_use_structured_output():
-    client, msgs = fake_client({"relation": "about", "confidence": 0.9}, {"relation": "narrower", "confidence": 0.7},
+    client, msgs = fake_client({"relation": "about", "confidence": 0.9},
                                {"q": "What does RootNet build?", "a": "Cell-type GRNs."})
     b = AnthropicBackend("claude-opus-5-5", "sk-test", client=client)
     assert b.classify_topic_relation("RootNet builds GRNs", "GRN inference") == ("about", 0.9)
-    assert b.judge_breadth("GRN inference", "regulatory genomics") == ("narrower", 0.7)
+    assert b.judge_breadth("GRN inference", "regulatory genomics") is None  # the topic agent judges pairs
     assert b.make_card("RootNet: tool that builds cell-type GRNs")[0].startswith("What")
+    assert len(msgs.calls) == 2
     for call in msgs.calls:
         assert call["model"] == "claude-opus-5-5" and call["fallbacks"] == "default"
         fmt = call["output_config"]["format"]

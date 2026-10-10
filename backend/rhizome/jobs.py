@@ -33,7 +33,7 @@ def handler(kind: str):
 
 # Kinds whose result only depends on the library state: a second request while one is still
 # queued is the same work, so it is coalesced instead of running the whole thing twice.
-COALESCE = ("rebuild", "nightly", "enrich")
+COALESCE = ("rebuild", "nightly", "enrich", "agent_review")
 
 
 def enqueue(s: Session, kind: str, payload: dict[str, Any] | None = None) -> Job:
@@ -250,9 +250,27 @@ def _nightly(s: Session, p: dict[str, Any]) -> dict[str, Any]:
             s, days=7, since=datetime.fromisoformat(last) if last else None)
         _kv_set(s, "last_synthesis", {"at": utcnow().isoformat()})
     _kv_set(s, "last_nightly", {"at": utcnow().isoformat()})
+    maybe_agent_review(s)
     if not get_settings().offline:
         enqueue(s, "enrich", {})  # metadata that failed at ingest time (separate job: goes online)
     return out
+
+
+@handler("agent_review")
+def _agent_review(s: Session, p: dict[str, Any]) -> dict[str, Any]:
+    from .inference.agent import DEFAULT_LIMIT, review_with_agent
+
+    return review_with_agent(s, limit=int(p.get("limit", DEFAULT_LIMIT)), item_ids=p.get("item_ids"),
+                             force=bool(p.get("force")))
+
+
+def maybe_agent_review(s: Session) -> Job | None:
+    """With the Anthropic backend selected, unjudged topic questions get a run of the topic agent."""
+    if get_settings().inference_backend != "anthropic":
+        return None
+    from .inference.agent import pending_unjudged
+
+    return enqueue(s, "agent_review", {}) if pending_unjudged(s) else None
 
 
 @handler("enrich")

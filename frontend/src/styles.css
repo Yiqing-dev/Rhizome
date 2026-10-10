@@ -468,3 +468,7 @@ table.decisions tr.revoked td:last-child { text-decoration: none; }
 .queue li:focus-visible, .drop:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
 .warn-text { color: var(--warn); }
 .abstract { white-space: pre-wrap; line-height: 1.5; }
+
+/* the topic agent's suggestion on a review item */
+.agent-note { border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: var(--radius-sm); padding: 0.5rem 0.75rem; }
+.agent-note p { margin: 0.25rem 0 0; }

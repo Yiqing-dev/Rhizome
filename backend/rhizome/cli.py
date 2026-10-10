@@ -366,7 +366,34 @@ def queue(kind: Optional[str] = None, limit: int = 20) -> None:
         other = p.get("b_name") or p.get("topic_name") or p.get("claim_text") or ""
         typer.echo(f"#{it['id']:<5} {it['kind']:<15} {it['score']:.2f}  {desc[:50]}  ⇄  {other[:50]}"
                    f"   [{' / '.join(it['actions'])}]")
+        v = p.get("agent") or {}
+        if v.get("action"):
+            typer.secho(f"       Claude: {v['action']} ({v.get('confidence', 0):.0%}) {v.get('reason', '')[:140]}", fg="cyan")
     typer.echo(f"({q['total']})")
+
+
+@app.command("agent-review")
+def agent_review(limit: int = typer.Option(25, help="Items to judge in this run"),
+                 force: bool = typer.Option(False, help="Judge again items that already have a verdict"),
+                 apply_min: Optional[float] = typer.Option(None, "--apply-min",
+                                                           help="Then apply every suggestion at least this confident (e.g. 0.8)")) -> None:
+    """Let the Claude topic agent judge pending topic questions (needs the Anthropic backend)."""
+    _require_writable()
+    c = _client()
+    job = c.run_job("agent_review", {"limit": limit, "force": force})
+    res = job.get("result") or {}
+    if _out(res):
+        return
+    if res.get("skipped"):
+        typer.secho(_("cli.agent_skipped", reason=res["skipped"]), fg="yellow")
+        raise typer.Exit(1)
+    typer.echo(_("cli.agent_done", judged=res.get("judged", 0), cached=res.get("from_cache", 0),
+                 failed=res.get("failed", 0), remaining=res.get("remaining", 0)))
+    if res.get("stopped"):
+        typer.secho(res["stopped"], fg="red", err=True)
+    if apply_min is not None:
+        r = c.apply_agent(apply_min)
+        typer.echo(_("cli.agent_applied", n=r.get("applied", 0)))
 
 
 @app.command()

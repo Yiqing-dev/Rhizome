@@ -261,7 +261,19 @@
     "side_b": "B",
     "empty_hint": "New items arrive as papers are ingested and when topics are created.",
     "dismiss_all": "Dismiss all shown",
-    "dismiss_confirm": "Skip all {{n}} pending items of this kind?"
+    "dismiss_confirm": "Skip all {{n}} pending items of this kind?",
+    "agent": {
+      "suggests": "Claude suggests: {{action}}",
+      "no_answer": "Claude could not decide this one ({{error}}).",
+      "hint": "Claude can look at both topics in your library (definitions, papers, shared material) and suggest an answer. Suggestions are never applied without you.",
+      "run": "Ask Claude ({{n}})",
+      "running": "Claude is judging…",
+      "apply": "Apply confident suggestions ({{n}})",
+      "apply_confirm": "Apply Claude's suggestion to {{n}} items with at least {{pct}}% confidence? Each becomes a decision you can undo under Decisions.",
+      "applied": "Applied {{n}} suggestions. Undo any of them under Decisions.",
+      "done": "Claude judged {{judged}} items; {{remaining}} still waiting.",
+      "skipped": "Claude did not run: {{reason}}"
+    }
   },
   "cards": {
     "title": "Review cards",
@@ -383,7 +395,7 @@
     "advanced": "Advanced",
     "advanced_hint": "Data folder, models, remote snapshots, review limits. Nothing here is needed day to day.",
     "inference_anthropic": "Anthropic API (Claude)",
-    "anthropic_hint": "Only the three narrow judgements go to the API (topic relation, broader / narrower, flashcard text), each as one short request; paper text is never sent for anything else. Billed to your Anthropic account. The key is kept in the system credential store, never in settings.json. Safety fallbacks are on: a declined judgement is retried on a fallback model inside the same request.",
+    "anthropic_hint": "Only the three narrow judgements go to the API (topic relation, broader / narrower, flashcard text), each as one short request; paper text is never sent for anything else. Billed to your Anthropic account. The key is kept in the system credential store, never in settings.json. Safety fallbacks are on: a declined judgement is retried on a fallback model inside the same request. With the Anthropic API selected, topic questions are also judged by a Claude agent that reads the library first (Review queue → Ask Claude).",
     "anthropic_model": "Model",
     "anthropic_key": "API key",
     "anthropic_key_save": "Save key",

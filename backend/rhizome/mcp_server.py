@@ -178,7 +178,9 @@ def rhz_related(entity: str) -> str:
 @mcp.tool(annotations=READ)
 def rhz_queue(kind: str | None = None, limit: int = 20, offset: int = 0) -> str:
     """Page through the review queue. kinds: merge, topic_relation, contradiction, retro_tag, synthesis.
-    Each item lists the allowed actions and both sides' aliases and connections."""
+    Each item lists the allowed actions and both sides' aliases and connections. Topic items may
+    carry `payload.agent`: an earlier verdict of the Rhizome topic agent (action, confidence,
+    reason) for you to weigh, not a decision."""
     return _j(_call(lambda c: c.queue(kind, limit, offset)))
 
 

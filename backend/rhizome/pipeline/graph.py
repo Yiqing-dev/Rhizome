@@ -756,6 +756,12 @@ class Graph:
         existing = self.s.execute(select(ReviewItem).where(ReviewItem.dedupe_key == dedupe)).scalar_one_or_none()
         if existing is not None:
             return None
+        if kind in ("topic_relation", "merge"):  # a rebuild regenerates items: the verdict was paid for
+            from ..inference.agent import cached_verdict
+
+            verdict = cached_verdict(self.s, dedupe)
+            if verdict is not None:
+                payload = {**payload, "agent": verdict}
         item = ReviewItem(id=self._planned(ReviewItem, self.item_plan, dedupe, "next_item_id"),
                           kind=kind, payload=payload, dedupe_key=dedupe, score=score)
         self.s.add(item)

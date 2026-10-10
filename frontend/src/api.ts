@@ -116,6 +116,8 @@ export interface ReviewItem {
   context: Record<string, { id: number; name: string; type: string; aliases: string[]; definition?: string;
     connections: { type: string; direction: string; name: string }[] }>;
 }
+export interface AgentVerdict { action?: string; confidence?: number; reason?: string; error?: string; model?: string }
+export interface AgentSummary { enabled: boolean; unjudged?: number; applicable?: number; min_confidence?: number }
 export interface DueCard { id: string; q: string; a: string; entity_key: string; entity_name: string | null; origin: string; new: boolean }
 export interface Stats { entities: Record<string, number>; edges: number; review_queue: number; review_queue_by_kind: Record<string, number>; cards_due: number;
   inbox?: { watching: boolean; last_scan: string | null; pending: string[]; ignored: string[] };
@@ -156,7 +158,8 @@ export const api = {
   topicMap: (includeCandidates = false) => req<TopicMap>("GET", "/topic-map", undefined, { include_candidates: includeCandidates }),
   createTopic: (b: { name: string; definition?: string; examples?: string[]; counter_examples?: string[]; parent?: string }) =>
     req<{ topic_id: number; job_id: number | null }>("POST", "/topic", b),
-  review: (kind?: string, offset = 0) => req<{ items: ReviewItem[]; total: number }>("GET", "/review", undefined, { kind, offset, limit: 50 }),
+  review: (kind?: string, offset = 0) => req<{ items: ReviewItem[]; total: number; agent?: AgentSummary }>("GET", "/review", undefined, { kind, offset, limit: 50 }),
+  applyAgent: (minConfidence = 0.8) => req<{ applied: number; by_action: Record<string, number> }>("POST", "/review/agent/apply", { min_confidence: minConfidence }),
   resolve: (id: number, action: string, note?: string) => req<{ status: string }>("POST", `/review/${id}`, { action, note }),
   decide: (op: string, payload: Record<string, unknown>) => req<{ id: number; rebuild_job: number | null }>("POST", "/decision", { op, payload }),
   decisions: (limit = 50, offset = 0) => req<{ decisions: Decision[] }>("GET", "/decisions", undefined, { limit, offset }),

@@ -34,7 +34,48 @@ def list_items(s: Session, kind: str | None = None, limit: int = 50, offset: int
              "actions": ACTIONS.get(it.kind, ("skip",)), "created_at": it.created_at.isoformat()}
         d["context"] = _context(g, it)
         out.append(d)
-    return {"items": out, "total": s.execute(cq).scalar_one()}
+    return {"items": out, "total": s.execute(cq).scalar_one(), "agent": agent_summary(s)}
+
+
+APPLY_MIN = 0.8  # default confidence for "apply the agent's suggestions"
+
+
+def _agent_items(s: Session) -> list[ReviewItem]:
+    from ..inference.agent import ACTIONS, eligible
+
+    return [it for it in s.execute(select(ReviewItem).where(ReviewItem.status == "pending",
+                                                            ReviewItem.kind.in_(tuple(ACTIONS)))).scalars()
+            if eligible(it)]
+
+
+def _applicable(it: ReviewItem, min_confidence: float) -> bool:
+    v = (it.payload or {}).get("agent") or {}
+    return (v.get("action") not in (None, "skip") and v.get("action") in ACTIONS.get(it.kind, ())
+            and float(v.get("confidence") or 0) >= min_confidence)
+
+
+def agent_summary(s: Session) -> dict[str, Any]:
+    from ..config import get_settings
+
+    if get_settings().inference_backend != "anthropic":
+        return {"enabled": False}
+    items = _agent_items(s)
+    return {"enabled": True, "unjudged": sum(1 for it in items if not (it.payload or {}).get("agent")),
+            "applicable": sum(1 for it in items if _applicable(it, APPLY_MIN)), "min_confidence": APPLY_MIN}
+
+
+def apply_agent(s: Session, min_confidence: float = APPLY_MIN) -> dict[str, Any]:
+    """Resolve every topic question whose agent verdict reaches `min_confidence` with that verdict,
+    as if the user had pressed the button: ordinary decisions, listed and undoable in Decisions."""
+    applied: dict[str, int] = {}
+    for it in _agent_items(s):
+        if not _applicable(it, min_confidence):
+            continue
+        action = it.payload["agent"]["action"]
+        r = resolve(s, it.id, action, note=f"agent: {it.payload['agent'].get('reason', '')}"[:500])
+        if r.get("status") == "resolved":
+            applied[action] = applied.get(action, 0) + 1
+    return {"applied": sum(applied.values()), "by_action": applied}
 
 
 def _context(g: Graph, it: ReviewItem) -> dict[str, Any]:

@@ -13,7 +13,7 @@ from ..config import get_settings
 from ..db.models import Edge, Entity, Extraction, ReviewCard, Work, utcnow
 from ..external.ids import effective_database, normalize_biotools, normalize_doi, normalize_repo, normalize_zenodo
 from ..i18n import _
-from ..inference import get_backend
+from ..inference.cache import judged
 from ..rxf.schema import RxfDocument, parse_stored, uses_ids
 from ..text import alias_default, norm, sha256
 from .canonicalize import is_user, resolve_claim, resolve_free, resolve_modality, resolve_organism
@@ -344,11 +344,11 @@ def _topic_relation_candidates(g: Graph, topic: Entity) -> None:
         return
     scores = get_reranker().score(topic.canonical_name, [n.canonical_name for n in neighbours])
     distinct = g.distinct_pairs()
-    backend = get_backend()
     for other, sc in zip(neighbours, scores):
         if sc < th.topic_relation_min or sc >= th.merge_review or frozenset((topic.key, other.key)) in distinct:
             continue
-        verdict = backend.judge_breadth(topic.canonical_name, other.canonical_name)
+        # remembered: a rebuild replays this for every export and must not ask the model again
+        verdict = judged(g.s, "judge_breadth", topic.canonical_name, other.canonical_name)
         suggestion = verdict[0] if verdict else None
         if verdict and verdict[0] == "none":
             continue
@@ -482,12 +482,11 @@ def _make_cards(g: Graph, doc: RxfDocument, work: Entity, assets: list[Entity], 
         target = target or work
         covered.add(target.key)
         upsert_card(g, target.key, rc.q, rc.a, "rxf", priority=10 if target.attrs.get("origin") == "user" else 0)
-    backend = get_backend()
     for e in assets:
         if e.key in covered or e.type == "claim" or (e.attrs or {}).get("no_cards"):
             continue
         prio = 10 if (e.attrs or {}).get("origin") == "user" else 0  # your ideas first, whoever wrote the card
-        qa = backend.make_card(_card_context(e, work))
+        qa = judged(g.s, "make_card", _card_context(e, work))
         if qa:
             upsert_card(g, e.key, qa[0], qa[1], "local_llm", priority=prio)
             continue

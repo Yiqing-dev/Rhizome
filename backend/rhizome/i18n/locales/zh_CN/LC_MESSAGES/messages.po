@@ -426,3 +426,12 @@ msgstr "注意：环境变量 {var} 已设置，会优先于存储的值。"
 
 msgid "settings.secret_store_unavailable"
 msgstr "这台机器没有可用的凭据存储（{error}）。请改用环境变量。"
+
+msgid "cli.agent_skipped"
+msgstr "主题 agent 没有运行：{reason}"
+
+msgid "cli.agent_done"
+msgstr "已判定 {judged} 项（取自记忆 {cached}，未得到答案 {failed}）；仍未判定：{remaining}"
+
+msgid "cli.agent_applied"
+msgstr "已采纳 {n} 条建议（任何一条都可以用 rhz undo / 决策记录撤销）"

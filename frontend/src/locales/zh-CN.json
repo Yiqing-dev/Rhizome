@@ -261,7 +261,19 @@
     "side_b": "B",
     "empty_hint": "摄入论文和新建主题时会产生新的待审项。",
     "dismiss_all": "全部跳过",
-    "dismiss_confirm": "跳过这一类的全部 {{n}} 条待审项？"
+    "dismiss_confirm": "跳过这一类的全部 {{n}} 条待审项？",
+    "agent": {
+      "suggests": "Claude 建议：{{action}}",
+      "no_answer": "Claude 没能判断这一项（{{error}}）。",
+      "hint": "Claude 可以查看两个主题在你库里的情况（定义、论文、共同的资产），然后给出建议。建议不会在你确认前生效。",
+      "run": "请 Claude 判断（{{n}}）",
+      "running": "Claude 正在判断…",
+      "apply": "采纳有把握的建议（{{n}}）",
+      "apply_confirm": "对 {{n}} 个把握度不低于 {{pct}}% 的项目采纳 Claude 的建议？每一条都会成为可在“决策记录”里撤销的决策。",
+      "applied": "已采纳 {{n}} 条建议，可在“决策记录”里撤销任何一条。",
+      "done": "Claude 判断了 {{judged}} 项；还有 {{remaining}} 项待判断。",
+      "skipped": "Claude 没有运行：{{reason}}"
+    }
   },
   "cards": {
     "title": "复习",
@@ -383,7 +395,7 @@
     "advanced": "高级设置",
     "advanced_hint": "数据目录、模型、远程快照、复习上限。日常使用不需要动这里。",
     "inference_anthropic": "Anthropic API（Claude）",
-    "anthropic_hint": "只有三类窄判定走 API（主题关系、上下位、复习题文字），每次一条短请求；论文文本不会为别的用途发出。费用计入你的 Anthropic 账户。密钥存在系统凭据存储里，不进 settings.json。安全回退已开启：被拒绝的判定会在同一次请求里改由回退模型完成。",
+    "anthropic_hint": "只有三类窄判定走 API（主题关系、上下位、复习题文字），每次一条短请求；论文文本不会为别的用途发出。费用计入你的 Anthropic 账户。密钥存在系统凭据存储里，不进 settings.json。安全回退已开启：被拒绝的判定会在同一次请求里改由回退模型完成。 选用 Anthropic API 后，主题之间的关系还会由一个先查看资料库再判断的 Claude agent 给出建议（审核队列 → 请 Claude 判断）。",
     "anthropic_model": "模型",
     "anthropic_key": "API 密钥",
     "anthropic_key_save": "保存密钥",

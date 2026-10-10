@@ -15,7 +15,7 @@ import logging
 import time
 from typing import Any
 
-from .prompts import BREADTH, CARD, TOPIC_RELATION
+from .prompts import CARD, TOPIC_RELATION
 
 log = logging.getLogger(__name__)
 
@@ -98,9 +98,9 @@ class AnthropicBackend:
         return (r["relation"], float(r["confidence"])) if r else None
 
     def judge_breadth(self, a, b):
-        system, schema = BREADTH
-        r = self._ask(system, f"A: {a}\nB: {b}", schema)
-        return (r["relation"], float(r["confidence"])) if r else None
+        """None: every candidate pair is queued, and the topic agent (``inference.agent``) judges it
+        afterwards with the library at hand, which two bare names cannot give."""
+        return None
 
     def make_card(self, asset_text):
         system, schema = CARD

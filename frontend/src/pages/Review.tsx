@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ApiError, type ReviewItem } from "../api";
+import { api, ApiError, type AgentVerdict, type ReviewItem } from "../api";
 import { EmptyState, Loading, TypeBadge } from "../components/common";
 import { CheckIcon } from "../components/icons";
-import { useKeys, useLoad, useBusy, useRefreshOnFocus } from "../hooks";
+import { useJob, useKeys, useLoad, useBusy, useRefreshOnFocus } from "../hooks";
 import { href, go } from "../router";
 
 const KINDS = ["", "merge", "topic_relation", "contradiction", "retro_tag", "synthesis"];
@@ -26,6 +26,20 @@ function Side({ label, side }: { label: string; side?: ReviewItem["context"][str
   );
 }
 
+/** The topic agent's verdict on this item: a suggestion with its reason, never a decision. */
+function AgentNote({ v }: { v: AgentVerdict }) {
+  const { t } = useTranslation();
+  if (v.error) return <div className="agent-note muted small">{t("review.agent.no_answer", { error: v.error })}</div>;
+  if (!v.action) return null;
+  return (
+    <div className="agent-note">
+      <strong>{t("review.agent.suggests", { action: t(`review.action.${v.action}`) })}</strong>
+      <span className="muted small"> · {Math.round((v.confidence ?? 0) * 100)}%</span>
+      {v.reason && <p className="small">{v.reason}</p>}
+    </div>
+  );
+}
+
 /** Batch, keyboard-only: j/k move, 1–5 pick an action, s skip. */
 export default function ReviewPage({ query }: { query?: URLSearchParams }) {
   const { t } = useTranslation();
@@ -40,6 +54,27 @@ export default function ReviewPage({ query }: { query?: URLSearchParams }) {
   const item = items[Math.min(cur, Math.max(0, items.length - 1))];
 
   const [err, setErr] = useState<string | null>(null);
+  const [agentMsg, setAgentMsg] = useState<string | null>(null);
+  const agentRun = useJob("agent_review", (j) => {
+    const r = j.result ?? {};
+    setAgentMsg(j.status === "failed" ? (j.error ?? "") : r.skipped ? t("review.agent.skipped", { reason: r.skipped })
+      : t("review.agent.done", { judged: r.judged ?? 0, remaining: r.remaining ?? 0 }) + (r.stopped ? ` (${r.stopped})` : ""));
+    q.reload();
+  });
+  const agent = q.data?.agent;
+  async function applyAgent() {
+    const n = agent?.applicable ?? 0;
+    if (!n || !window.confirm(t("review.agent.apply_confirm", { n, pct: Math.round((agent?.min_confidence ?? 0.8) * 100) }))) return;
+    await guard(async () => {
+      try {
+        const r = await api.applyAgent(agent?.min_confidence ?? 0.8);
+        setAgentMsg(t("review.agent.applied", { n: r.applied }));
+      } catch (e) {
+        setErr(String((e as ApiError).detail ?? e));
+      }
+      q.reload();
+    });
+  }
   async function act(action: string) {
     if (!item) return;
     await guard(async () => {
@@ -86,6 +121,19 @@ export default function ReviewPage({ query }: { query?: URLSearchParams }) {
           )}
         </div>
       </div>
+      {agent?.enabled && ((agent.unjudged ?? 0) > 0 || (agent.applicable ?? 0) > 0 || agentRun.running) && (
+        <div className="notice row wrap">
+          <span className="grow small">{t("review.agent.hint")}</span>
+          {((agent.unjudged ?? 0) > 0 || agentRun.running) && (
+            <button onClick={agentRun.start} disabled={agentRun.running}>
+              {agentRun.running ? t("review.agent.running") : t("review.agent.run", { n: agent.unjudged ?? 0 })}</button>
+          )}
+          {(agent.applicable ?? 0) > 0 && (
+            <button className="primary" onClick={applyAgent}>{t("review.agent.apply", { n: agent.applicable })}</button>
+          )}
+        </div>
+      )}
+      {agentMsg && <div className="notice ok small">{agentMsg}</div>}
       <Loading error={q.error} loading={q.loading && !q.data} />
       {err && <div className="notice error">{err}</div>}
       {q.data && !items.length && <EmptyState icon={<CheckIcon />} title={t("review.empty")} hint={t("review.empty_hint")} />}
@@ -95,7 +143,7 @@ export default function ReviewPage({ query }: { query?: URLSearchParams }) {
             {items.map((it, i) => (
               <li key={it.id} className={it === item ? "current" : ""} onClick={() => setCur(i)} tabIndex={0}
                   aria-current={it === item} onKeyDown={(e) => { if (e.key === "Enter") setCur(i); }}>
-                <span className="kind">{t(`review.kind.${it.kind}`)}</span>
+                <span className="kind">{t(`review.kind.${it.kind}`)}{(it.payload.agent as AgentVerdict | undefined)?.action ? " · ✓" : ""}</span>
                 <span>{label(it).slice(0, 80)}</span>
               </li>
             ))}
@@ -115,10 +163,13 @@ export default function ReviewPage({ query }: { query?: URLSearchParams }) {
               {item.kind === "synthesis" && (
                 <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("review.synthesis_note")} />
               )}
+              {item.payload.agent && <AgentNote v={item.payload.agent as AgentVerdict} />}
               <div className="actions">
-                {item.actions.map((a, i) => (
-                  <button key={a} className={i === 0 ? "primary" : ""} onClick={() => act(a)}><kbd>{i + 1}</kbd> {t(`review.action.${a}`)}</button>
-                ))}
+                {item.actions.map((a, i) => {
+                  const suggested = (item.payload.agent as AgentVerdict | undefined)?.action;
+                  const primary = suggested && suggested !== "skip" && item.actions.includes(suggested) ? a === suggested : i === 0;
+                  return <button key={a} className={primary ? "primary" : ""} onClick={() => act(a)}><kbd>{i + 1}</kbd> {t(`review.action.${a}`)}</button>;
+                })}
               </div>
             </div>
           )}

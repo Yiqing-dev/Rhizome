@@ -426,3 +426,12 @@ msgstr "Note: {var} is set in the environment and takes precedence."
 
 msgid "settings.secret_store_unavailable"
 msgstr "No credential store on this machine ({error}). Set the environment variable instead."
+
+msgid "cli.agent_skipped"
+msgstr "The topic agent did not run: {reason}"
+
+msgid "cli.agent_done"
+msgstr "Judged {judged} (from memory {cached}, without an answer {failed}); still unjudged: {remaining}"
+
+msgid "cli.agent_applied"
+msgstr "Applied {n} suggestions (undo any of them with rhz undo / Decisions)"

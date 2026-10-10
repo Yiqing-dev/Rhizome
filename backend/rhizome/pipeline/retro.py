@@ -17,6 +17,7 @@ from sqlalchemy import select
 
 from ..db.models import Extraction, ReviewItem
 from ..inference import get_backend
+from ..inference.cache import judged
 from ..ml import get_reranker
 from .graph import Graph, embed_texts, entity_text, knn
 
@@ -58,7 +59,7 @@ def retro_tag(s: Session, topic_key: str, k: int | None = None) -> dict:
     for e, sc in kept:
         if f"retro_tag:{topic.key}|{e.key}" in seen:
             continue
-        verdict = backend.classify_topic_relation(entity_text(e), definition)
+        verdict = judged(s, "classify_topic_relation", entity_text(e), definition, backend=backend)
         if verdict is None and queued >= th.retro_queue_max:  # no local judge: the user is the judge
             remaining += 1
             continue

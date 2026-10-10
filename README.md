@@ -109,7 +109,16 @@ Advanced → *Generative judgements* can route them to the Anthropic API instead
 "./backend[api]"` for a source install; the Windows app includes it). Each judgement is one short
 structured-output request; paper text is never sent for anything else. The key lives in the system
 credential store or `ANTHROPIC_API_KEY`, never in settings.json: paste it in Settings or run
-`rhz settings secret anthropic_api_key`. Any failure sends the item back to the review queue. The server talks to the running app over REST and falls back to in-process calls.
+`rhz settings secret anthropic_api_key`. Any failure sends the item back to the review queue.
+
+With the API selected, topic questions in the review queue (same topic? A part of B?) are judged by
+a Claude agent that first reads the library through three read-only tools: what each topic covers
+(definition, aliases, parents and children, tagged papers and assets), what the two share, and
+nearby topics. It suggests one of the item's actions with a confidence and a reason; the Review
+page highlights it, and *Apply confident suggestions* turns every suggestion at 80 % or more into an
+ordinary, undoable decision. It runs after an ingest that raises new topic questions, nightly, from
+*Ask Claude* on the Review page, or `rhz agent-review [--apply-min 0.8]`. Verdicts are remembered, so
+a rebuild never pays for the same question twice. The server talks to the running app over REST and falls back to in-process calls.
 Add "call `rhz_recall` before discussing an analysis plan" to your Project instructions.
 
 ### Remote machines (HPC)

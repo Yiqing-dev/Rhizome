@@ -107,6 +107,10 @@ class JobBody(BaseModel):
     payload: dict[str, Any] = Field(default_factory=dict)
 
 
+class ApplyAgentBody(BaseModel):
+    min_confidence: float = Field(0.8, ge=0.5, le=1.0)
+
+
 class SecretBody(BaseModel):
     name: str
     value: str | None = None  # None / empty removes the stored secret
@@ -452,7 +456,13 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
 
         return {"dismissed": dismiss(s, body.kind, body.topic)}
 
-    # declared after /review/dismiss: a literal path must not be read as an item id
+    @app.post("/review/agent/apply", dependencies=W)
+    def apply_agent_ep(body: ApplyAgentBody, s: Session = Depends(db)) -> dict[str, Any]:
+        from ..services.review import apply_agent
+
+        return apply_agent(s, body.min_confidence)
+
+    # declared after the literal /review/... paths: a literal path must not be read as an item id
     @app.post("/review/{item_id}", dependencies=W)
     def resolve(item_id: int, body: ResolveBody, s: Session = Depends(db)) -> dict[str, Any]:
         from ..services.review import resolve as do_resolve
