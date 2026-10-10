@@ -30,7 +30,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install
-        run: pip install ${{ matrix.constraints }} -e "./backend[dev]"
+        run: pip install ${{ matrix.constraints }} -e "./backend[dev,api]"
       - name: Unit, RXF contract and retrieval tests
         run: python -m pytest backend/tests -q
         env:
