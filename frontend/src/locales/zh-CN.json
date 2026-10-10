@@ -192,7 +192,13 @@
     "merge": "并入…",
     "merge_placeholder": "要并入的主题 key 或名称",
     "merge_confirm": "把这个主题并入 {{into}}？",
-    "manage": "管理主题"
+    "manage": "管理主题",
+    "organise": "请 Claude 整理",
+    "organising": "Claude 正在整理…",
+    "organise_hint": "Claude 查看这个主题在你库里的情况，建议定义、别名、上下位主题、应合并的主题和挂错的条目。在你采纳之前什么都不会改。",
+    "organise_queued": "审核队列里有 {{n}} 条建议",
+    "organise_nothing": "没有需要改的地方。",
+    "organise_failed": "Claude 没能整理这个主题：{{error}}"
   },
   "column": {
     "dataset": "数据",
@@ -234,7 +240,8 @@
       "topic_relation": "主题关系",
       "contradiction": "矛盾",
       "retro_tag": "回溯标注",
-      "synthesis": "综合"
+      "synthesis": "综合",
+      "suggestion": "整理建议"
     },
     "question": {
       "merge": "“{{a_name}}”和“{{b_name}}”是同一个概念吗？",
@@ -255,7 +262,8 @@
       "applicable_to": "可用于",
       "none": "无关",
       "useful": "有用",
-      "useless": "无用"
+      "useless": "无用",
+      "apply": "采纳"
     },
     "side_a": "A",
     "side_b": "B",
@@ -272,7 +280,24 @@
       "apply_confirm": "对 {{n}} 个把握度不低于 {{pct}}% 的项目采纳 Claude 的建议？每一条都会成为可在“决策记录”里撤销的决策。",
       "applied": "已采纳 {{n}} 条建议，可在“决策记录”里撤销任何一条。",
       "done": "Claude 判断了 {{judged}} 项；还有 {{remaining}} 项待判断。",
-      "skipped": "Claude 没有运行：{{reason}}"
+      "skipped": "Claude 没有运行：{{reason}}",
+      "why": "Claude 的理由"
+    },
+    "suggestion": {
+      "definition": "把“{{topic_name}}”定义为：{{value}}",
+      "alias": "把“{{value}}”加为“{{topic_name}}”的别名",
+      "merge": "把“{{topic_name}}”和“{{other_name}}”合并为一个主题（保留“{{into_name}}”）",
+      "parent": "把“{{topic_name}}”挂到更宽的主题“{{other_name}}”下",
+      "child": "把“{{other_name}}”作为下位主题挂到“{{topic_name}}”下",
+      "misfiled": "去掉“{{other_name}}”上的“{{topic_name}}”标签"
+    },
+    "suggestion_short": {
+      "definition": "定义",
+      "alias": "别名",
+      "merge": "合并",
+      "parent": "上位主题",
+      "child": "下位主题",
+      "misfiled": "去标签"
     }
   },
   "cards": {

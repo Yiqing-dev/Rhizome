@@ -435,3 +435,6 @@ msgstr "Judged {judged} (from memory {cached}, without an answer {failed}); stil
 
 msgid "cli.agent_applied"
 msgstr "Applied {n} suggestions (undo any of them with rhz undo / Decisions)"
+
+msgid "cli.organise_done"
+msgstr "{n} suggestions in the review queue ({what}); apply them there or with rhz agent-review --apply-min"

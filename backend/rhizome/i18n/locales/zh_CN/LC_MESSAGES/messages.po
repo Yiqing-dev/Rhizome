@@ -435,3 +435,6 @@ msgstr "已判定 {judged} 项（取自记忆 {cached}，未得到答案 {failed
 
 msgid "cli.agent_applied"
 msgstr "已采纳 {n} 条建议（任何一条都可以用 rhz undo / 决策记录撤销）"
+
+msgid "cli.organise_done"
+msgstr "{n} 条建议已进入审核队列（{what}）；在那里采纳，或用 rhz agent-review --apply-min"

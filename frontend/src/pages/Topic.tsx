@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, type TopicItem } from "../api";
+import { api, type OrganiseRun, type TopicItem } from "../api";
 import { EntityLink, Loading, TypeBadge } from "../components/common";
-import { useLoad } from "../hooks";
+import { useJob, useLoad } from "../hooks";
 import { href, go } from "../router";
 
 const COLUMNS = ["dataset", "method", "idea", "claim", "work"] as const;
@@ -15,6 +15,11 @@ export default function TopicPage({ id, query }: { id: number; query?: URLSearch
   const [mergeInto, setMergeInto] = useState("");
   const setRole = (r: string) => go(`topic/${id}`, { role: r || undefined });
   const page = useLoad(() => api.topicAssets(id, role || undefined), [id, role]);
+  const [run, setRun] = useState<OrganiseRun | null>(null);
+  const organise = useJob("organise_topic", (j) => {
+    setRun(j.status === "failed" ? { error: j.error ?? "" } : (j.result as OrganiseRun));
+    page.reload();
+  }, { topic: page.data?.topic.key ?? "" });
   const [more, setMore] = useState<Record<string, TopicItem[]>>({});
   useEffect(() => setMore({}), [id, role]);
   const p = page.data;
@@ -61,7 +66,29 @@ export default function TopicPage({ id, query }: { id: number; query?: URLSearch
                   {t("topic.confirm")}
                 </button>
               )}
+              {p.ai?.enabled && (
+                <button onClick={() => { setRun(null); organise.start(); }} disabled={organise.running} title={t("topic.organise_hint")}>
+                  {organise.running ? t("topic.organising") : t("topic.organise")}</button>
+              )}
             </div>
+            {(() => {
+              const r = run ?? p.ai?.last_run ?? null;
+              if (!r || organise.running) return null;
+              const problem = r.error || r.stopped || r.skipped;
+              return (
+                <div className={`notice ${problem ? "warn" : ""} small`}>
+                  {problem ? t("topic.organise_failed", { error: problem }) : (
+                    <>
+                      {r.summary && <p>{r.summary}</p>}
+                      {(r.queued ?? 0) > 0
+                        ? <a href={href("review?kind=suggestion")}>{t("topic.organise_queued", { n: r.queued })} →</a>
+                        : <span className="muted">{t("topic.organise_nothing")}</span>}
+                      {r.at && <span className="muted"> · {new Date(r.at + (r.at.endsWith("Z") ? "" : "Z")).toLocaleDateString()}</span>}
+                    </>
+                  )}
+                </div>
+              );
+            })()}
             <details className="edit-menu">
               <summary>{t("topic.manage")}</summary>
               <div className="row wrap">

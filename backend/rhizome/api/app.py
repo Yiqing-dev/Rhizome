@@ -393,7 +393,18 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         out = ta(s, topic_id, role=role, column=column, offset=offset, limit=limit)
         if out is None:
             raise HTTPException(404, _("api.not_found"))
+        from ..inference.organise import last_run
+
+        out["ai"] = {"enabled": get_settings().inference_backend == "anthropic" and not read_only,
+                     "last_run": last_run(s, out["topic"]["key"])}
         return out
+
+    @app.post("/topic/{topic_id}/organise", dependencies=W)
+    def organise(topic_id: int, s: Session = Depends(db)) -> dict[str, Any]:
+        topic = s.get(Entity, topic_id)
+        if topic is None or topic.type != "topic":
+            raise HTTPException(404, _("api.not_found"))
+        return jobs.job_view(jobs.enqueue(s, "organise_topic", {"topic": topic.key}))
 
     @app.get("/topic/{topic_id}/changes", dependencies=A)
     def topic_changes(topic_id: int, since: str | None = None, s: Session = Depends(db)) -> dict[str, Any]:

@@ -192,7 +192,13 @@
     "merge": "Merge into…",
     "merge_placeholder": "topic key or name to merge into",
     "merge_confirm": "Merge this topic into {{into}}?",
-    "manage": "Manage topic"
+    "manage": "Manage topic",
+    "organise": "Organise with Claude",
+    "organising": "Claude is organising…",
+    "organise_hint": "Claude reads this topic in your library and proposes a definition, aliases, parent / child topics, merges and misfiled items. Nothing changes until you apply a suggestion.",
+    "organise_queued": "{{n}} suggestions in the review queue",
+    "organise_nothing": "No changes suggested.",
+    "organise_failed": "Claude could not organise this topic: {{error}}"
   },
   "column": {
     "dataset": "Data",
@@ -234,7 +240,8 @@
       "topic_relation": "Topic relation",
       "contradiction": "Contradiction",
       "retro_tag": "Retro-tag",
-      "synthesis": "Synthesis"
+      "synthesis": "Synthesis",
+      "suggestion": "Suggestion"
     },
     "question": {
       "merge": "Are “{{a_name}}” and “{{b_name}}” the same concept?",
@@ -255,7 +262,8 @@
       "applicable_to": "Applicable to",
       "none": "Unrelated",
       "useful": "Useful",
-      "useless": "Not useful"
+      "useless": "Not useful",
+      "apply": "Apply"
     },
     "side_a": "A",
     "side_b": "B",
@@ -272,7 +280,24 @@
       "apply_confirm": "Apply Claude's suggestion to {{n}} items with at least {{pct}}% confidence? Each becomes a decision you can undo under Decisions.",
       "applied": "Applied {{n}} suggestions. Undo any of them under Decisions.",
       "done": "Claude judged {{judged}} items; {{remaining}} still waiting.",
-      "skipped": "Claude did not run: {{reason}}"
+      "skipped": "Claude did not run: {{reason}}",
+      "why": "Claude's reason"
+    },
+    "suggestion": {
+      "definition": "Define “{{topic_name}}” as: {{value}}",
+      "alias": "Add “{{value}}” as another name of “{{topic_name}}”",
+      "merge": "Merge “{{topic_name}}” and “{{other_name}}” into one topic (kept: “{{into_name}}”)",
+      "parent": "Put “{{topic_name}}” under the broader topic “{{other_name}}”",
+      "child": "Put “{{other_name}}” under “{{topic_name}}” as a narrower topic",
+      "misfiled": "Remove the tag “{{topic_name}}” from “{{other_name}}”"
+    },
+    "suggestion_short": {
+      "definition": "Definition",
+      "alias": "Alias",
+      "merge": "Merge",
+      "parent": "Broader topic",
+      "child": "Narrower topic",
+      "misfiled": "Untag"
     }
   },
   "cards": {

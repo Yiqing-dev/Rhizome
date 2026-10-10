@@ -110,12 +110,14 @@ export interface TopicPage {
   topic: Hit & { attrs: Record<string, any> }; children: Hit[]; parents: Hit[]; subtree_size: number;
   columns: Record<"dataset" | "method" | "idea" | "claim" | "work", TopicItem[]>;
   totals: Record<"dataset" | "method" | "idea" | "claim" | "work", number>; limit: number;
+  ai?: { enabled: boolean; last_run: OrganiseRun | null };
 }
 export interface ReviewItem {
   id: number; kind: string; payload: Record<string, any>; score: number; actions: string[]; created_at: string;
   context: Record<string, { id: number; name: string; type: string; aliases: string[]; definition?: string;
     connections: { type: string; direction: string; name: string }[] }>;
 }
+export interface OrganiseRun { summary?: string; queued?: number; by_what?: Record<string, number>; at?: string; error?: string; stopped?: string; skipped?: string }
 export interface AgentVerdict { action?: string; confidence?: number; reason?: string; error?: string; model?: string }
 export interface AgentSummary { enabled: boolean; unjudged?: number; applicable?: number; min_confidence?: number }
 export interface DueCard { id: string; q: string; a: string; entity_key: string; entity_name: string | null; origin: string; new: boolean }

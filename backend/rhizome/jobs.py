@@ -264,6 +264,13 @@ def _agent_review(s: Session, p: dict[str, Any]) -> dict[str, Any]:
                              force=bool(p.get("force")))
 
 
+@handler("organise_topic")
+def _organise_topic(s: Session, p: dict[str, Any]) -> dict[str, Any]:
+    from .inference.organise import organise_topic
+
+    return organise_topic(s, p["topic"])
+
+
 def maybe_agent_review(s: Session) -> Job | None:
     """With the Anthropic backend selected, unjudged topic questions get a run of the topic agent."""
     if get_settings().inference_backend != "anthropic":

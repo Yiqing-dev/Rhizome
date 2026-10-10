@@ -7,7 +7,7 @@ import { CheckIcon } from "../components/icons";
 import { useJob, useKeys, useLoad, useBusy, useRefreshOnFocus } from "../hooks";
 import { href, go } from "../router";
 
-const KINDS = ["", "merge", "topic_relation", "contradiction", "retro_tag", "synthesis"];
+const KINDS = ["", "merge", "topic_relation", "contradiction", "retro_tag", "synthesis", "suggestion"];
 
 function Side({ label, side }: { label: string; side?: ReviewItem["context"][string] }) {
   const { t } = useTranslation();
@@ -27,13 +27,13 @@ function Side({ label, side }: { label: string; side?: ReviewItem["context"][str
 }
 
 /** The topic agent's verdict on this item: a suggestion with its reason, never a decision. */
-function AgentNote({ v }: { v: AgentVerdict }) {
+function AgentNote({ v, own }: { v: AgentVerdict; own?: boolean }) {
   const { t } = useTranslation();
   if (v.error) return <div className="agent-note muted small">{t("review.agent.no_answer", { error: v.error })}</div>;
   if (!v.action) return null;
   return (
     <div className="agent-note">
-      <strong>{t("review.agent.suggests", { action: t(`review.action.${v.action}`) })}</strong>
+      <strong>{own ? t("review.agent.why") : t("review.agent.suggests", { action: t(`review.action.${v.action}`) })}</strong>
       <span className="muted small"> · {Math.round((v.confidence ?? 0) * 100)}%</span>
       {v.reason && <p className="small">{v.reason}</p>}
     </div>
@@ -99,7 +99,9 @@ export default function ReviewPage({ query }: { query?: URLSearchParams }) {
     }
   }, [items, item, note]);
 
-  const label = (it: ReviewItem) => (it.payload.a_name ?? it.payload.name ?? it.payload.new_text ?? "") as string;
+  const label = (it: ReviewItem) => (it.kind === "suggestion"
+    ? `${t(`review.suggestion_short.${it.payload.what}`)} · ${it.payload.topic_name}: ${it.payload.value ?? it.payload.other_name ?? ""}`
+    : it.payload.a_name ?? it.payload.name ?? it.payload.new_text ?? "") as string;
   return (
     <div className="stack">
       <div className="page-head">
@@ -151,7 +153,9 @@ export default function ReviewPage({ query }: { query?: URLSearchParams }) {
           {item && (
             <div className="panel">
               <span className="eyebrow">{t(`review.kind.${item.kind}`)}</span>
-              <div className="question">{String(t(`review.question.${item.kind}`, { ...item.payload }))}</div>
+              <div className="question">{item.kind === "suggestion"
+                ? String(t(`review.suggestion.${item.payload.what}`, { ...item.payload }))
+                : String(t(`review.question.${item.kind}`, { ...item.payload }))}</div>
               <div className="sides">
                 <Side label={t("review.side_a")} side={item.context.a ?? item.context.key ?? item.context.new_claim} />
                 <Side label={t("review.side_b")} side={item.context.b ?? item.context.claim ?? item.context.topic} />
@@ -163,7 +167,7 @@ export default function ReviewPage({ query }: { query?: URLSearchParams }) {
               {item.kind === "synthesis" && (
                 <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("review.synthesis_note")} />
               )}
-              {item.payload.agent && <AgentNote v={item.payload.agent as AgentVerdict} />}
+              {item.payload.agent && <AgentNote v={item.payload.agent as AgentVerdict} own={item.kind === "suggestion"} />}
               <div className="actions">
                 {item.actions.map((a, i) => {
                   const suggested = (item.payload.agent as AgentVerdict | undefined)?.action;

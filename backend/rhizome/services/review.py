@@ -18,6 +18,7 @@ ACTIONS = {
     "contradiction": ("accept", "reject", "skip"),
     "retro_tag": ("about", "applicable_to", "none", "skip"),
     "synthesis": ("useful", "useless", "skip"),
+    "suggestion": ("apply", "skip"),  # an edit proposed by the topic organiser: one decision
 }
 
 
@@ -41,11 +42,13 @@ APPLY_MIN = 0.8  # default confidence for "apply the agent's suggestions"
 
 
 def _agent_items(s: Session) -> list[ReviewItem]:
+    """Items an agent has an opinion on: topic questions, and the organiser's suggestions."""
     from ..inference.agent import ACTIONS, eligible
 
+    kinds = (*ACTIONS, "suggestion")
     return [it for it in s.execute(select(ReviewItem).where(ReviewItem.status == "pending",
-                                                            ReviewItem.kind.in_(tuple(ACTIONS)))).scalars()
-            if eligible(it)]
+                                                            ReviewItem.kind.in_(kinds))).scalars()
+            if it.kind == "suggestion" or eligible(it)]
 
 
 def _applicable(it: ReviewItem, min_confidence: float) -> bool:
@@ -60,7 +63,7 @@ def agent_summary(s: Session) -> dict[str, Any]:
     if get_settings().inference_backend != "anthropic":
         return {"enabled": False}
     items = _agent_items(s)
-    return {"enabled": True, "unjudged": sum(1 for it in items if not (it.payload or {}).get("agent")),
+    return {"enabled": True, "unjudged": sum(1 for it in items if it.kind != "suggestion" and not (it.payload or {}).get("agent")),
             "applicable": sum(1 for it in items if _applicable(it, APPLY_MIN)), "min_confidence": APPLY_MIN}
 
 
@@ -172,6 +175,16 @@ def _apply(s: Session, g: Graph, it: ReviewItem, p: dict[str, Any], action: str,
         if action in ("about", "applicable_to"):
             rel = action if p.get("type") == "work" else "applicable_to"
             made = decisions.record(g, "add_edge", {"src": p["key"], "dst": p["topic"], "type": rel})
+    elif it.kind == "suggestion":
+        if action == "apply":
+            args = dict(p.get("args") or {})
+            for k in ("key", "from", "into", "src", "dst"):  # merged since it was proposed: follow
+                if isinstance(args.get(k), str):
+                    args[k] = g.resolve_key(args[k])
+            if p.get("op") == "merge" and args.get("from") == args.get("into"):
+                it.status = "obsolete"
+            else:
+                made = decisions.record(g, p["op"], args)
     elif it.kind == "synthesis":
         from .synthesis import tune_threshold
 

@@ -168,6 +168,18 @@ class LibraryTools:
                       "asset_examples": [{"type": x.type, "name": x.canonical_name[:200]} for x in shared if x.type != "work"][:8],
                       "existing_is_a": ["A is part of B" if src == ta.id else "B is part of A" for src, _ in hierarchy]})
 
+    def tagged_items(self, key: str, offset: int = 0) -> str:
+        e = self._topic(key)
+        if e is None:
+            return _clip({"error": f"no topic {key!r}"})
+        rows = self.s.execute(select(Entity, Edge.type).join(Edge, Edge.src == Entity.id).where(
+            Edge.dst == e.id, Edge.status != "rejected", Edge.type != "is_a", Entity.status != "rejected")
+            .order_by(Entity.type, Entity.id).offset(max(0, offset)).limit(40)).all()
+        return _clip({"offset": offset, "items": [
+            {"key": x.key, "type": x.type, "name": x.canonical_name[:160], "edge": et,
+             **({"tldr": ((x.attrs or {}).get("tldr") or [None])[0]} if x.type == "work" else {})}
+            for x, et in rows], "more": len(rows) == 40}, limit=9000)
+
     def search_topics(self, query: str) -> str:
         from ..services.search import Filters, search
 
@@ -176,7 +188,7 @@ class LibraryTools:
 
     def run(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
         fn = {"topic_info": self.topic_info, "shared_material": self.shared_material,
-              "search_topics": self.search_topics}.get(name)
+              "search_topics": self.search_topics, "tagged_items": self.tagged_items}.get(name)
         if fn is None:
             return f"unknown tool {name}", True
         try:
@@ -187,6 +199,62 @@ class LibraryTools:
 
 # ---- the agent loop --------------------------------------------------------------------------
 
+def make_client(api_key: str | None):
+    import anthropic
+
+    return anthropic.Anthropic(api_key=api_key, max_retries=2, timeout=120.0)
+
+
+def run_agent(client: Any, model: str, system: str, tool_defs: list[dict[str, Any]], tools: LibraryTools,
+              prompt: str, schema: dict[str, Any], max_turns: int = MAX_TURNS, effort: str = "medium",
+              max_tokens: int = 8000) -> dict[str, Any]:
+    """Lookups through the library tools, then one JSON answer in `schema`. Returns the parsed
+    answer (with "turns") or {"error": ...}; raises AgentStopped when the run should stop."""
+    import anthropic
+
+    messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
+    for turn in range(max_turns):
+        try:
+            resp = client.beta.messages.create(
+                model=model, max_tokens=max_tokens, system=system, tools=tool_defs, messages=messages,
+                output_config={"effort": effort, "format": {"type": "json_schema", "schema": schema}},
+                cache_control={"type": "ephemeral"},  # later turns of one run reuse the prefix
+                betas=[FALLBACK_BETA], fallbacks="default")
+        except (anthropic.AuthenticationError, anthropic.PermissionDeniedError, anthropic.BadRequestError,
+                anthropic.RateLimitError, anthropic.APIStatusError, anthropic.APIConnectionError) as e:
+            raise AgentStopped(f"{type(e).__name__}: {getattr(e, 'message', e)}") from e
+        if resp.stop_reason == "tool_use":
+            messages.append({"role": "assistant", "content": resp.content})  # unchanged: append-only
+            results: list[dict[str, Any]] = []
+            for b in resp.content:
+                if getattr(b, "type", None) == "tool_use":
+                    out, err = tools.run(b.name, dict(b.input or {}))
+                    results.append({"type": "tool_result", "tool_use_id": b.id, "content": out,
+                                    **({"is_error": True} if err else {})})
+            if turn == max_turns - 2:
+                results.append({"type": "text", "text": "No more lookups are available: answer now."})
+            messages.append({"role": "user", "content": results})
+            continue
+        if resp.stop_reason in ("refusal", "max_tokens"):
+            return {"error": resp.stop_reason}
+        text = next((b.text for b in resp.content if getattr(b, "type", None) == "text"), "")
+        try:
+            out = json.loads(text)
+        except json.JSONDecodeError:
+            return {"error": "unparseable answer"}
+        if not isinstance(out, dict):
+            return {"error": "unparseable answer"}
+        return {**out, "turns": turn + 1}
+    return {"error": "no answer within the lookup budget"}
+
+
+def _confidence(v: Any) -> float:
+    try:
+        return round(min(1.0, max(0.0, float(v))), 3)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 class TopicAgent:
     def __init__(self, model: str, api_key: str | None = None, client: Any = None):
         self.model = model
@@ -196,60 +264,24 @@ class TopicAgent:
     @property
     def client(self):
         if self._client is None:
-            import anthropic
-
-            self._client = anthropic.Anthropic(api_key=self._api_key, max_retries=2, timeout=120.0)
+            self._client = make_client(self._api_key)
         return self._client
 
     def judge(self, tools: LibraryTools, kind: str, p: dict[str, Any]) -> dict[str, Any]:
         """One item: returns {action, confidence, reason} or {error}. Raises AgentStopped when the
         run should stop (credentials, rate limit, network)."""
-        import anthropic
-
         allowed = ACTIONS[kind]
         question = ("Are these two topic labels the same topic?" if kind == "merge"
                     else "How do these two topics relate?")
-        messages: list[dict[str, Any]] = [{"role": "user", "content": (
-            f"{question}\nA: {p.get('a_name')} (key: {p.get('a')})\nB: {p.get('b_name')} (key: {p.get('b')})\n"
-            f"Allowed actions: {', '.join(allowed)}.")}]
-        for turn in range(MAX_TURNS):
-            try:
-                resp = self.client.beta.messages.create(
-                    model=self.model, max_tokens=8000, system=SYSTEM, tools=TOOLS, messages=messages,
-                    output_config={"effort": "medium", "format": {"type": "json_schema", "schema": _schema(kind)}},
-                    cache_control={"type": "ephemeral"},  # later turns of one item reuse the prefix
-                    betas=[FALLBACK_BETA], fallbacks="default")
-            except (anthropic.AuthenticationError, anthropic.PermissionDeniedError, anthropic.BadRequestError,
-                    anthropic.RateLimitError, anthropic.APIStatusError, anthropic.APIConnectionError) as e:
-                raise AgentStopped(f"{type(e).__name__}: {getattr(e, 'message', e)}") from e
-            if resp.stop_reason == "tool_use":
-                messages.append({"role": "assistant", "content": resp.content})  # unchanged: append-only
-                results: list[dict[str, Any]] = []
-                for b in resp.content:
-                    if getattr(b, "type", None) == "tool_use":
-                        out, err = tools.run(b.name, dict(b.input or {}))
-                        results.append({"type": "tool_result", "tool_use_id": b.id, "content": out,
-                                        **({"is_error": True} if err else {})})
-                if turn == MAX_TURNS - 2:
-                    results.append({"type": "text", "text": "No more lookups are available: answer now."})
-                messages.append({"role": "user", "content": results})
-                continue
-            if resp.stop_reason in ("refusal", "max_tokens"):
-                return {"error": resp.stop_reason}
-            text = next((b.text for b in resp.content if getattr(b, "type", None) == "text"), "")
-            try:
-                out = json.loads(text)
-            except json.JSONDecodeError:
-                return {"error": "unparseable answer"}
-            if not isinstance(out, dict) or out.get("action") not in allowed:
-                return {"error": "answer outside the allowed actions"}
-            try:
-                conf = min(1.0, max(0.0, float(out.get("confidence", 0))))
-            except (TypeError, ValueError):
-                conf = 0.0
-            return {"action": out["action"], "confidence": round(conf, 3), "reason": str(out.get("reason", ""))[:600],
-                    "turns": turn + 1}
-        return {"error": "no answer within the lookup budget"}
+        prompt = (f"{question}\nA: {p.get('a_name')} (key: {p.get('a')})\nB: {p.get('b_name')} (key: {p.get('b')})\n"
+                  f"Allowed actions: {', '.join(allowed)}.")
+        out = run_agent(self.client, self.model, SYSTEM, TOOLS, tools, prompt, _schema(kind))
+        if out.get("error"):
+            return {"error": out["error"]}
+        if out.get("action") not in allowed:
+            return {"error": "answer outside the allowed actions"}
+        return {"action": out["action"], "confidence": _confidence(out.get("confidence")),
+                "reason": str(out.get("reason", ""))[:600], "turns": out["turns"]}
 
 
 def _annotate(it: ReviewItem, verdict: dict[str, Any]) -> None:

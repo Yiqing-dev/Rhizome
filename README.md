@@ -118,7 +118,14 @@ nearby topics. It suggests one of the item's actions with a confidence and a rea
 page highlights it, and *Apply confident suggestions* turns every suggestion at 80 % or more into an
 ordinary, undoable decision. It runs after an ingest that raises new topic questions, nightly, from
 *Ask Claude* on the Review page, or `rhz agent-review [--apply-min 0.8]`. Verdicts are remembered, so
-a rebuild never pays for the same question twice. The server talks to the running app over REST and falls back to in-process calls.
+a rebuild never pays for the same question twice.
+
+A topic page also gets *Organise with Claude*: the agent reads the topic (its tagged papers and
+assets, neighbours, what it shares with them) and proposes a definition when there is none, more
+aliases, broader / narrower / same topics among the existing ones, and items tagged with it that do
+not belong. Proposals are checked against the library, then wait in the review queue as
+*Suggestions*; each one applied is an ordinary, undoable decision, and a skipped one is not proposed
+again. From the terminal: `rhz organise "GRN inference"`. The server talks to the running app over REST and falls back to in-process calls.
 Add "call `rhz_recall` before discussing an analysis plan" to your Project instructions.
 
 ### Remote machines (HPC)

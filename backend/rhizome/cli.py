@@ -372,6 +372,27 @@ def queue(kind: Optional[str] = None, limit: int = 20) -> None:
     typer.echo(f"({q['total']})")
 
 
+@app.command()
+def organise(topic: str) -> None:
+    """Let Claude organise one topic: proposed definition, aliases, parent / child topics, merges and
+    misfiled items go to the review queue as suggestions (needs the Anthropic backend)."""
+    _require_writable()
+    job = _client().run_job("organise_topic", {"topic": topic})
+    res = job.get("result") or {}
+    if job.get("status") == "failed":
+        typer.secho(job.get("error") or "failed", fg="red", err=True)
+        raise typer.Exit(1)
+    if _out(res):
+        return
+    if res.get("skipped") or res.get("stopped") or res.get("error"):
+        typer.secho(_("cli.agent_skipped", reason=res.get("skipped") or res.get("stopped") or res.get("error")), fg="yellow")
+        raise typer.Exit(1)
+    if res.get("summary"):
+        typer.echo(res["summary"])
+    typer.echo(_("cli.organise_done", n=res.get("queued", 0),
+                 what=", ".join(f"{k} {v}" for k, v in (res.get("by_what") or {}).items()) or "-"))
+
+
 @app.command("agent-review")
 def agent_review(limit: int = typer.Option(25, help="Items to judge in this run"),
                  force: bool = typer.Option(False, help="Judge again items that already have a verdict"),
