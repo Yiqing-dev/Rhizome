@@ -155,7 +155,6 @@ export default function SettingsPage() {
         <h1>{t("settings.title")}</h1>
         {saved && <span className="pill ok">{t("settings.saved")}</span>}
       </div>
-      <Loading error={st.error} loading={st.loading && !s} />
       <section className="panel">
         <h2>{t("settings.appearance")}</h2>
         <div className="form-grid">
@@ -181,6 +180,7 @@ export default function SettingsPage() {
           </div></label>
         <p className="hint">{t("settings.appearance_hint")}</p>
       </section>
+      <Loading error={st.error} loading={st.loading && !s} skeleton="panels" />
       {s && (
         <>
           <section className="panel" id="project-setup">

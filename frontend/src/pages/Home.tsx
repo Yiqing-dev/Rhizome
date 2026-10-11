@@ -74,7 +74,7 @@ export default function Home() {
         </form>
       </section>
 
-      <Loading error={stats.error} loading={stats.loading && !s} />
+      <Loading error={stats.error} loading={stats.loading && !s} skeleton="tiles" />
       {s && total === 0 && (
         <section className="steps">
           <div className="step"><strong>{t("home.step1_t")}</strong>{t("home.step1")}{" "}

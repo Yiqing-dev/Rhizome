@@ -39,7 +39,7 @@ export default function DigestPage() {
             )}</span>
         </p>
       )}
-      <Loading error={d.error} loading={d.loading && !d.data} />
+      <Loading error={d.error} loading={d.loading && !d.data} skeleton="digest" />
       {d.data && (
         <>
           <section className="stack-sm">

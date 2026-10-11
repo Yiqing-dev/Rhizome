@@ -67,7 +67,7 @@ export default function MapPage() {
           )}
         </div>
       )}
-      <Loading error={map.error} loading={map.loading && !map.data} />
+      <Loading error={map.error} loading={map.loading && !map.data} skeleton="map" />
       {map.data && (nodes.length ? (
         <div className="map-layout">
           <section className="graph-card">

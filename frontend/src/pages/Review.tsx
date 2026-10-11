@@ -136,7 +136,7 @@ export default function ReviewPage({ query }: { query?: URLSearchParams }) {
         </div>
       )}
       {agentMsg && <div className="notice ok small">{agentMsg}</div>}
-      <Loading error={q.error} loading={q.loading && !q.data} />
+      <Loading error={q.error} loading={q.loading && !q.data} skeleton="review" />
       {err && <div className="notice error">{err}</div>}
       {q.data && !items.length && <EmptyState icon={<CheckIcon />} title={t("review.empty")} hint={t("review.empty_hint")} />}
       {items.length > 0 && (

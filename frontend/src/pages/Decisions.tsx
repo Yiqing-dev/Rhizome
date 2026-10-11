@@ -35,7 +35,7 @@ export default function DecisionsPage() {
         </div>
       </div>
       {msg && <div className={`notice ${msg.ok ? "ok" : "error"}`}>{msg.text}</div>}
-      <Loading error={list.error} loading={list.loading && !list.data} />
+      <Loading error={list.error} loading={list.loading && !list.data} skeleton="table" />
       {list.data && !rows.length && <EmptyState title={t("decisions.empty")} />}
       {rows.length > 0 && (
         <table className="decisions">

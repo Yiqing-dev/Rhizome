@@ -32,7 +32,7 @@ export default function TopicPage({ id, query }: { id: number; query?: URLSearch
   }
   return (
     <div className={`stack ${page.loading && p ? "reloading" : ""}`}>
-      <Loading error={page.error} loading={page.loading && !p} />
+      <Loading error={page.error} loading={page.loading && !p} skeleton="topic" />
       {p && (
         <>
           <header className="entity-head">

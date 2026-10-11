@@ -274,7 +274,7 @@ export default function EntityPage({ id }: { id: number }) {
   const edgeTypes = graph.data ? new Set(graph.data.edges.map((e) => e.type)) : undefined;
   return (
     <div className="stack">
-      <Loading error={card.error} loading={card.loading && !c} />
+      <Loading error={card.error} loading={card.loading && !c} skeleton="entity" />
       {c && (
         <>
           <header className="entity-head">

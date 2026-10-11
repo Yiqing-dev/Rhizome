@@ -548,3 +548,24 @@ button.swatch, button.swatch:hover, button.swatch.active { width: 32px; height: 
 button.swatch:hover { transform: scale(1.08); border-color: var(--line-strong); }
 button.swatch.active { border-color: var(--ink); }
 .swatch:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* ---- skeletons: the page's shape while its first request is in flight ---- */
+.sk {
+  display: block; height: 0.9rem; max-width: 100%; border-radius: 6px; flex: none;
+  background: linear-gradient(100deg, var(--line) 20%, color-mix(in srgb, var(--line) 45%, var(--surface)) 45%, var(--line) 70%);
+  background-size: 220% 100%; animation: sk-shimmer 1.6s linear infinite;
+}
+.sk.round { border-radius: 999px; }
+.skeleton { animation: sk-in 0.45s both; }  /* invisible for the first moments: a fast answer shows no flash */
+@keyframes sk-shimmer { from { background-position: 120% 0; } to { background-position: -100% 0; } }
+@keyframes sk-in { 0%, 35% { opacity: 0; } 100% { opacity: 1; } }
+.skeleton .hit, .skeleton .tile, .skeleton .card, .skeleton .panel, .skeleton .queue, .skeleton .graph-card, .skeleton .flashcard { box-shadow: none; }
+.skeleton .hit { border-left-color: var(--line); }
+.skeleton .row { align-items: center; }
+.sk-pad { padding: 1rem 1.1rem; display: flex; flex-direction: column; gap: 0.6rem; }
+.sk-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.9rem; }
+.sk-graph { padding: 0.9rem; box-sizing: border-box; }
+.sk-graph .sk { border-radius: var(--radius-sm); }
+.sk-table th .sk, .sk-table td .sk { display: inline-block; vertical-align: middle; }
+.skeleton .queue li { cursor: default; }
+.skeleton .queue li:hover { background: none; }

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api, errorText, type Stats } from "./api";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import ImportOverlay from "./components/ImportOverlay";
+import { Skeleton } from "./components/Skeleton";
 import { isLocked, refresh as refreshImport, useImport } from "./importStore";
 import { showToast, Toasts } from "./components/Toast";
 import { Logo, SearchIcon } from "./components/icons";
@@ -271,7 +272,7 @@ export default function App() {
         <JobBanner />
         <ErrorBoundary resetKey={route.path.join("/")}
           labels={{ title: t("common.page_error"), home: t("nav.home"), copy: t("common.copy_details") }}>
-          <Suspense fallback={<div className="muted">{t("common.loading")}</div>}>{page}</Suspense>
+          <Suspense fallback={<Skeleton kind="page" />}>{page}</Suspense>
         </ErrorBoundary>
         <Toasts />
       </main>

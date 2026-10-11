@@ -75,7 +75,7 @@ export default function CardsPage() {
         </div>
         {cards.length > 0 && <span className="muted small">{t("cards.progress", { done, total: done + cards.length - i })}</span>}
       </div>
-      <Loading error={due.error} loading={due.loading && !due.data} />
+      <Loading error={due.error} loading={due.loading && !due.data} skeleton="flashcard" />
       {due.data && !card && waiting.length > 0 && (
         <EmptyState icon={<CardIcon />} title={t("cards.learning_wait", { n: waiting.length })} hint={t("cards.learning_hint", { min: nextWait ?? 0 })} />
       )}

@@ -5,6 +5,7 @@ import { errorText, type EntityType, type Hit, type Source } from "../api";
 import { href } from "../router";
 import { EDGE_TYPES, ENTITY_TYPES } from "./colors";
 import { LeafIcon } from "./icons";
+import { Skeleton, type SkeletonKind } from "./Skeleton";
 
 export function TypeBadge({ type }: { type: EntityType | string }) {
   const { t } = useTranslation();
@@ -70,12 +71,13 @@ export function HitRow({ h, score }: { h: Hit; score?: number | null }) {
   );
 }
 
-export function Loading({ error, loading }: { error: unknown; loading: boolean }) {
+/** Error notice, or while loading a skeleton in the shape of what the page will show. */
+export function Loading({ error, loading, skeleton = "list" }: { error: unknown; loading: boolean; skeleton?: SkeletonKind }) {
   const { t } = useTranslation();
   if (error) {
     return <div className="notice error"><pre>{errorText(error, t)}</pre></div>;
   }
-  return loading ? <div className="muted">{t("common.loading")}</div> : null;
+  return loading ? <Skeleton kind={skeleton} /> : null;
 }
 
 export function EmptyState({ title, hint, icon, children }: { title: string; hint?: string; icon?: ReactNode; children?: ReactNode }) {
