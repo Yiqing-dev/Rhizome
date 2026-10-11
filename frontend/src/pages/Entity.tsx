@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ApiError, errorText, type Card, type EdgeView, type ExportView } from "../api";
 import LocalGraph from "../components/LocalGraph";
@@ -269,6 +269,7 @@ export default function EntityPage({ id }: { id: number }) {
   const graph = useLoad(() => api.neighbors(id, hops), [id, hops]);
   const related = useLoad(() => api.related(id), [id]);
   const c = card.data;
+  useEffect(() => { if (c) document.title = `${c.name} · ${t("app.name")}`; }, [c, t]);
   const nodeTypes = graph.data ? new Set(graph.data.nodes.map((n) => n.type)) : undefined;
   const edgeTypes = graph.data ? new Set(graph.data.edges.map((e) => e.type)) : undefined;
   return (

@@ -118,6 +118,8 @@ class SecretBody(BaseModel):
 
 class SettingsPatch(BaseModel):
     language: str | None = None
+    theme: str | None = None
+    accent: str | None = None
     offline: bool | None = None
     contact_email: str | None = None
     inbox_dir: str | None = None
@@ -250,7 +252,8 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         moved = getattr(app.state, "moved_to", None)
         out: dict[str, Any] = {"ok": True, "app": "rhizome", "read_only": read_only or bool(moved), "moved_to": moved}
         if _authed(request):
-            out.update(version=__version__, language=ui_language())
+            st = get_settings()
+            out.update(version=__version__, language=ui_language(), theme=st.theme, accent=st.accent)
         return out
 
     # ---- ingest ----

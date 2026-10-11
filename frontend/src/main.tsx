@@ -5,6 +5,7 @@ import "@fontsource-variable/inter";
 import "@fontsource-variable/source-serif-4";
 import { api, captureToken } from "./api";
 import { applyBackendLanguage } from "./i18n";
+import { applyBackendAppearance } from "./theme";
 import App from "./App";
 import "./styles.css";
 
@@ -24,6 +25,9 @@ function render() {
 // agree on it); localStorage is only the first-paint guess, since the desktop app has a new origin
 // (random port) on every launch. Wait at most 1.5 s for it, then render either way.
 Promise.race([api.health(), new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500))])
-  .then((h) => { if (h && h.language) applyBackendLanguage(h.language); })
+  .then((h) => {
+    if (h && h.language) applyBackendLanguage(h.language);
+    if (h && (h.theme || h.accent)) applyBackendAppearance(h.theme, h.accent);
+  })
   .catch(() => undefined)
   .finally(render);

@@ -23,6 +23,7 @@ export default function TopicPage({ id, query }: { id: number; query?: URLSearch
   const [more, setMore] = useState<Record<string, TopicItem[]>>({});
   useEffect(() => setMore({}), [id, role]);
   const p = page.data;
+  useEffect(() => { if (p) document.title = `${p.topic.name} · ${t("app.name")}`; }, [p, t]);
   async function showMore(col: (typeof COLUMNS)[number]) {
     if (!p) return;
     const have = p.columns[col].length + (more[col]?.length ?? 0);

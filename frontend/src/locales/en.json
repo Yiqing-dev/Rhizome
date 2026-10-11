@@ -438,7 +438,21 @@
     "anthropic_key_stored": "A key is stored in the system credential store",
     "anthropic_key_missing": "No key set: judgements go to the review queue",
     "anthropic_key_saved": "Key stored in the system credential store.",
-    "anthropic_key_removed": "Stored key removed."
+    "anthropic_key_removed": "Stored key removed.",
+    "appearance": "Appearance",
+    "appearance_hint": "Theme and colour apply at once and are kept with your other settings, so every window and launch agrees.",
+    "theme": "Theme",
+    "theme_system": "System",
+    "theme_light": "Light",
+    "theme_dark": "Dark",
+    "accent": "Colour",
+    "accent_green": "Green",
+    "accent_teal": "Teal",
+    "accent_blue": "Blue",
+    "accent_violet": "Violet",
+    "accent_rose": "Rose",
+    "accent_amber": "Amber",
+    "accent_graphite": "Graphite"
   },
   "lang": {
     "short_en": "EN",

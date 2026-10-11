@@ -207,6 +207,8 @@ class Settings(BaseSettings):
     # None -> sqlite:///<data_dir>/rhizome.db ; "postgresql+psycopg://..." for the optional backend
     database_url: str | None = None
     language: Literal["auto", "en", "zh_CN"] = "auto"
+    theme: Literal["system", "light", "dark"] = "system"  # UI appearance; the UI reads both at boot
+    accent: Literal["green", "teal", "blue", "violet", "rose", "amber", "graphite"] = "green"
     inbox_dir: Path | None = None
     # None -> <data_dir>/backups. Point it at another disk or a synced folder: backups are closed,
     # consistent copies, unlike the live database (never sync the data dir itself while it runs).

@@ -165,7 +165,7 @@ export interface SystemInfo {
 export interface BackupStatus { dir: string; count: number; bytes: number; last: string | null; last_daily: string | null; error?: string }
 
 export const api = {
-  health: () => req<{ ok: boolean; version: string; read_only: boolean; moved_to?: string | null; language: string }>("GET", "/health"),
+  health: () => req<{ ok: boolean; version: string; read_only: boolean; moved_to?: string | null; language: string; theme?: string; accent?: string }>("GET", "/health"),
   stats: () => req<Stats>("GET", "/stats"),
   search: (q: string, f: Record<string, unknown> = {}) =>
     req<{ results: Hit[]; has_more?: boolean; total?: number; offset?: number }>("GET", "/search", undefined, { q, ...f }),

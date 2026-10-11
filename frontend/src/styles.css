@@ -20,9 +20,11 @@
   --muted: #656a61;
   --line: #e4e1d6;
   --line-strong: #cfcbbd;
-  --accent: #3e7d3b;
+  /* the accent is derived from one base colour so a preset (data-accent) changes everything at once */
+  --accent-base: #3e7d3b;
+  --accent: var(--accent-base);
   --accent-ink: #ffffff;
-  --accent-soft: #e6f0e1;
+  --accent-soft: color-mix(in srgb, var(--accent-base) 13%, var(--surface));
   --link: #2b5bd0;
   --ok: #1f7a46;
   --warn: #a8600a;
@@ -51,8 +53,8 @@
   font-feature-settings: "cv11", "ss01", "tnum";
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+/* dark: chosen in Settings (data-theme) or following the system when nothing is chosen */
+:root[data-theme="dark"] {
     --c-work: #8ea2ff;
     --c-dataset: #4fc4a0;
     --c-method: #f29a4a;
@@ -69,9 +71,41 @@
     --muted: #a3a79b;
     --line: #2e322a;
     --line-strong: #434839;
-    --accent: #8ec97a;
-    --accent-ink: #11200d;
-    --accent-soft: #233021;
+    --accent: color-mix(in oklch, var(--accent-base) 58%, white);
+    --accent-ink: color-mix(in srgb, var(--accent-base) 35%, black);
+    --accent-soft: color-mix(in srgb, var(--accent-base) 20%, var(--surface));
+    --link: #9fb6ff;
+    --ok: #7ed49b;
+    --warn: #f0b35a;
+    --warn-soft: #3a2d14;
+    --err: #ff8a7a;
+    --err-soft: #40201c;
+    --user: #c1a6ff;
+    --user-soft: #2d2541;
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-2: 0 10px 24px -10px rgb(0 0 0 / 0.6);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --c-work: #8ea2ff;
+    --c-dataset: #4fc4a0;
+    --c-method: #f29a4a;
+    --c-idea: #ab9fe8;
+    --c-claim: #ef76b4;
+    --c-topic: #9bcf5a;
+    --c-organism: #d4a95a;
+    --c-modality: #a5aab3;
+    --bg: #15170f;
+    --bg-elev: #1b1e15;
+    --surface: #20241b;
+    --ink: #ebe9df;
+    --ink-2: #c6c4b8;
+    --muted: #a3a79b;
+    --line: #2e322a;
+    --line-strong: #434839;
+    --accent: color-mix(in oklch, var(--accent-base) 58%, white);
+    --accent-ink: color-mix(in srgb, var(--accent-base) 35%, black);
+    --accent-soft: color-mix(in srgb, var(--accent-base) 20%, var(--surface));
     --link: #9fb6ff;
     --ok: #7ed49b;
     --warn: #f0b35a;
@@ -84,6 +118,16 @@
     --shadow-2: 0 10px 24px -10px rgb(0 0 0 / 0.6);
   }
 }
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+
+/* accent presets (Settings → Appearance); light and dark shades derive from the base */
+:root[data-accent="teal"] { --accent-base: #1f7f86; }
+:root[data-accent="blue"] { --accent-base: #2f62c9; }
+:root[data-accent="violet"] { --accent-base: #6a4fc2; }
+:root[data-accent="rose"] { --accent-base: #c23a6a; }
+:root[data-accent="amber"] { --accent-base: #b26a0b; }
+:root[data-accent="graphite"] { --accent-base: #4f5560; }
 
 /* ---- base ------------------------------------------------------------------------- */
 *, *::before, *::after { box-sizing: border-box; }
@@ -137,9 +181,12 @@ label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; c
 label > input, label > select { color: var(--ink); }
 label.check { flex-direction: row; align-items: center; gap: 0.45rem; cursor: pointer; }
 label.check input { accent-color: var(--accent); width: 1rem; height: 1rem; margin: 0; padding: 0; }
+label.small { flex-direction: row; align-items: center; gap: 0.4rem; }
+label.small input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
 
 /* ---- shell ------------------------------------------------------------------------- */
-.shell { min-height: 100vh; display: flex; flex-direction: column; }
+.shell { min-height: 100vh; display: flex; flex-direction: column;
+  background: radial-gradient(900px 360px at 50% -120px, color-mix(in srgb, var(--accent) 11%, transparent), transparent 75%) no-repeat; }
 .topbar {
   position: sticky; top: 0; z-index: 20; backdrop-filter: blur(10px);
   background: color-mix(in srgb, var(--bg) 82%, transparent); border-bottom: 1px solid var(--line);
@@ -189,6 +236,8 @@ label.check input { accent-color: var(--accent); width: 1rem; height: 1rem; marg
 .lang-toggle button { border: none; border-radius: 0; padding: 0.25rem 0.6rem; font-size: 0.8rem; background: var(--surface); }
 .lang-toggle button.active { background: var(--accent); color: var(--accent-ink); }
 main { flex: 1; width: 100%; max-width: 1240px; margin: 0 auto; padding: 1.4rem 24px 4rem; }
+main > .stack, main > .page { animation: page-in 0.18s ease-out; }
+@keyframes page-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
 
 /* ---- layout primitives --------------------------------------------------------------- */
 .stack { display: flex; flex-direction: column; gap: 1.1rem; }
@@ -445,7 +494,7 @@ a.tile:hover { text-decoration: none; transform: translateY(-1px); box-shadow: v
   .pair .link-mark { flex-direction: row; }
   .flashcard { padding: 1.3rem; }
 }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
 table.decisions { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 table.decisions th, table.decisions td { text-align: left; padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -483,8 +532,19 @@ table.decisions tr.revoked td:last-child { text-decoration: none; }
 .import-results li { padding: 0.45rem 0; border-top: 1px solid var(--line); }
 .import-results li.failed strong { color: var(--danger, #b42318); }
 .import-results pre { white-space: pre-wrap; font-size: 0.8rem; }
-.import-lock:has(.import-pill) { align-items: flex-end; justify-content: flex-end; background: color-mix(in srgb, var(--bg) 25%, transparent); }
+.import-lock:has(.import-pill) { align-items: flex-end; justify-content: flex-start; background: color-mix(in srgb, var(--bg) 25%, transparent); }
 .import-pill { display: flex; flex-direction: column; align-items: stretch; gap: 0.35rem; min-width: 240px; padding: 0.6rem 0.8rem; border-radius: var(--radius); border: 1px solid var(--line-strong); background: var(--surface); box-shadow: var(--shadow-1); cursor: pointer; text-align: left; }
 .import-pill > span { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; }
 .import-pill svg { width: 15px; height: 15px; color: var(--accent); flex: none; }
 .import-error { position: fixed; left: 50%; bottom: 1.2rem; transform: translateX(-50%); z-index: 100; max-width: 560px; }
+
+/* ---- appearance (Settings) ---------------------------------------------------------------- */
+.segmented { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 999px; overflow: hidden; background: var(--surface); }
+.segmented button { border: none; border-radius: 0; padding: 0.4rem 0.9rem; background: transparent; }
+.segmented button + button { border-left: 1px solid var(--line); }
+.segmented button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.swatches { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+button.swatch, button.swatch:hover, button.swatch.active { width: 32px; height: 32px; border-radius: 50%; border: 2px solid transparent; padding: 0; background: var(--sw); box-shadow: inset 0 0 0 2px var(--surface); cursor: pointer; transition: transform 0.1s; }
+button.swatch:hover { transform: scale(1.08); border-color: var(--line-strong); }
+button.swatch.active { border-color: var(--ink); }
+.swatch:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }

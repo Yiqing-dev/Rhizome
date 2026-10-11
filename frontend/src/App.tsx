@@ -211,6 +211,21 @@ export default function App() {
   useEffect(() => {
     document.documentElement.lang = i18n.language;
   }, [i18n.language]);
+  useEffect(() => {  // the window title names the page (entity and topic pages set their own)
+    const key = [...NAV, ...MORE].find(([p]) => p === (head ?? ""))?.[1] ?? (head === "settings" ? "nav.settings" : null);
+    if (key && head !== "entity" && head !== "topic") document.title = head ? `${t(key)} · ${t("app.name")}` : t("app.name");
+  }, [head, i18n.language, t]);
+  useEffect(() => {  // "/" anywhere focuses the search box, as on most sites
+    const on = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (document.body.dataset.importing === "1") return;
+      const box = document.querySelector<HTMLInputElement>(".topbar-search input, .searchbar input");
+      if (box) { e.preventDefault(); box.focus(); box.select(); }
+    };
+    window.addEventListener("keydown", on);
+    return () => window.removeEventListener("keydown", on);
+  }, []);
   const refreshQueue = useCallback(() => {
     api.stats().then((s) => { setQueue(s.review_queue + 0); setUpdate(s.update ?? null); }).catch(() => undefined);
   }, []);

@@ -438,7 +438,21 @@
     "anthropic_key_stored": "系统凭据存储里已有密钥",
     "anthropic_key_missing": "尚未设置密钥：判定会进入审核队列",
     "anthropic_key_saved": "密钥已存入系统凭据存储。",
-    "anthropic_key_removed": "已删除存储的密钥。"
+    "anthropic_key_removed": "已删除存储的密钥。",
+    "appearance": "外观",
+    "appearance_hint": "主题和颜色立即生效，并和其他设置一起保存，所以每个窗口、每次启动都一致。",
+    "theme": "主题",
+    "theme_system": "跟随系统",
+    "theme_light": "浅色",
+    "theme_dark": "深色",
+    "accent": "主色",
+    "accent_green": "绿",
+    "accent_teal": "青",
+    "accent_blue": "蓝",
+    "accent_violet": "紫",
+    "accent_rose": "玫红",
+    "accent_amber": "琥珀",
+    "accent_graphite": "石墨"
   },
   "lang": {
     "short_en": "EN",

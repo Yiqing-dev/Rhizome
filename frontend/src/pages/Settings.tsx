@@ -6,6 +6,7 @@ import { Loading } from "../components/common";
 import { SettingsIcon } from "../components/icons";
 import { useJob, useLoad } from "../hooks";
 import { backendLang, fmtDate, setLanguage } from "../i18n";
+import { ACCENTS, THEMES, applyAppearance, currentAccent, currentTheme, type Theme } from "../theme";
 
 export default function SettingsPage() {
   const { t, i18n } = useTranslation();
@@ -43,6 +44,19 @@ export default function SettingsPage() {
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
     st.reload();
+  }
+
+  const [theme, setTheme] = useState<Theme>(currentTheme);
+  const [accent, setAccent] = useState<string>(currentAccent);
+  function pickTheme(th: Theme) {
+    setTheme(th);
+    applyAppearance(th, accent);
+    patch({ theme: th }).catch(() => undefined);
+  }
+  function pickAccent(name: string) {
+    setAccent(name);
+    applyAppearance(theme, name);
+    patch({ accent: name }).catch(() => undefined);
   }
 
   async function lang(l: "en" | "zh-CN") {
@@ -143,12 +157,29 @@ export default function SettingsPage() {
       </div>
       <Loading error={st.error} loading={st.loading && !s} />
       <section className="panel">
-        <h2>{t("settings.language")}</h2>
-        <div className="row">
-          <button className={cur === "en" ? "active" : ""} onClick={() => lang("en")} lang="en">{t("settings.lang_en")}</button>
-          <button className={cur === "zh-CN" ? "active" : ""} onClick={() => lang("zh-CN")} lang="zh-CN">{t("settings.lang_zh")}</button>
+        <h2>{t("settings.appearance")}</h2>
+        <div className="form-grid">
+          <label>{t("settings.language")}
+            <div className="segmented" role="group" aria-label={t("settings.language")}>
+              <button className={cur === "en" ? "active" : ""} onClick={() => lang("en")} lang="en">{t("settings.lang_en")}</button>
+              <button className={cur === "zh-CN" ? "active" : ""} onClick={() => lang("zh-CN")} lang="zh-CN">{t("settings.lang_zh")}</button>
+            </div></label>
+          <label>{t("settings.theme")}
+            <div className="segmented" role="group" aria-label={t("settings.theme")}>
+              {THEMES.map((th) => (
+                <button key={th} className={theme === th ? "active" : ""} onClick={() => pickTheme(th)}>{t(`settings.theme_${th}`)}</button>
+              ))}
+            </div></label>
         </div>
-        <p className="hint">{t("settings.language_hint")}</p>
+        <label>{t("settings.accent")}
+          <div className="swatches" role="radiogroup" aria-label={t("settings.accent")}>
+            {Object.entries(ACCENTS).map(([name, hex]) => (
+              <button key={name} role="radio" aria-checked={accent === name} title={t(`settings.accent_${name}`)}
+                className={`swatch ${accent === name ? "active" : ""}`} style={{ "--sw": hex } as React.CSSProperties}
+                onClick={() => pickAccent(name)} />
+            ))}
+          </div></label>
+        <p className="hint">{t("settings.appearance_hint")}</p>
       </section>
       {s && (
         <>
