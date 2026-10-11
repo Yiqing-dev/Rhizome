@@ -55,7 +55,7 @@ The main surface is small on purpose; everything else is one click away.
 
 | Where | What |
 | --- | --- |
-| **Home** | search box, asset counts, a one-line to-do (cards due, items in the review queue), the *Add a paper* drop zone; *Recall* folds out below it |
+| **Home** | search box, asset counts, a one-line to-do (cards due, items in the review queue), the *Add a paper* drop zone; *Recall* folds out below it. Dropped files import as one batch with a progress dialog; the app is locked until it finishes (the dialog can be minimised, and survives a reload or restart) |
 | **Topic map** / **Review cards** | the topic layer as a graph (new topics fold out at the bottom); FSRS review session |
 | **More ▾** | the search page with filters, the review queue (its count sits on the menu), the weekly digest, the decision log |
 | **Settings** | language, chat Project setup (export instructions, vocabulary), storage folders, backups, Claude Desktop. *Advanced* holds moving the data folder, offline mode, the backup folder and restore, models and inference backend, review limits, remote snapshots |

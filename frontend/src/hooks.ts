@@ -28,6 +28,7 @@ export function useLoad<T>(fn: () => Promise<T>, deps: unknown[]): {
 export function useKeys(handler: (e: KeyboardEvent) => void, deps: unknown[]): void {
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
+      if (document.body.dataset.importing === "1") return;  // an import holds the app
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       // a held key, an IME composition or a browser shortcut (Ctrl+1) must not grade or decide

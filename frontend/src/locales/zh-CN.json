@@ -534,5 +534,24 @@
     "available": "Rhizome {{latest}} 已发布（当前 {{current}}）。",
     "open": "去下载",
     "later": "以后再说"
+  },
+  "import": {
+    "uploading": "正在上传文件…",
+    "queued": "等待导入…",
+    "running": "正在导入…",
+    "finished": "导入完成",
+    "uploaded": "{{mb}} / {{total}} MB",
+    "count": "{{done}} / {{total}} 个文件",
+    "locked_hint": "导入完成前软件处于锁定状态。可以把这个窗口最小化，导入会继续进行；即使刷新页面也会回到这里。",
+    "minimize": "最小化",
+    "expand": "显示导入进度",
+    "done": "完成",
+    "close": "关闭",
+    "summary": "成功导入 {{ok}} 个，失败 {{failed}} 个",
+    "skipped": "跳过 {{n}} 个非 RXF 文件：{{files}}",
+    "interrupted": "导入在全部文件完成前中断了",
+    "repair": "修复后导入（{{n}}）",
+    "open": "打开",
+    "duplicate": "库里已有"
   }
 }

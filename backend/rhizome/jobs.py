@@ -264,6 +264,13 @@ def _agent_review(s: Session, p: dict[str, Any]) -> dict[str, Any]:
                              force=bool(p.get("force")))
 
 
+@handler("ingest_batch")
+def _ingest_batch(s: Session, p: dict[str, Any]) -> dict[str, Any]:
+    from .services.imports import run_batch
+
+    return run_batch(s, p["batch"], only=p.get("only"), repair=bool(p.get("repair")))
+
+
 @handler("organise_topic")
 def _organise_topic(s: Session, p: dict[str, Any]) -> dict[str, Any]:
     from .inference.organise import organise_topic

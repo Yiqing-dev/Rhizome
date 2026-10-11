@@ -534,5 +534,24 @@
     "available": "Rhizome {{latest}} is available (you have {{current}}).",
     "open": "Download",
     "later": "Later"
+  },
+  "import": {
+    "uploading": "Uploading files…",
+    "queued": "Waiting to import…",
+    "running": "Importing…",
+    "finished": "Import finished",
+    "uploaded": "{{mb}} of {{total}} MB",
+    "count": "{{done}} of {{total}} files",
+    "locked_hint": "The app is locked until the import finishes. You can minimise this window; the import keeps running and comes back here even after a reload.",
+    "minimize": "Minimise",
+    "expand": "Show import progress",
+    "done": "Done",
+    "close": "Close",
+    "summary": "{{ok}} imported, {{failed}} failed",
+    "skipped": "{{n}} files skipped (not RXF): {{files}}",
+    "interrupted": "The import stopped before every file was done",
+    "repair": "Repair and import ({{n}})",
+    "open": "Open",
+    "duplicate": "Already in the library"
   }
 }

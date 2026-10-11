@@ -438,3 +438,6 @@ msgstr "已采纳 {n} 条建议（任何一条都可以用 rhz undo / 决策记�
 
 msgid "cli.organise_done"
 msgstr "{n} 条建议已进入审核队列（{what}）；在那里采纳，或用 rhz agent-review --apply-min"
+
+msgid "api.import_busy"
+msgstr "还有一次导入正在进行，请等它完成。"

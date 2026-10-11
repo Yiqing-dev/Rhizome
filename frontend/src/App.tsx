@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-import { lazy, Suspense, useEffect, useState, useCallback } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { api, errorText, type Stats } from "./api";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import ImportOverlay from "./components/ImportOverlay";
+import { isLocked, refresh as refreshImport, useImport } from "./importStore";
 import { showToast, Toasts } from "./components/Toast";
 import { Logo, SearchIcon } from "./components/icons";
 import { useJob, useRefreshOnFocus } from "./hooks";
@@ -199,6 +201,10 @@ export default function App() {
     };
   }, [t]);
   const route = useRoute();
+  const importing = isLocked(useImport());
+  const shell = useRef<HTMLDivElement>(null);
+  useEffect(() => { void refreshImport(); }, []);  // an import started before a reload is shown again
+  useEffect(() => { shell.current?.toggleAttribute("inert", importing); }, [importing]);
   const [head, id] = route.path;
   const [queue, setQueue] = useState<number>(0);
   const [update, setUpdate] = useState<Stats["update"]>(null);
@@ -226,7 +232,8 @@ export default function App() {
   }
   const isHome = !head;
   return (
-    <div className="shell">
+    <>
+    <div className="shell" ref={shell} aria-busy={importing}>
       <header className="topbar">
         <div className="topbar-inner">
           <a className="brand" href={href("")}><Logo />{t("app.name")}</a>
@@ -254,5 +261,7 @@ export default function App() {
         <Toasts />
       </main>
     </div>
+    <ImportOverlay />
+    </>
   );
 }

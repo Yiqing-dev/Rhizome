@@ -284,6 +284,44 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
             raise HTTPException(422, res.to_dict())
         return res.to_dict()
 
+    # ---- imports from the app: one batch at a time, progress the UI can always find again ----
+    @app.post("/import", dependencies=W)
+    async def import_files(request: Request, s: Session = Depends(db)) -> dict[str, Any]:
+        from ..services.imports import ImportBusy, NothingToImport, stage
+
+        form = await request.form()
+        uploads = [(f.filename or "upload", await f.read()) for f in form.getlist("files") if not isinstance(f, str)]
+        try:
+            return await run_in_threadpool(lambda: stage(s, uploads, repair=str(form.get("repair", "")).lower() in ("1", "true")))
+        except ImportBusy:
+            raise HTTPException(409, _("api.import_busy"))
+        except NothingToImport:
+            raise HTTPException(422, {"code": "not_rxf"})
+
+    @app.get("/import/active", dependencies=A)
+    def import_active(s: Session = Depends(db)) -> dict[str, Any]:
+        from ..services.imports import active
+
+        return {"active": active(s)}
+
+    @app.post("/import/{batch}/repair", dependencies=W)
+    def import_repair(batch: str, s: Session = Depends(db)) -> dict[str, Any]:
+        from ..services.imports import ImportBusy, repair_failed
+
+        try:
+            return repair_failed(s, batch)
+        except ImportBusy:
+            raise HTTPException(409, _("api.import_busy"))
+
+    @app.delete("/import/{batch}", dependencies=W)
+    def import_dismiss(batch: str, s: Session = Depends(db)) -> dict[str, Any]:
+        from ..services.imports import ImportBusy, dismiss
+
+        try:
+            return {"dismissed": dismiss(s, batch)}
+        except ImportBusy:
+            raise HTTPException(409, _("api.import_busy"))
+
     # ---- inbox files that failed (error/) ----
     def _failed_file(name: str) -> Path:
         err = get_settings().inbox / "error"

@@ -7,8 +7,8 @@ import { SparkIcon, UploadIcon } from "../components/icons";
 import { useLoad, useRefreshOnFocus } from "../hooks";
 import { fmtNum } from "../i18n";
 import { go, href } from "../router";
+import { start as startImport, useImport } from "../importStore";
 
-const RXF_HEAD = /^[ \t]*rxf_version[ \t]*:/m;
 const TILE_TYPES = ["work", "dataset", "method", "idea", "claim", "topic"] as const;
 const RECALL_MAX = 4000; // the server reads this much of the context
 
@@ -34,63 +34,17 @@ export default function Home() {
     }
   }
   const [over, setOver] = useState(false);
-  const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
+  const imp = useImport();
+  const busy = !!imp.uploading || !!imp.progress;
   const fileInput = useRef<HTMLInputElement>(null);
-  const [ingestMsg, setIngestMsg] = useState<{ ok: boolean; text: string; related?: any[]; retry?: File[]; repairable?: string[] } | null>(null);
+  const [ingestMsg, setIngestMsg] = useState<{ ok: boolean; text: string; related?: any[] } | null>(null);
 
   const failed = useLoad(() => api.inboxFailed(), []);
   const fixes = (codes: string[]) => codes.map((c) => t(`home.fix.${c}`)).join("; ");
 
-  async function onFiles(list: FileList | File[] | null, repair = false) {
-    if (busy) return;  // a second drop while importing would interleave two runs
-    const files = Array.from(list ?? []);
-    const stem = (n: string) => n.replace(/\.[^.]+$/, "").toLowerCase();
-    const pdfs = new Map(files.filter((f) => /\.pdf$/i.test(f.name)).map((f) => [stem(f.name), f]));
-    // RXF is recognised by content, not by name or extension (chat clients name files oddly)
-    const rxf: File[] = [];
-    for (const f of files) {
-      if (/\.pdf$/i.test(f.name)) continue;
-      if (/\.(ya?ml|rxf)$/i.test(f.name)) { rxf.push(f); continue; }
-      try {
-        if (RXF_HEAD.test(await f.slice(0, 65536).text())) rxf.push(f);
-      } catch {
-        /* a folder or an unreadable file: skipped */
-      }
-    }
-    if (!rxf.length) {
-      setIngestMsg({ ok: false, text: t("home.drop_not_rxf") });
-      return;
-    }
-    const lines: string[] = [];
-    let ok = true;
-    let related: any[] = [];
-    const retry: File[] = [];
-    const repairable = new Set<string>();
-    setBusy({ done: 0, total: rxf.length });
-    try {
-    for (const f of rxf) {
-      setBusy({ done: lines.length, total: rxf.length });
-      try {
-        const r = await api.ingestFile(f, pdfs.get(stem(f.name)), repair);
-        lines.push(t(r.duplicate ? "home.ingested_dup" : "home.ingested", { work: r.work_key }));
-        if (r.repairs?.length) lines.push(t("home.repaired", { fixes: fixes(r.repairs) }));
-        related = related.concat(r.related ?? []);
-      } catch (e) {
-        ok = false;
-        const d = (e as ApiError).detail as { report?: string; repairable?: string[] } | string | undefined;
-        lines.push(`${f.name}: ${(typeof d === "string" ? d : d?.report) ?? t("common.error")}`);
-        if (typeof d === "object" && d?.repairable?.length) {
-          retry.push(f, ...(pdfs.has(stem(f.name)) ? [pdfs.get(stem(f.name))!] : []));
-          d.repairable.forEach((c) => repairable.add(c));
-        }
-      }
-    }
-    setIngestMsg({ ok, text: lines.join("\n\n"), related: [...new Map(related.map((r) => [r.work_id, r])).values()],
-                   retry: retry.length ? retry : undefined, repairable: [...repairable] });
-    stats.reload();
-    } finally {
-      setBusy(null);
-    }
+  function onFiles(list: FileList | File[] | null) {
+    setIngestMsg(null);
+    startImport(Array.from(list ?? []));  // progress, results and repair live in the import overlay
   }
 
   async function retryFailed(name: string, repair: boolean) {
@@ -160,18 +114,11 @@ export default function Home() {
             onDrop={(e) => { e.preventDefault(); setOver(false); onFiles(e.dataTransfer.files); }}>
             <input ref={fileInput} type="file" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }} />
             <UploadIcon />
-            <span>{busy ? t("home.importing", { done: busy.done, total: busy.total }) : t("home.drop")}</span>
+            <span>{busy ? t("import.running") : t("home.drop")}</span>
           </label>
           {ingestMsg && (
             <div className={`notice ${ingestMsg.ok ? "ok" : "error"}`}>
               <pre>{ingestMsg.text}</pre>
-              {ingestMsg.retry && (
-                <div className="row wrap" style={{ marginTop: "0.5rem" }}>
-                  <span className="grow" />
-                  <button className="primary" title={t("home.repairable", { fixes: fixes(ingestMsg.repairable ?? []) })}
-                    onClick={() => onFiles(ingestMsg.retry!, true)}>{t("home.repair_import")}</button>
-                </div>
-              )}
               {ingestMsg.related?.length ? (
                 <div className="stack-sm" style={{ marginTop: "0.5rem" }}>
                   <div className="eyebrow">{t("home.related")}</div>

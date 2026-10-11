@@ -67,6 +67,15 @@ async function req<T>(method: string, path: string, body?: unknown, params?: Rec
   return data as T;
 }
 
+/** Absolute URL and auth header for the few requests that cannot go through `req` (an upload
+ * that reports its progress needs XMLHttpRequest). */
+export function apiUrl(path: string): string {
+  return new URL(BASE + path, window.location.origin).toString();
+}
+export function authHeader(): string {
+  return `Bearer ${token()}`;
+}
+
 /** Tell the open pages that the library changed (also dispatched by the file upload below). */
 export function changed(): void {
   window.dispatchEvent(new Event("rhz:changed"));
@@ -118,6 +127,15 @@ export interface ReviewItem {
     connections: { type: string; direction: string; name: string }[] }>;
 }
 export interface OrganiseRun { summary?: string; queued?: number; by_what?: Record<string, number>; at?: string; error?: string; stopped?: string; skipped?: string }
+export interface ImportResult {
+  name: string; ok?: boolean; work_key?: string; work_id?: number; duplicate?: boolean; repairs?: string[];
+  related?: { work_id: number; title: string; via: { dimension: string }[] }[]; report?: string | null; repairable?: string[];
+}
+export interface ImportProgress {
+  batch: string; status: "queued" | "running" | "done" | "interrupted"; total: number; done: number;
+  current: string | null; files: { name: string; pdf: string | null }[]; skipped: string[];
+  results: Record<string, ImportResult>; error?: string | null;
+}
 export interface AgentVerdict { action?: string; confidence?: number; reason?: string; error?: string; model?: string }
 export interface AgentSummary { enabled: boolean; unjudged?: number; applicable?: number; min_confidence?: number }
 export interface DueCard { id: string; q: string; a: string; entity_key: string; entity_name: string | null; origin: string; new: boolean }
@@ -181,6 +199,9 @@ export const api = {
     return data;
   },
   inboxFailed: () => req<{ files: FailedFile[] }>("GET", "/inbox/failed"),
+  importActive: () => req<{ active: ImportProgress | null }>("GET", "/import/active"),
+  importRepair: (batch: string) => req<ImportProgress>("POST", `/import/${batch}/repair`),
+  importDismiss: (batch: string) => req<{ dismissed: boolean }>("DELETE", `/import/${batch}`),
   inboxRetry: (name: string, repair: boolean) => req<any>("POST", `/inbox/failed/${encodeURIComponent(name)}`, { repair }),
   recall: (text: string) => req<{ results: Hit[] }>("POST", "/recall", { text }),
   cardsDue: () => req<{ cards: DueCard[] }>("GET", "/cards/due"),

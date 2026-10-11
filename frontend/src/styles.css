@@ -472,3 +472,19 @@ table.decisions tr.revoked td:last-child { text-decoration: none; }
 /* the topic agent's suggestion on a review item */
 .agent-note { border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: var(--radius-sm); padding: 0.5rem 0.75rem; }
 .agent-note p { margin: 0.25rem 0 0; }
+
+/* import in progress: the app underneath is inert; the dialog can shrink to a pill */
+.import-lock { position: fixed; inset: 0; z-index: 100; background: color-mix(in srgb, var(--bg) 55%, transparent); backdrop-filter: blur(1px); display: flex; align-items: center; justify-content: center; padding: 1rem; cursor: progress; }
+.import-modal { width: min(560px, 100%); max-height: 85vh; overflow: auto; cursor: default; box-shadow: var(--shadow-2, var(--shadow-1)); }
+.import-modal h2 { display: flex; align-items: center; gap: 0.5rem; margin: 0; }
+.import-modal h2 svg { width: 18px; height: 18px; color: var(--accent); }
+.progress { height: 8px; border-radius: 999px; background: var(--bg-elev); overflow: hidden; }
+.progress > div { height: 100%; background: var(--accent); border-radius: 999px; transition: width 0.3s; }
+.import-results li { padding: 0.45rem 0; border-top: 1px solid var(--line); }
+.import-results li.failed strong { color: var(--danger, #b42318); }
+.import-results pre { white-space: pre-wrap; font-size: 0.8rem; }
+.import-lock:has(.import-pill) { align-items: flex-end; justify-content: flex-end; background: color-mix(in srgb, var(--bg) 25%, transparent); }
+.import-pill { display: flex; flex-direction: column; align-items: stretch; gap: 0.35rem; min-width: 240px; padding: 0.6rem 0.8rem; border-radius: var(--radius); border: 1px solid var(--line-strong); background: var(--surface); box-shadow: var(--shadow-1); cursor: pointer; text-align: left; }
+.import-pill > span { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; }
+.import-pill svg { width: 15px; height: 15px; color: var(--accent); flex: none; }
+.import-error { position: fixed; left: 50%; bottom: 1.2rem; transform: translateX(-50%); z-index: 100; max-width: 560px; }
