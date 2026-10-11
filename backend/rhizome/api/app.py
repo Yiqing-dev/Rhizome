@@ -453,9 +453,17 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
 
     @app.get("/topic-map", dependencies=A)
     def topic_map(include_candidates: bool = False, s: Session = Depends(db)) -> dict[str, Any]:
+        from ..inference.organise import last_tree_run
         from ..services.views import topic_map as tm
 
-        return tm(s, include_candidates)
+        out = tm(s, include_candidates)
+        out["ai"] = {"enabled": get_settings().inference_backend == "anthropic" and not read_only,
+                     "last_run": last_tree_run(s)}
+        return out
+
+    @app.post("/topic-map/organise", dependencies=W)
+    def organise_tree_ep(s: Session = Depends(db)) -> dict[str, Any]:
+        return jobs.job_view(jobs.enqueue(s, "organise_tree", {}))
 
     @app.post("/topic", dependencies=W)
     def create_topic(body: TopicBody, s: Session = Depends(db)) -> dict[str, Any]:

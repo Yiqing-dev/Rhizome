@@ -113,6 +113,7 @@ export interface GraphView {
 export interface TopicMap {
   nodes: { id: number; key: string; name: string; status: string; counts: Record<string, number>; size: number; community: number | null }[];
   edges: { src: number; dst: number; status: string }[]; total_topics: number;
+  ai?: { enabled: boolean; last_run: OrganiseRun | null };
 }
 export interface TopicItem extends Hit { roles: string[]; works: number; contested: boolean; year: number | null }
 export interface TopicPage {

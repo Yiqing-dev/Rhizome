@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api } from "../api";
+import { api, type OrganiseRun } from "../api";
 import TopicGraph from "../components/TopicGraph";
 import { EmptyState, Loading } from "../components/common";
 import { communityColor, surface, tint } from "../components/colors";
 import { GraphIcon } from "../components/icons";
-import { useLoad } from "../hooks";
+import { useJob, useLoad } from "../hooks";
 import { go, href } from "../router";
 
 export default function MapPage() {
@@ -17,6 +17,12 @@ export default function MapPage() {
   const [form, setForm] = useState({ name: "", definition: "", examples: "", counter: "", parent: "" });
   const [busy, setBusy] = useState(false);
   const onHover = useCallback((id: number | null) => setHover(id), []);
+  const [run, setRun] = useState<OrganiseRun | null>(null);
+  const organise = useJob("organise_tree", (j) => {
+    setRun(j.status === "failed" ? { error: j.error ?? "" } : (j.result as OrganiseRun));
+    map.reload();
+  });
+  const last = run ?? map.data?.ai?.last_run ?? null;
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -40,9 +46,27 @@ export default function MapPage() {
           <h1>{t("map.title")}</h1>
           <p className="sub">{t("map.sub")}</p>
         </div>
-        <label className="check"><input type="checkbox" checked={cands} onChange={(e) => setCands(e.target.checked)} />
-          {t("map.show_candidates")}</label>
+        <div className="row wrap">
+          {map.data?.ai?.enabled && (
+            <button onClick={() => { setRun(null); organise.start(); }} disabled={organise.running} title={t("map.organise_hint")}>
+              {organise.running ? t("map.organising") : t("map.organise")}</button>
+          )}
+          <label className="check"><input type="checkbox" checked={cands} onChange={(e) => setCands(e.target.checked)} />
+            {t("map.show_candidates")}</label>
+        </div>
       </div>
+      {last && !organise.running && (
+        <div className={`notice ${last.error || last.stopped || last.skipped ? "warn" : ""} small`}>
+          {last.error || last.stopped || last.skipped ? t("topic.organise_failed", { error: last.error || last.stopped || last.skipped }) : (
+            <>
+              {last.summary && <p>{last.summary}</p>}
+              {(last.queued ?? 0) > 0
+                ? <a href={href("review?kind=suggestion")}>{t("topic.organise_queued", { n: last.queued })} →</a>
+                : <span className="muted">{t("topic.organise_nothing")}</span>}
+            </>
+          )}
+        </div>
+      )}
       <Loading error={map.error} loading={map.loading && !map.data} />
       {map.data && (nodes.length ? (
         <div className="map-layout">

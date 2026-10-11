@@ -177,14 +177,16 @@ def _apply(s: Session, g: Graph, it: ReviewItem, p: dict[str, Any], action: str,
             made = decisions.record(g, "add_edge", {"src": p["key"], "dst": p["topic"], "type": rel})
     elif it.kind == "suggestion":
         if action == "apply":
-            args = dict(p.get("args") or {})
-            for k in ("key", "from", "into", "src", "dst"):  # merged since it was proposed: follow
-                if isinstance(args.get(k), str):
-                    args[k] = g.resolve_key(args[k])
-            if p.get("op") == "merge" and args.get("from") == args.get("into"):
-                it.status = "obsolete"
-            else:
-                made = decisions.record(g, p["op"], args)
+            steps = p.get("ops") or [{"op": p.get("op"), "args": p.get("args")}]
+            for step in steps:
+                args = dict(step.get("args") or {})
+                for k in ("key", "from", "into", "src", "dst"):  # merged since it was proposed: follow
+                    if isinstance(args.get(k), str):
+                        args[k] = g.resolve_key(args[k])
+                if step["op"] == "merge" and args.get("from") == args.get("into"):
+                    it.status = "obsolete"
+                    continue
+                made = decisions.record(g, step["op"], args)
     elif it.kind == "synthesis":
         from .synthesis import tune_threshold
 

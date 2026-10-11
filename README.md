@@ -125,7 +125,9 @@ assets, neighbours, what it shares with them) and proposes a definition when the
 aliases, broader / narrower / same topics among the existing ones, and items tagged with it that do
 not belong. Proposals are checked against the library, then wait in the review queue as
 *Suggestions*; each one applied is an ordinary, undoable decision, and a skipped one is not proposed
-again. From the terminal: `rhz organise "GRN inference"`. The server talks to the running app over REST and falls back to in-process calls.
+again. From the terminal: `rhz organise "GRN inference"`. The topic map has the same for the whole
+tree, *Organise the tree with Claude* (`rhz organise-tree`): merges, broader / narrower topics, new
+parent topics over existing ones, and candidates to confirm or hide, at most 25 suggestions a run. The server talks to the running app over REST and falls back to in-process calls.
 Add "call `rhz_recall` before discussing an analysis plan" to your Project instructions.
 
 ### Remote machines (HPC)

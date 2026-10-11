@@ -100,7 +100,7 @@ export default function ReviewPage({ query }: { query?: URLSearchParams }) {
   }, [items, item, note]);
 
   const label = (it: ReviewItem) => (it.kind === "suggestion"
-    ? `${t(`review.suggestion_short.${it.payload.what}`)} · ${it.payload.topic_name}: ${it.payload.value ?? it.payload.other_name ?? ""}`
+    ? `${t(`review.suggestion_short.${it.payload.what}`)} · ${it.payload.topic_name}${(it.payload.value ?? it.payload.other_name) ? `: ${it.payload.value ?? it.payload.other_name}` : ""}`
     : it.payload.a_name ?? it.payload.name ?? it.payload.new_text ?? "") as string;
   return (
     <div className="stack">

@@ -225,7 +225,10 @@
     "communities": "{{n}} communities",
     "legend": "Pale = candidate topic · click a node to open its page · hover to highlight neighbours",
     "list_title": "Topics by size",
-    "empty_hint": "Topics appear as RXF exports mention them; confirm or create them to make them official."
+    "empty_hint": "Topics appear as RXF exports mention them; confirm or create them to make them official.",
+    "organise": "Organise the tree with Claude",
+    "organising": "Claude is organising the tree…",
+    "organise_hint": "Claude reads the whole topic tree and proposes merges, broader / narrower topics, new parent topics, and candidate topics to confirm or hide. Nothing changes until you apply a suggestion."
   },
   "review": {
     "title": "Review queue",
@@ -289,7 +292,10 @@
       "merge": "Merge “{{topic_name}}” and “{{other_name}}” into one topic (kept: “{{into_name}}”)",
       "parent": "Put “{{topic_name}}” under the broader topic “{{other_name}}”",
       "child": "Put “{{other_name}}” under “{{topic_name}}” as a narrower topic",
-      "misfiled": "Remove the tag “{{topic_name}}” from “{{other_name}}”"
+      "misfiled": "Remove the tag “{{topic_name}}” from “{{other_name}}”",
+      "confirm": "Confirm “{{topic_name}}” as a topic",
+      "reject": "Hide the topic “{{topic_name}}”",
+      "group": "Create the broader topic “{{value}}” above: {{children}}"
     },
     "suggestion_short": {
       "definition": "Definition",
@@ -297,7 +303,10 @@
       "merge": "Merge",
       "parent": "Broader topic",
       "child": "Narrower topic",
-      "misfiled": "Untag"
+      "misfiled": "Untag",
+      "confirm": "Confirm",
+      "reject": "Hide",
+      "group": "New parent"
     }
   },
   "cards": {

@@ -33,7 +33,7 @@ def handler(kind: str):
 
 # Kinds whose result only depends on the library state: a second request while one is still
 # queued is the same work, so it is coalesced instead of running the whole thing twice.
-COALESCE = ("rebuild", "nightly", "enrich", "agent_review")
+COALESCE = ("rebuild", "nightly", "enrich", "agent_review", "organise_tree")
 
 
 def enqueue(s: Session, kind: str, payload: dict[str, Any] | None = None) -> Job:
@@ -269,6 +269,13 @@ def _ingest_batch(s: Session, p: dict[str, Any]) -> dict[str, Any]:
     from .services.imports import run_batch
 
     return run_batch(s, p["batch"], only=p.get("only"), repair=bool(p.get("repair")))
+
+
+@handler("organise_tree")
+def _organise_tree(s: Session, p: dict[str, Any]) -> dict[str, Any]:
+    from .inference.organise import organise_tree
+
+    return organise_tree(s)
 
 
 @handler("organise_topic")

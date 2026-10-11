@@ -149,6 +149,18 @@ class Proposals:
         self._queue(relation, other.key, "add_edge", {"src": src.key, "dst": dst.key, "type": "is_a"},
                     conf, reason, **shown)
 
+    def confirm(self, conf: float, reason: str) -> None:
+        if self.topic.status != "candidate":
+            self.rejected += 1
+            return
+        self._queue("confirm", "", "confirm_topic", {"key": self.topic.key}, conf, reason)
+
+    def hide(self, conf: float, reason: str) -> None:
+        if self.topic.status == "rejected":
+            self.rejected += 1
+            return
+        self._queue("reject", "", "reject_entity", {"key": self.topic.key}, conf, reason)
+
     def misfiled(self, item_key: str, conf: float, reason: str) -> None:
         g, t = self.g, self.topic
         item = g.by_key(g.resolve_key(item_key)) if item_key else None
@@ -214,3 +226,187 @@ def organise_topic(s: Session, topic: str, client: Any = None, model: str | None
         row.v = result
     s.flush()
     return result
+
+
+# ---- the whole tree ---------------------------------------------------------------------------
+
+TREE_TURNS = 12
+TREE_MAX = 25  # proposals per run: a reviewable batch, not a rewrite of the library
+TREE_KEY = "organise:tree"
+
+TREE_SYSTEM = """You help organise the topic tree of a personal literature library. Topics are short labels that
+papers and their assets are tagged with; `is_a` edges put a narrower topic under a broader one.
+Candidate topics were proposed by exports and are not confirmed yet. Read the tree with list_topics
+(page through it), and look closer with topic_info, shared_material and search_topics where a name
+alone is ambiguous. Then propose the few changes that make the tree clearer:
+
+- merges: two topics that are the same (synonyms, an acronym and its expansion, a translation).
+- hierarchy: a topic that belongs under an existing broader topic (child, parent).
+- groups: a new broader topic for two or more existing topics that clearly share a parent the tree
+  lacks (give a short English noun-phrase name and a one-sentence definition).
+- promote: candidate topics that are real, recurring topics worth confirming.
+- hide: topics that are noise (too vague, a one-off phrase, not a topic at all).
+
+Use topic keys exactly as listed. Each proposal has a confidence from 0 to 1 and a one-sentence
+reason naming the evidence. Prefer few, well-founded proposals over many; empty lists are fine.
+`summary` is two or three sentences on the state of the tree for the user."""
+
+TREE_TOOLS = TOOL_DEFS + [{
+    "name": "list_topics", "strict": True,
+    "description": "Every topic, largest first, 60 at a time: key, name, status, how many items are tagged, parents.",
+    "input_schema": {"type": "object", "properties": {"offset": {"type": "integer"}},
+                     "required": ["offset"], "additionalProperties": False}}]
+
+_PAIR = lambda a, b: {"type": "object", "additionalProperties": False,  # noqa: E731
+                      "required": [a, b, "confidence", "reason"],
+                      "properties": {a: {"type": "string"}, b: {"type": "string"}, **_ITEM}}
+_ONE = {"type": "object", "additionalProperties": False, "required": ["key", "confidence", "reason"],
+        "properties": {"key": {"type": "string"}, **_ITEM}}
+TREE_SCHEMA = {"type": "object", "additionalProperties": False,
+               "required": ["summary", "merges", "hierarchy", "groups", "promote", "hide"],
+               "properties": {
+                   "summary": {"type": "string"},
+                   "merges": {"type": "array", "items": _PAIR("a", "b")},
+                   "hierarchy": {"type": "array", "items": _PAIR("child", "parent")},
+                   "groups": {"type": "array", "items": {
+                       "type": "object", "additionalProperties": False,
+                       "required": ["name", "definition", "children", "confidence", "reason"],
+                       "properties": {"name": {"type": "string"}, "definition": {"type": "string"},
+                                      "children": {"type": "array", "items": {"type": "string"}}, **_ITEM}}},
+                   "promote": {"type": "array", "items": _ONE},
+                   "hide": {"type": "array", "items": _ONE}}}
+
+
+class TreeProposals:
+    """Per-topic checks reused for proposals that span the tree."""
+
+    def __init__(self, s: Session, model: str):
+        from ..pipeline.graph import Graph
+
+        self.s, self.model, self.g = s, model, Graph(s)
+        self._by: dict[int, Proposals] = {}
+        self.rejected = 0
+
+    def topic(self, key: str) -> Entity | None:
+        g = self.g
+        e = g.by_key(g.resolve_key(key)) if key else None
+        if e is None and key:
+            e = g.by_alias("topic", key.removeprefix("topic:"))
+        return e if e is not None and e.type == "topic" and e.status != "rejected" else None
+
+    def of(self, e: Entity) -> Proposals:
+        if e.id not in self._by:
+            self._by[e.id] = Proposals(self.s, e, self.model)
+        return self._by[e.id]
+
+    @property
+    def queued(self) -> dict[str, int]:
+        out: dict[str, int] = {}
+        for p in self._by.values():
+            for k, v in p.queued.items():
+                out[k] = out.get(k, 0) + v
+        return out
+
+    def not_queued(self) -> int:
+        return self.rejected + sum(p.rejected for p in self._by.values())
+
+    def group(self, name: str, definition: str, children: list[str], conf: float, reason: str) -> None:
+        from ..pipeline.canonicalize import free_key
+
+        name = (name or "").strip()
+        kids = []
+        for k in children or []:
+            e = self.topic(k)
+            if e is not None and e.id not in {x.id for x in kids}:
+                kids.append(e)
+        if not name or len(name) > 80 or len(kids) < 2:
+            self.rejected += 1
+            return
+        existing = self.g.by_key(free_key("topic", name)) or self.g.by_alias("topic", name)
+        if existing is not None:  # the broader topic exists already: plain hierarchy proposals
+            for kid in kids:
+                if kid.id != existing.id:
+                    self.of(kid).relation(existing.key, "parent", conf, reason)
+            return
+        new_key = free_key("topic", name)
+        ops = [{"op": "create_topic", "args": {"name": name, "definition": (definition or "").strip()[:400] or None}}]
+        ops += [{"op": "add_edge", "args": {"src": k.key, "dst": new_key, "type": "is_a"}} for k in kids]
+        first = self.of(kids[0])
+        first._queue("group", name, "batch", {}, conf, reason, value=name, ops=ops,
+                     children=", ".join(k.canonical_name for k in kids))
+
+
+def organise_tree(s: Session, client: Any = None, model: str | None = None) -> dict[str, Any]:
+    """Run the tree organiser and queue its checked proposals (at most TREE_MAX)."""
+    st = get_settings()
+    if client is None:
+        if st.inference_backend != "anthropic":
+            return {"skipped": "inference_backend is not anthropic"}
+        from ..secrets import get_secret
+        from .anthropic_api import available
+
+        if not available():
+            return {"skipped": "the anthropic package is not installed"}
+        key = get_secret("anthropic_api_key")
+        if not key:
+            return {"skipped": "no API key is set"}
+        client = make_client(key)
+    model = model or st.anthropic_model
+    counts = dict(s.execute(select(Entity.status, func.count()).where(Entity.type == "topic").group_by(Entity.status)).all())
+    total = sum(n for k, n in counts.items() if k != "rejected")
+    if total < 2:
+        return {"skipped": "fewer than two topics"}
+    prompt = (f"The library has {total} topics ({counts.get('candidate', 0)} candidates). "
+              "Organise the tree; start with list_topics at offset 0.")
+    try:
+        out = run_agent(client, model, TREE_SYSTEM, TREE_TOOLS, LibraryTools(s), prompt, TREE_SCHEMA,
+                        max_turns=TREE_TURNS, max_tokens=16000)
+    except AgentStopped as e:
+        return {"stopped": str(e)}
+    if out.get("error"):
+        return {"error": out["error"]}
+    tp = TreeProposals(s, model)
+    budget = TREE_MAX
+
+    def take() -> bool:
+        nonlocal budget
+        budget -= 1
+        return budget >= 0
+
+    for x in out.get("merges") or []:
+        a = tp.topic(x.get("a", ""))
+        if a is None:
+            tp.rejected += 1
+        elif take():
+            tp.of(a).relation(x.get("b", ""), "merge", _confidence(x.get("confidence")), str(x.get("reason", "")))
+    for x in out.get("hierarchy") or []:
+        child = tp.topic(x.get("child", ""))
+        if child is None:
+            tp.rejected += 1
+        elif take():
+            tp.of(child).relation(x.get("parent", ""), "parent", _confidence(x.get("confidence")), str(x.get("reason", "")))
+    for x in out.get("groups") or []:
+        if take():
+            tp.group(x.get("name", ""), x.get("definition", ""), x.get("children") or [],
+                     _confidence(x.get("confidence")), str(x.get("reason", "")))
+    for field_, method in (("promote", "confirm"), ("hide", "hide")):
+        for x in out.get(field_) or []:
+            t = tp.topic(x.get("key", ""))
+            if t is None:
+                tp.rejected += 1
+            elif take():
+                getattr(tp.of(t), method)(_confidence(x.get("confidence")), str(x.get("reason", "")))
+    result = {"summary": str(out.get("summary", ""))[:1200], "queued": sum(tp.queued.values()), "by_what": tp.queued,
+              "not_queued": tp.not_queued(), "model": model, "at": utcnow().isoformat(), "turns": out.get("turns")}
+    row = s.get(KV, TREE_KEY)
+    if row is None:
+        s.add(KV(k=TREE_KEY, v=result))
+    else:
+        row.v = result
+    s.flush()
+    return result
+
+
+def last_tree_run(s: Session) -> dict[str, Any] | None:
+    row = s.get(KV, TREE_KEY)
+    return row.v if row is not None and isinstance(row.v, dict) else None

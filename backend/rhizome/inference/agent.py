@@ -180,6 +180,25 @@ class LibraryTools:
              **({"tldr": ((x.attrs or {}).get("tldr") or [None])[0]} if x.type == "work" else {})}
             for x, et in rows], "more": len(rows) == 40}, limit=9000)
 
+    def list_topics(self, offset: int = 0) -> str:
+        """Every topic, largest first, 60 at a time: key, name, status, how much is tagged, parents."""
+        s = self.s
+        size = (select(Edge.dst.label("tid"), func.count().label("n")).where(Edge.status != "rejected", Edge.type != "is_a")
+                .group_by(Edge.dst).subquery())
+        rows = s.execute(select(Entity, func.coalesce(size.c.n, 0)).outerjoin(size, size.c.tid == Entity.id).where(
+            Entity.type == "topic", Entity.status != "rejected").order_by(func.coalesce(size.c.n, 0).desc(), Entity.id)
+            .offset(max(0, offset)).limit(60)).all()
+        ids = [e.id for e, _ in rows]
+        parents: dict[int, list[str]] = {}
+        if ids:
+            for src, name in s.execute(select(Edge.src, Entity.canonical_name).join(Entity, Entity.id == Edge.dst).where(
+                    Edge.src.in_(ids), Edge.type == "is_a", Edge.status != "rejected")).all():
+                parents.setdefault(src, []).append(name)
+        return _clip({"offset": offset, "topics": [
+            {"key": e.key, "name": e.canonical_name, "status": e.status, "tagged": n, "parents": parents.get(e.id, []),
+             **({"definition": (e.attrs or {}).get("definition")} if (e.attrs or {}).get("definition") else {})}
+            for e, n in rows], "more": len(rows) == 60}, limit=12000)
+
     def search_topics(self, query: str) -> str:
         from ..services.search import Filters, search
 
@@ -188,7 +207,8 @@ class LibraryTools:
 
     def run(self, name: str, args: dict[str, Any]) -> tuple[str, bool]:
         fn = {"topic_info": self.topic_info, "shared_material": self.shared_material,
-              "search_topics": self.search_topics, "tagged_items": self.tagged_items}.get(name)
+              "search_topics": self.search_topics, "tagged_items": self.tagged_items,
+              "list_topics": self.list_topics}.get(name)
         if fn is None:
             return f"unknown tool {name}", True
         try:
