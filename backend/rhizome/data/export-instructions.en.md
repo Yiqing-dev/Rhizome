@@ -22,19 +22,19 @@ Content
 6. DOI: write it whenever the paper has one; for arXiv papers write 10.48550/arXiv.<id> without the version suffix.
 7. Free text is in the main language of this conversation; field names, enum values, topics.name and Latin species names are English; the paper title stays as in the paper.
 8. depth: deep when a full in-depth review was done in this conversation (section by section, logic chain worked through, hence claims, issues and review_cards); otherwise light.
-9. claims come from the conclusions D of the logic chain, one independently valid proposition each. Judge evidence_type by the actual kind of evidence, not by the authors' wording; every claim has evidence (its location in the paper); set logic_jump: true for those marked as a logical leap; set stance: contradicts when the paper's evidence goes against the proposition, otherwise leave stance out.
+9. claims come from the conclusions D of the logic chain, one independently valid proposition each. Judge evidence_type by the actual kind of evidence, not by the authors' wording; every claim has evidence (its location in the paper); boundary states concretely the biological premises and the mathematical inductive-bias limits the conclusion or model depends on (sample characteristics, stationarity / smoothness assumptions, and the kill conditions under which it fails); set logic_jump: true for those marked as a logical leap; set stance: contradicts when the paper's evidence goes against the proposition, otherwise leave stance out.
 10. user_insights holds only judgements, associations and plans I voiced explicitly in this conversation, paraphrased faithfully; your views never go here. If I said nothing of the kind, delete the whole section.
-11. ideas: origin is user for mine and model for yours; transfer information is only ever the nested transfer: {type, to, barrier}, with to naming the id of the target topic in this file.
+11. ideas: origin is user for mine and model for yours; text must be detached from the paper's particular species and gene story, preferring a portable local mathematical operator, regularisation mechanism, sampling strategy or ground-truth-free validation design; transfer information is only ever the nested transfer: {type, to, barrier}, with to naming the id of the target topic in this file and barrier naming the concrete obstacle to a cross-species / cross-modality / cross-problem transfer (a distribution mismatch, a physical or biological boundary).
 12. datasets:
    - With an accession: copy it from the paper; database is the repository it belongs to (GEO, SRA, ENA, GSA, CNGB, ArrayExpress, Zenodo), other for anything else.
    - Without an accession: name is required and database is other.
    - name is the short name used in the paper or the field, at most 5 words (e.g. GKX, nuScenes, Tabula Sapiens); without a common name use "first author year + data type" (e.g. Lin 2026 duckweed snRNA-seq). Descriptive detail goes into tissue / modality / scale, never into name.
    - Dataset names and hosting platforms (Hugging Face, GitHub, Kaggle, project websites) never go into database.
    - public: true when everything can be downloaded openly; false when only partly public or subscription-bound; unknown when the paper does not say.
-13. methods: name is the short name used in the literature (e.g. MFCF, SCENIC+), at most 5 words; what the method does goes into io. extends lists only the methods it builds on and improves, not components it merely calls; when the improved method is also listed in this file, use exactly its name.
-14. topics: when the conversation or the Project knowledge has rhizome-vocab.yaml, prefer its canonical names (candidate_topics may be reused when they fit); only otherwise create a new one as a short English noun phrase and give its other names in aliases (the spelled-out form of an acronym, the Chinese name), so it merges with an existing topic instead of becoming a second one. about is what the paper itself studies; applicable_to is a topic the paper's assets can serve although the paper does not study it.
+13. methods: name is the short name used in the literature (e.g. MFCF, SCENIC+), at most 5 words; what the method does goes into io, in a dense form: "input modality / tensor structure → [core mathematical mechanism / architectural feature] → output representation / result". extends lists only the methods it builds on and improves, not components it merely calls; when the improved method is also listed in this file, use exactly its name.
+14. topics: when the conversation or the Project knowledge has rhizome-vocab.yaml, prefer its canonical names (candidate_topics may be reused when they fit); only otherwise create a new one as a short English noun phrase and give its other names in aliases (the spelled-out form of an acronym, the Chinese name), so it merges with an existing topic instead of becoming a second one. about is what the paper itself studies; applicable_to is a topic the paper's assets and local operators can serve although the paper does not study it (cross-disciplinary algorithmic primitives and transferable new biological settings included).
 15. id: topics t1, t2…, claims c1…, datasets d1…, methods m1…, ideas i1…, user_insights u1…; user_insights.links_to, review_cards.about and transfer.to may only refer to these ids, never to names.
-16. review_cards: 3–5 cards; the question must be answerable without the paper, the answer is one or two sentences.
+16. review_cards: 3–5 cards; the question must be answerable without the paper, the answer is one or two sentences; prefer questions on the core operator's principle, the kill conditions of its implicit mathematical assumptions, ground-truth-free negative-control or synthetic-data validation designs, and the pitfalls of the key experiments.
 
 Self-check (before writing or outputting, without showing the check; when you can run code, parse the YAML first, then go through the items)
 17. All required fields present; no fields outside the skeleton; enum values valid; ids unique; links_to, about and transfer.to all point at ids that exist in this file; every dataset has an accession or a name and database is in the enum; dataset and method names are short names; no placeholders.
@@ -43,7 +43,7 @@ Self-check (before writing or outputting, without showing the check; when you ca
 
 ```yaml
 rxf_version: 1                        # required
-exported_at: 2026-10-04               # required; YYYY-MM-DD
+exported_at: 2026-10-04               # required; YYYY-MM-DD (the actual date of the export)
 prompt_version: deep-review-v2        # required; version of the review prompt used, unversioned when there is none
 instructions_version: "2026.10"       # required; copy as is, never invent one
 depth: deep                           # required: light | deep
@@ -65,7 +65,7 @@ claims:                               # deep; the conclusions D of the logic cha
     text: "..."
     evidence_type: causal             # causal | correlational | speculative
     evidence: "Fig. 3B"               # location in the paper, required
-    boundary: "..."                   # where the claim holds
+    boundary: "..."                   # where the claim holds (biological premises and the limits of the mathematical assumptions)
     logic_jump: false
     stance: supports                  # supports | contradicts; contradicts when the paper's evidence goes against the proposition, else omit
 assets:                               # required when the paper has any
@@ -86,11 +86,11 @@ assets:                               # required when the paper has any
       role: proposes                  # proposes | uses | evaluates
       extends: ["SCENIC"]             # short names of the methods it improves on
       repo: "https://github.com/..."
-      io: "input → output"
+      io: "input modality / tensor → [core mathematical mechanism] → output representation"
       maintained: unknown             # true | false | unknown
   ideas:
     - id: i1
-      text: "..."                     # one sentence, detached from the original problem
+      text: "..."                     # one sentence, detached from the original problem (prefer a detachable local operator, regularisation mechanism or validation design)
       transfer: {type: cross-species, to: t2, barrier: "..."}   # nested; type: cross-species | cross-modality | cross-problem; to is a topic id; barrier optional
       origin: model                   # model | user
 issues:                               # deep
@@ -98,7 +98,7 @@ issues:                               # deep
 user_insights:                        # only judgements and associations I voiced in the discussion
   - {id: u1, text: "...", links_to: [c1, m1]}   # ids from this file only
 review_cards:                         # deep, 3–5 cards
-  - q: "..."                          # about: an id from this file
+  - q: "..."                          # answerable without the paper: operator principle, kill conditions, ground-truth-free validation
     a: "..."
-    about: d1
+    about: d1                         # an id from this file
 ```

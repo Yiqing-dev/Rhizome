@@ -131,7 +131,7 @@ RXF（Rhizome Exchange Format）是 Rhizome 唯一的输入格式。讨论结束
 
 ```yaml
 rxf_version: 1                        # 均必填
-exported_at: 2026-10-04               # 均必填；YYYY-MM-DD
+exported_at: 2026-10-04               # 均必填；YYYY-MM-DD（填导出当日实际日期）
 prompt_version: deep-review-v2        # 均必填；生成时所用审稿提示词的版本，没有时写 unversioned
 instructions_version: "2026.10"       # 均必填；照抄，不要自己编
 depth: deep                           # 均必填：light | deep
@@ -153,7 +153,7 @@ claims:                               # 必填；取自逻辑链的结论 D
     text: "..."
     evidence_type: causal             # causal | correlational | speculative
     evidence: "Fig. 3B"               # 原文位置，均必填
-    boundary: "..."                   # 适用边界
+    boundary: "..."                   # 适用边界（含生物学前提与数学假设失效边界）
     logic_jump: false
     stance: supports                  # supports | contradicts；原文证据与该命题相反时写 contradicts，否则可省略
 assets:                               # 有则必填
@@ -174,11 +174,11 @@ assets:                               # 有则必填
       role: proposes                  # proposes | uses | evaluates
       extends: ["SCENIC"]             # 被它改进的方法的短名
       repo: "https://github.com/..."
-      io: "输入 → 输出"
+      io: "输入模态/张量 → [核心数学机制] → 输出表征"
       maintained: unknown             # true | false | unknown
   ideas:
     - id: i1
-      text: "..."                     # 脱离原课题的一句话
+      text: "..."                     # 脱离原课题的一句话（优先提炼可拆卸局部算子、正则化机制或验证设计）
       transfer: {type: cross-species, to: t2, barrier: "..."}   # 必须嵌套；type: cross-species | cross-modality | cross-problem；to 填主题 id；barrier 选填
       origin: model                   # model | user
 issues:                               # 必填
@@ -186,9 +186,9 @@ issues:                               # 必填
 user_insights:                        # 只收录我在讨论中说出的判断和联想
   - {id: u1, text: "...", links_to: [c1, m1]}   # 只能引用本文件内的 id
 review_cards:                         # 必填，3–5 张
-  - q: "..."                          # 只能引用本文件内的 id
+  - q: "..."                          # 题目必须能脱离原文作答，聚焦算子原理、假设死亡边界或无真值验证设计
     a: "..."
-    about: d1
+    about: d1                         # 只能引用本文件内的 id
 ```
 
 **文件内 id**：`id` 只在单份 RXF 内有效，作用是让 `links_to` 和 `about` 有确定的引用对象。入库时它们会被解析成库里的实体 ID，本身不进入 L2。`id` 是可选字段；但只要 `links_to` 或 `about` 引用了某个 id，这个 id 就必须在本文件里存在，否则校验失败。
@@ -214,19 +214,19 @@ review_cards:                         # 必填，3–5 张
 6. DOI：有 DOI 就写；arXiv 论文写 10.48550/arXiv.<编号>，不带版本号。
 7. 自由文本用本次对话的主要语言；字段名、枚举值、topics.name、物种拉丁学名用英文；论文标题保持原文。
 8. depth：本次做过完整的深度审稿（逐节审读、理清逻辑链，于是有 claims、issues、review_cards）写 deep，否则写 light。
-9. claims 取自逻辑链的结论 D，一条写一个可以独立成立的命题。evidence_type 按证据的实际类型判断，不按作者的说法；每条都要有 evidence（原文位置）；带【逻辑跳跃】的设 logic_jump: true；原文证据与该命题相反时设 stance: contradicts，否则不写 stance。
+9. claims 取自逻辑链的结论 D，一条写一个可以独立成立的命题。evidence_type 按证据的实际类型判断，不按作者的说法；每条都要有 evidence（原文位置）；boundary 须具体写明该结论或模型成立所依赖的生物学前提与数学归纳偏置边界（如样本特征、稳态/平滑假设及失效的死亡边界 Kill Conditions）；带【逻辑跳跃】的设 logic_jump: true；原文证据与该命题相反时设 stance: contradicts，否则不写 stance。
 10. user_insights 只收录我在本次对话中明确说出的判断、联想和计划，按原意转述；你的观点不得放进这里。我没有说过，就删除整段。
-11. ideas：我提出的 origin 写 user，你提出的写 model；迁移信息只能写成嵌套的 transfer: {type, to, barrier}，to 填本文件里目标主题的 id。
+11. ideas：我提出的 origin 写 user，你提出的写 model；text 须脱离原论文的具体物种与基因故事，优先提炼可独立移植的局部数学算子、正则化机制、采样策略或无真值验证设计；迁移信息只能写成嵌套的 transfer: {type, to, barrier}，to 填本文件里目标主题的 id，barrier 须具体指出跨物种/跨模态/跨问题迁移时的数学分布错位或物理/生物学边界障碍。
 12. datasets：
    - 有 accession：照原文写；database 填它所属的库（GEO、SRA、ENA、GSA、CNGB、ArrayExpress、Zenodo），不属于这些库的填 other。
    - 没有 accession：name 必填，database 填 other。
    - name 用原文或领域里通用的短名，不超过 5 个词（如 GKX、nuScenes、Tabula Sapiens）；没有通用名时，用"第一作者 年份 + 数据类型"（如 Lin 2026 duckweed snRNA-seq）。描述性内容写进 tissue / modality / scale，不写进 name。
    - 数据集名和托管平台名（Hugging Face、GitHub、Kaggle、项目官网）一律不写进 database。
    - public：全部可以公开下载写 true；部分公开或需要订阅写 false；原文没有说明写 unknown。
-13. methods：name 只写文献里通用的短名（如 MFCF、SCENIC+），不超过 5 个词；方法做什么写进 io。extends 只填它在其基础上改进的方法，不包括只是调用的组件；被改进的方法也列在本文件 methods 里时，名称与它的 name 完全一致。
-14. topics：如果对话或 Project 知识里有 rhizome-vocab.yaml，优先使用其中的规范名（candidate_topics 里合适的也可以沿用）；没有合适的才新建，用简短的英文名词短语，并在 aliases 里给出它的其他叫法（缩写的全称、中文名），这样会并入已有主题而不是另起一个。about 指论文本身研究的主题；applicable_to 指论文的资产可以用于、但论文本身并不研究的主题。
+13. methods：name 只写文献里通用的短名（如 MFCF、SCENIC+），不超过 5 个词；方法做什么写进 io，采用高信息密度格式："输入模态/张量结构 → [核心数学机制/架构特征] → 输出表征/结果"。extends 只填它在其基础上改进的方法，不包括只是调用的组件；被改进的方法也列在本文件 methods 里时，名称与它的 name 完全一致。
+14. topics：如果对话或 Project 知识里有 rhizome-vocab.yaml，优先使用其中的规范名（candidate_topics 里合适的也可以沿用）；没有合适的才新建，用简短的英文名词短语，并在 aliases 里给出它的其他叫法（缩写的全称、中文名），这样会并入已有主题而不是另起一个。about 指论文本身研究的主题；applicable_to 指论文的资产与局部算子可以用于、但论文本身并不研究的主题（可包含跨学科算法原语或可迁移的生物学新场景）。
 15. id：topics 用 t1、t2…，claims 用 c1…，datasets 用 d1…，methods 用 m1…，ideas 用 i1…，user_insights 用 u1…；user_insights.links_to、review_cards.about 和 transfer.to 只能引用这些 id，不写名称。
-16. review_cards：3–5 张，题目必须能脱离原文作答，答案一到两句话。
+16. review_cards：3–5 张，题目必须能脱离原文作答，答案一到两句话；优先围绕核心算子原理、隐式数学假设的失效边界（Kill Conditions）、无真值阴性对照/合成数据验证设计或关键实验防坑点出题。
 
 自查（写入或输出前完成，不要输出自查过程；能运行代码时，先用 YAML 解析器解析一遍，再逐项检查）
 17. 必填字段齐全；没有骨架之外的字段；枚举值合法；id 唯一；links_to、about 和 transfer.to 都指向本文件里存在的 id；每个 dataset 都有 accession 或 name，database 在枚举内；dataset 和 method 的 name 都是短名；没有占位符。
@@ -507,5 +507,6 @@ G2 是整个计划的证伪点：如果检索基线达不到 M0 预注册的阈�
 | RXF v1 字段补充（首次导出校验失败后） | 新增可选字段 `exported_at`、`language`，claims 与各类 assets 新增文件内 `id`；`topics.new` 不收；`ideas.transfer` 保持嵌套 | 仍为 `rxf_version: 1`（向后兼容）；`links_to` / `about` 只能引用文件内 id，校验检查引用完整性；导出指令新增三条 |
 | RXF v1 第二次补充（两份导出分别因数据集缺少标识和 database 取值越界而校验失败，2026-10-04） | 数据集用 accession 或 name 标识；database 枚举定为 GEO / SRA / ENA / CNGB / ArrayExpress / Zenodo / other；骨架补齐代码已接受的字段（`paper.venue`、`datasets.name`、`datasets.role`、`methods.extends`）；`maintained`、`public` 用 true / false / unknown | 仍为 `rxf_version: 1`；导出指令重写为 17 条；没有 accession 的 Dataset 走自由概念规范化；骨架作为契约测试的正例 |
 | RXF v1 第三次补充（对照代码核查文档，2026-10-05） | `public` 与 `maintained` 一样接受 unknown；database 枚举加入 GSA；骨架补上代码已有的 `claims.stance`（contradicts 边的来源）、`topics.aliases`、`instructions_version`；导出指令改为上面的 17 条，中英两版 | 仍为 `rxf_version: 1`；骨架进入 CI 契约测试；实现状态见 docs/implementation.zh.md |
+| RXF v1 第四次补充（导出质量，2026-10-15） | 字段和枚举不变；导出指令收紧内容要求：claims.boundary 写明生物学前提与数学归纳偏置的失效边界（Kill Conditions）；ideas.text 脱离具体物种与基因故事、优先提炼可移植的局部算子 / 正则化 / 采样 / 无真值验证设计，barrier 写具体的分布错位或物理生物学障碍；methods.io 用"输入模态/张量 → [核心数学机制] → 输出表征"；applicable_to 可含跨学科算法原语；review_cards 围绕算子原理、假设死亡边界、无真值验证与防坑点出题 | 仍为 `rxf_version: 1`，`instructions_version` 仍为 "2026.10"；校验器把聊天界面自动加上的 markdown 链接（`[url](url)`）还原成纯 URL（paper.url、methods.repo） |
 
 需求和架构已经定稿；实现进度和与设计的偏差见 docs/implementation.zh.md。还没完成的 M0 事项：预注册 benchmark 问题和门槛，准备 G3 标注集。

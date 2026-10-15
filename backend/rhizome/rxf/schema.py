@@ -13,6 +13,7 @@ exists. Files without any ids (older exports) keep the old behaviour: references
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -32,6 +33,22 @@ class _Item(_Strict):
 PaperType = Literal["research", "tool", "resource", "benchmark", "review", "protocol"]
 
 
+_MD_LINK = re.compile(r"^\[(?P<text>[^\]]*)\]\((?P<href>[^)\s]+)\)(?P<tail>.*)$")
+
+
+def unwrap_markdown_link(v: str | None) -> str | None:
+    """A URL that a chat UI rendered as markdown, `[https://x](https://x)rest`, back to the plain
+    URL. Only when the link text is itself the start of the href (an autolink), so a real label
+    is left alone."""
+    if v is None:
+        return v
+    m = _MD_LINK.match(v.strip())
+    if not m:
+        return v
+    text, href, tail = m.group("text"), m.group("href"), m.group("tail")
+    return (href + tail) if href.startswith(text) or text.startswith(href) else v
+
+
 class Paper(_Strict):
     doi: str | None = Field(None, description="DOI without the https://doi.org/ prefix")
     title: str
@@ -42,6 +59,11 @@ class Paper(_Strict):
     authors: list[str] = Field(default_factory=list)
     venue: str | None = None
     url: str | None = None
+
+    @field_validator("url")
+    @classmethod
+    def _plain_url(cls, v: str | None) -> str | None:
+        return unwrap_markdown_link(v)
 
     @field_validator("doi")
     @classmethod
@@ -101,6 +123,11 @@ class Method(_Item):
     modality: str | None = None
     extends: list[str] = Field(default_factory=list)
     evidence: str | None = None
+
+    @field_validator("repo")
+    @classmethod
+    def _plain_repo(cls, v: str | None) -> str | None:
+        return unwrap_markdown_link(v)
 
 
 class Transfer(_Strict):

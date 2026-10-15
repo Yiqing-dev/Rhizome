@@ -84,3 +84,18 @@ def test_instruction_skeleton_is_a_valid_export(name):
     doc = res.doc
     assert doc.depth == "deep" and doc.assets.datasets[0].public is True and doc.assets.methods[0].extends
     assert {t.id for t in doc.topics} == {"t1", "t2"} and doc.assets.ideas[0].transfer.to == "t2"
+
+
+def test_markdown_autolinked_urls_are_unwrapped():
+    """Chat UIs render a bare URL as [url](url); an export copied from such a view carries the
+    markdown. The plain URL is what the library stores; a link with a real label is left alone."""
+    from rhizome.external.ids import normalize_repo
+
+    r = load_rxf("rxf_version: 1\npaper: {title: t, url: '[https://example.org/p](https://example.org/p)'}\n"
+                 "assets:\n  methods:\n    - {name: M, repo: '[https://github.com/](https://github.com/)lab/tool'}\n")
+    assert r.ok, r.report
+    assert r.doc.paper.url == "https://example.org/p"
+    assert r.doc.assets.methods[0].repo == "https://github.com/lab/tool"
+    assert normalize_repo(r.doc.assets.methods[0].repo) == "github.com/lab/tool"
+    r = load_rxf("rxf_version: 1\npaper: {title: t}\nassets:\n  methods:\n    - {name: M, repo: '[code](https://github.com/lab/tool)'}\n")
+    assert r.doc.assets.methods[0].repo == "[code](https://github.com/lab/tool)"

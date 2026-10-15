@@ -54,3 +54,10 @@ All optional, defaults shown:
 - **v1, additive** (2026-10-05) — `public` takes `unknown` like `maintained`; `GSA` joins the database enum.
   The export instructions were rewritten (17 numbered rules + an annotated skeleton, zh and en); the
   skeleton of each instruction file is a contract test. Older v1 files stay valid.
+- **v1, instructions only** (2026-10-15) — no field or enum change. The export instructions ask for more
+  from the free text: `claims.boundary` names the biological premises and the kill conditions of the
+  mathematical assumptions; `ideas.text` is a portable operator / regulariser / sampling or validation
+  design detached from the paper's species and genes, with a concrete `transfer.barrier`; `methods.io`
+  is written as `input → [core mechanism] → output`; `review_cards` target operator principles, kill
+  conditions and ground-truth-free validation. The validator unwraps markdown-autolinked URLs
+  (`[url](url)`) in `paper.url` and `methods.repo`. `instructions_version` stays "2026.10".
