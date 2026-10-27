@@ -59,10 +59,10 @@ const Table = ({ rows = 7, cols = 4 }: { rows?: number; cols?: number }) => (
 function shape(kind: SkeletonKind) {
   switch (kind) {
     case "list": return <Hits n={5} />;
-    case "tiles": return (
-      <section className="tiles">
+    case "tiles": return (  // the Home page's six count cells (styles: .home-tiles)
+      <section className="home-tiles">
         {Array.from({ length: 6 }, (_, i) => (
-          <div className="tile" key={i}><Bar w="3.2rem" h="1.7rem" /><Bar w="4.5rem" h="0.75rem" /></div>
+          <span key={i}><Bar w="4rem" h="0.7rem" /><Bar w="2.2rem" h="2rem" /><Bar w="6.5rem" h="0.7rem" /></span>
         ))}
       </section>
     );

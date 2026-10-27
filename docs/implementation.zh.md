@@ -461,6 +461,23 @@ Anthropic API 的开关、模型和密钥原来藏在 设置 → 高级设置 �
 由用户为具体文件点下），面板提示里写明整篇论文会发出并计费。测试（`test_reader.py`）用脚本化客户端覆盖完整路径、查重短路、
 force、修复一轮、API 错误、截断、路由暂存与任务执行；真实 API 路径未在 CI 中联网验证。
 
+## 首页改版：Ledger（Modernist 设计系统，2026-10-27）
+
+首页按 Claude Design 里的"1a Ledger"稿子重做（提交 89335d9，由设计项目"Send to Claude Code Web"发起的会话完成；本节记录
+它和后续修补）。一张带 2px 分隔线的"账页"，宽 1280，Archivo 字体：第一行是日期、大标题和搜索（输入即出前 6 条结果的下拉，
+方向键选、回车进完整检索页）加"今日"三项（待复习卡、待审条目、近 7 天捕获的论文）；第二行六个资产计数块带 7 天增量；第三行
+三栏：存入论文（RXF 拖放、收件箱、"让 Claude 读新论文"）、最近捕获（最新 5 篇，来源 / 时间 / 深度 / 资产数）、召回（Ctrl+Enter
+提交，结果带相关度条和"上次看是几天前"）。
+
+后端：`/stats` 多了 `week`（近 7 天按类型的新增数）、`week_days`、`recent`（`services/views.py::recent_works`）；`/recall` 多了
+`seen_days`（`services/recall.py::days_since_seen`，`forgetting` 由它推导）。新增 token：`--accent-deep`、`--accent-press`、
+`--divider`、`--sunk`、`--font-display`、`--space-1..8`；主色预设加了 `red`（#ec3013，Modernist 的强调色）并成为默认，绿色
+仍可在设置里选。顶栏改成 56px 的 Modernist 栏（下划线当前页、红色队列计数、方形中英切换），品牌标识换成四格方块：顶栏、
+浏览器图标和桌面应用图标（`docs/logo.png` 重新生成，`npm run icons`）一致。其他页面暂时沿用原来的圆角卡片样式，只换了顶栏和
+token，迁移是下一批。
+
+修补：首页加载态的骨架换成和六格一致的形状；删掉首页旧版遗留的六个翻译键和 `.todo` 样式；叶子 logo 组件不再使用，已移除。
+
 ## 还需要你来做的（M0）
 
 - 导出指令已按设计文档 10-04 版定稿（见上一节）；用一段时间后若再出现校验失败，把错误报告贴回来改规则。

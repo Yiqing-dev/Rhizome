@@ -4,19 +4,6 @@
 // 16px by default; CSS may enlarge (e.g. .drop svg, .empty svg)
 const base = { width: 16, height: 16, fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true } as const;
 
-export function Logo({ size = 26 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32">
-      <circle cx="16" cy="16" r="6" fill="var(--c-topic)" />
-      <path d="M16 10 L9 4 M16 22 L22 28 M10 16 L3 18 M22 16 L29 13" stroke="var(--c-topic)" strokeWidth="2.6" strokeLinecap="round" />
-      <circle cx="9" cy="4" r="2.6" fill="var(--c-work)" />
-      <circle cx="22" cy="28" r="2.6" fill="var(--c-method)" />
-      <circle cx="3" cy="18" r="2.6" fill="var(--c-idea)" />
-      <circle cx="29" cy="13" r="2.6" fill="var(--c-dataset)" />
-    </svg>
-  );
-}
-
 /** The Modernist brand mark: a 2×2 grid of squares, the first in the accent. */
 export const Mark = () => (
   <span className="mark" aria-hidden="true"><i /><i /><i /><i /></span>

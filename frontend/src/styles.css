@@ -240,8 +240,6 @@ label.small input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
 .disclosure.inline[open] > summary { margin-bottom: 0.5rem; }
 .disclosure.advanced { padding: 0.9rem 1.1rem; border: 1px dashed var(--line-strong); border-radius: var(--radius); }
 .disclosure.advanced[open] > summary { margin-bottom: 0.9rem; }
-.todo { display: flex; gap: 1.2rem; flex-wrap: wrap; font-size: 0.92rem; }
-.todo a::before { content: "•"; margin-right: 0.4rem; color: var(--warn); }
 .topbar-search { display: flex; align-items: center; gap: 10px; align-self: center; background: var(--sunk); border: 1px solid var(--divider); height: 36px; padding: 0 10px; min-width: 260px; }
 .topbar-search input { border: none; background: none; padding: 0; flex: 1; min-width: 0; font-size: 14px; }
 .topbar-search input:focus-visible { outline: none; }
@@ -449,6 +447,8 @@ main > .stack, main > .page, main > .home { animation: page-in 0.18s ease-out; }
 .home .progress i, .home .progress > div { border-radius: 0; background: var(--accent); }
 .home .ok-mark { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--accent-deep); }
 .home .skeleton { padding: var(--space-6); }
+.home .skeleton.sk-tiles { padding: 0; gap: 0; }
+.skeleton .home-tiles > span { display: flex; flex-direction: column; gap: 6px; padding: var(--space-4) var(--space-6); box-shadow: inset -1px 0 0 var(--divider); min-width: 0; }
 
 /* ---- hits ------------------------------------------------------------------------------ */
 .hits { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.55rem; }
