@@ -6,7 +6,7 @@ This is the one place where paper text leaves the machine for more than a narrow
 is opt-in twice: the Anthropic backend must be selected and a key stored, and every run is started
 by the user for a named file. One conversation carries the whole paper (the PDF is sent once as a
 document block and cached): a short identification answer first, so a paper the library already
-has costs one small request; then the in-depth review in the interface language; then the RXF
+has costs one small request; then the in-depth review under the user's own deep-review prompt (deep-review-v2, shipped in rhizome/data); then the RXF
 export under the same instructions the user's chat Project holds, with the library vocabulary, so
 topics merge instead of multiplying. The YAML is validated like any inbox file and sent back once
 with the error report when it is not; the ingest is the ordinary one (L0 keeps the bytes, the PDF
@@ -33,7 +33,7 @@ from .agent import FALLBACK_BETA
 log = logging.getLogger(__name__)
 
 STEPS = ("identify", "dedupe", "review", "export", "validate", "ingest")
-PROMPT_VERSION = "rhizome-reader-v1"
+PROMPT_VERSION = "deep-review-v2"  # the user's review prompt, rhizome/data/deep-review-v2.md
 MAX_OUTPUT = 16000
 REPAIR_ROUNDS = 1
 
@@ -208,7 +208,7 @@ def read_paper(s: Session, pdf: bytes, filename: str, *, force: bool = False, cl
 
     # 3. review
     step("review")
-    messages.append({"role": "user", "content": prompts.READER_REVIEW.format(language=prompts.LANGUAGE_NAME[language])})
+    messages.append({"role": "user", "content": prompts.review_prompt()})
     resp = _call(client, usage, model=model, max_tokens=MAX_OUTPUT, system=system, messages=messages,
                  output_config={"effort": "high"})
     report = _text(resp).strip()

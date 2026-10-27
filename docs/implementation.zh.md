@@ -433,10 +433,11 @@ server、network），界面按 code 给出中英文解释并附原始错误，�
    标题 / 年份 / 第一作者，effort low。
 2. **查重**：在本地按 DOI（`work:doi:*`、别名、external_id）、arXiv 号折算的 DOI、标题（别名和规范名归一化后比对）找已有论文。
    找到就停，结果 `duplicate` 带已有论文链接；只花了一次小请求。面板上的"仍然审读"用同一份暂存文件以 `force=True` 重排任务。
-3. **审读**：同一会话继续（前缀缓存命中），按 `prompts.READER_REVIEW` 做逐节审读、逻辑链、证据类型、边界与 Kill Conditions、
-   数据集 / 方法 / 问题 / 可迁移想法，markdown，界面语言，effort high，max_tokens 16000。
+3. **审读**：同一会话继续（前缀缓存命中），审稿提示词就是你自己的 deep-review-v2（原样放在
+   `backend/rhizome/data/deep-review-v2.md`，`prompts.review_prompt()` 读出），所以软件里生成的报告和聊天 Project 里的走同一套
+   步骤；effort high，max_tokens 16000。该提示词规定分析用中文，界面为英文时报告仍是中文。
 4. **导出**：再续一轮"导出 RXF"。system 提示里带着用户 Project 里那份导出指令（`rxf/guide.instructions`，中英随界面语言）
-   和当前词表（`services/vocab.export_vocab`），所以主题优先落到已有规范名。要求 prompt_version `rhizome-reader-v1`、
+   和当前词表（`services/vocab.export_vocab`），所以主题优先落到已有规范名。要求 prompt_version `deep-review-v2`、
    depth deep、exported_at 当天、没有 user_insights、ideas 的 origin 全为 model。
 5. **校验**：`load_rxf`；不通过就把校验报告发回去修一轮（`REPAIR_ROUNDS = 1`），仍不通过结果为 `invalid`，报告和 YAML 原样
    返回给面板。

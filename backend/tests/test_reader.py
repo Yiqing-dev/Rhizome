@@ -62,7 +62,8 @@ def test_full_read_ingests_and_keeps_the_report(settings, session):
     assert all(call["fallbacks"] == "default" for call in c.calls)
     # the conversation is append-only and the export turn names the version and the date
     assert [m["role"] for m in c.calls[2]["messages"]] == ["user", "assistant", "user", "assistant", "user"]
-    assert "rhizome-reader-v1" in c.calls[2]["messages"][-1]["content"]
+    assert "deep-review-v2" in c.calls[2]["messages"][-1]["content"]
+    assert c.calls[2]["messages"][2]["content"].startswith("# 角色与任务 (prompt_version: deep-review-v2)")  # the review turn
     # the report sits beside the export and the card shows it
     ex = session.execute(select(Extraction).where(Extraction.work_key == out["work"]["key"], Extraction.kind == "rxf")).scalars().first()
     assert ex.meta["report_sha"] and ex.meta["reader"]["model"] == "claude-opus-5-5"

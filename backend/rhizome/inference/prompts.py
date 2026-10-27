@@ -58,19 +58,13 @@ READER_IDENTITY_SCHEMA = {
     "required": ["doi", "arxiv_id", "title", "year", "first_author", "venue"], "additionalProperties": False,
 }
 
-READER_REVIEW = (
-    "Do a full in-depth review of this paper, in {language}, as a structured markdown report. Work section by "
-    "section, then reconstruct the logic chain: premises, evidence, intermediate results, and the conclusions D that "
-    "the paper actually supports, marking every logical leap. For each conclusion give the evidence location "
-    "(figure, table, section) and judge whether the evidence is causal, correlational or speculative by what was "
-    "done, not by what the authors claim. State the boundary of each conclusion: the biological premises and the "
-    "mathematical inductive biases it rests on, and the kill conditions under which it fails. List the datasets "
-    "(with accessions and whether they are public), the methods (what they extend, their input → mechanism → "
-    "output), and the issues you would raise as a reviewer, each with severity, location, and a concrete test that "
-    "would settle it. Close with transferable ideas: local operators, regularisers, sampling strategies or "
-    "ground-truth-free validation designs that could move to other species, modalities or problems, and what "
-    "blocks each transfer. Headings in markdown; no preamble."
-)
+def review_prompt() -> str:
+    """The user's own deep-review prompt (deep-review-v2), shipped verbatim in rhizome/data so the
+    report the app produces follows the same steps as the one a chat Project produces."""
+    from importlib import resources
+
+    return resources.files("rhizome").joinpath("data", "deep-review-v2.md").read_text("utf-8")
+
 
 READER_EXPORT = (
     "Export RXF for this paper now, following the export instructions and skeleton in your instructions exactly. "
