@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, ApiError } from "../api";
+import { api, errorText, ApiError } from "../api";
 import { Loading } from "../components/common";
 import { SettingsIcon } from "../components/icons";
 import { useJob, useLoad } from "../hooks";
@@ -25,6 +25,24 @@ export default function SettingsPage() {
   const [apiKey, setApiKey] = useState("");
   const [keyMsg, setKeyMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const keySource = sys.data?.secrets?.anthropic_api_key ?? null;
+  const [testing, setTesting] = useState(false);
+  async function testConnection() {
+    setTesting(true); setKeyMsg(null);
+    try {
+      const r = await api.testAnthropic();
+      if (r.ok) {
+        setKeyMsg({ ok: true, text: t("settings.anthropic_test_ok", { model: r.display_name || r.model, ms: r.latency_ms ?? 0,
+          input: r.usage?.input ?? 0, output: r.usage?.output ?? 0 }) });
+      } else {
+        const why = t(`settings.anthropic_test_err.${r.code ?? "unknown"}`, { defaultValue: t("settings.anthropic_test_err.unknown") });
+        setKeyMsg({ ok: false, text: r.error ? `${why}\n${r.error}` : why });
+      }
+    } catch (e) {
+      setKeyMsg({ ok: false, text: errorText(e, t) });
+    } finally {
+      setTesting(false);
+    }
+  }
   async function saveKey(value: string | null) {
     try {
       await api.setSecret("anthropic_api_key", value);
@@ -324,9 +342,10 @@ export default function SettingsPage() {
                 <div className="row wrap">
                   <button className="primary" disabled={!apiKey.trim()} onClick={() => saveKey(apiKey.trim())}>{t("settings.anthropic_key_save")}</button>
                   {keySource === "keyring" && <button className="ghost" onClick={() => saveKey(null)}>{t("settings.anthropic_key_clear")}</button>}
+                  <button onClick={testConnection} disabled={testing}>{testing ? t("settings.anthropic_testing") : t("settings.anthropic_test")}</button>
                   <span className="hint">{keySource === "env" ? t("settings.anthropic_key_env") : keySource === "keyring" ? t("settings.anthropic_key_stored") : t("settings.anthropic_key_missing")}</span>
                 </div>
-                {keyMsg && <div className={`notice ${keyMsg.ok ? "ok" : "error"}`}>{keyMsg.text}</div>}
+                {keyMsg && <div className={`notice ${keyMsg.ok ? "ok" : "error"}`} style={{ whiteSpace: "pre-wrap" }}>{keyMsg.text}</div>}
               </div>
             )}
             <div className="row wrap">

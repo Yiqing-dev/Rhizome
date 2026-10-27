@@ -718,6 +718,19 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         reset_backend()
         return {"name": body.name, "source": secret_source(body.name)}
 
+    @app.post("/settings/anthropic/test", dependencies=A)
+    def test_anthropic_ep() -> dict[str, Any]:
+        """Prove the stored key and the chosen model work: one model lookup and one tiny message,
+        billed to the user's account. A success also clears a backend that an earlier failure had
+        disabled."""
+        from ..inference import anthropic_api, reset_backend
+        from ..secrets import get_secret
+
+        out = anthropic_api.check(get_settings().anthropic_model, get_secret("anthropic_api_key"))
+        if out["ok"]:
+            reset_backend()
+        return out
+
     # ---- desktop integration ----
     from .. import system as sysint
 

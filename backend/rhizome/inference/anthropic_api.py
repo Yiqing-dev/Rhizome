@@ -106,3 +106,53 @@ class AnthropicBackend:
         system, schema = CARD
         r = self._ask(system, asset_text, schema)
         return (r["q"], r["a"]) if r else None
+
+
+CHECK_PROMPT = "Reply with the single word OK."
+
+
+def check(model: str, api_key: str | None, client: Any = None) -> dict[str, Any]:
+    """One cheap round trip to prove the stored key and the chosen model work together: the model
+    is looked up (no tokens), then one tiny message is sent exactly the way the judgements are
+    (same betas, same fallback). The result never contains the key; ``code`` names the first thing
+    that failed so the settings page can say what to fix."""
+    out: dict[str, Any] = {"ok": False, "model": model or DEFAULT_MODEL}
+    if not available():
+        out["code"] = "sdk_missing"
+        return out
+    if not api_key:
+        out["code"] = "no_key"
+        return out
+    import anthropic
+
+    client = client or anthropic.Anthropic(api_key=api_key, max_retries=0, timeout=30.0)
+    t0 = time.monotonic()
+    try:
+        m = client.models.retrieve(out["model"])
+        out["display_name"] = getattr(m, "display_name", None)
+        resp = client.beta.messages.create(
+            model=out["model"], max_tokens=256, messages=[{"role": "user", "content": CHECK_PROMPT}],
+            output_config={"effort": "low"}, betas=["server-side-fallback-2026-07-01"], fallbacks="default",
+        )
+    except anthropic.AuthenticationError as e:
+        code, err = "auth", e
+    except anthropic.PermissionDeniedError as e:
+        code, err = "permission", e
+    except anthropic.NotFoundError as e:
+        code, err = "model_not_found", e
+    except anthropic.BadRequestError as e:
+        code, err = "bad_request", e
+    except anthropic.RateLimitError as e:
+        code, err = "rate_limit", e
+    except anthropic.APIStatusError as e:
+        code, err = ("server" if e.status_code >= 500 else "bad_request"), e
+    except anthropic.APIConnectionError as e:
+        code, err = "network", e
+    else:
+        usage = getattr(resp, "usage", None)
+        out.update(ok=True, latency_ms=int((time.monotonic() - t0) * 1000), stop_reason=getattr(resp, "stop_reason", None),
+                   usage={"input": getattr(usage, "input_tokens", None), "output": getattr(usage, "output_tokens", None)})
+        return out
+    out.update(code=code, latency_ms=int((time.monotonic() - t0) * 1000),
+               error=f"{type(err).__name__}: {getattr(err, 'message', None) or err}")
+    return out

@@ -958,6 +958,19 @@ def settings_secret(name: str, clear: bool = typer.Option(False, "--clear", help
         c.set_secret(name, value)  # the running app picks it up at once
 
 
+@settings_app.command("test-anthropic")
+def settings_test_anthropic() -> None:
+    """Send one tiny request with the stored key and the configured model and report what happened
+    (exit code 1 when it failed)."""
+    from .inference import anthropic_api
+    from .secrets import get_secret
+
+    out = anthropic_api.check(get_settings().anthropic_model, get_secret("anthropic_api_key"))
+    typer.echo(json.dumps(out, indent=2, ensure_ascii=False))
+    if not out["ok"]:
+        raise typer.Exit(1)
+
+
 @settings_app.command("show")
 def settings_show() -> None:
     typer.echo(json.dumps(get_settings().model_dump(mode="json"), indent=2, ensure_ascii=False))

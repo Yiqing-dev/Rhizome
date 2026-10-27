@@ -58,7 +58,7 @@ The main surface is small on purpose; everything else is one click away.
 | **Home** | search box, asset counts, a one-line to-do (cards due, items in the review queue), the *Add a paper* drop zone; *Recall* folds out below it. Dropped files import as one batch with a progress dialog; the app is locked until it finishes (the dialog can be minimised, and survives a reload or restart) |
 | **Topic map** / **Review cards** | the topic layer as a graph (new topics fold out at the bottom); FSRS review session |
 | **More ▾** | the search page with filters, the review queue (its count sits on the menu), the weekly digest, the decision log |
-| **Settings** | appearance (language, light / dark / system theme, accent colour), chat Project setup (export instructions, vocabulary), storage folders, backups, Claude Desktop. *Advanced* holds moving the data folder, offline mode, the backup folder and restore, models and inference backend, review limits, remote snapshots |
+| **Settings** | appearance (language, light / dark / system theme, accent colour), chat Project setup (export instructions, vocabulary), storage folders, backups, Claude Desktop. *Advanced* holds moving the data folder, offline mode, the backup folder and restore, models and inference backend (with a *Test connection* button for the Anthropic API), review limits, remote snapshots |
 
 On a topic page merge / reject sit under *Manage topic*; on a paper or asset card rename / alias /
 merge sit under *Edit*. Search shows the type chips; organism, modality, year and role are under

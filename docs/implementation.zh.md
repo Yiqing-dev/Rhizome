@@ -412,6 +412,17 @@ Claude agent 判断。它先用三个只读的本地工具查看资料库：`top
 上把自动链接（链接文字就是 URL 本身）还原为纯 URL，和 DOI 去前缀一样在校验时静默处理；带真实标题的链接不动。
 指令文件本身写的是纯 URL。
 
+## Anthropic API 测试连接（2026-10-27）
+
+设置 → 高级 → 模型，选了 Anthropic API 后，密钥栏旁多了"测试连接"。后端 `inference/anthropic_api.py::check()` 先用
+`models.retrieve` 查一次模型（不计 token，同时验证密钥），再按判定请求同样的方式（同样的 beta 和安全回退）发一条
+"Reply with the single word OK." 的最小消息，effort 为 low、max_tokens 256。成功时报告模型显示名、往返毫秒数和用掉的输入 /
+输出 token；失败时 `code` 指出第一处问题（sdk_missing、no_key、auth、permission、model_not_found、bad_request、rate_limit、
+server、network），界面按 code 给出中英文解释并附原始错误，密钥从不出现在返回里。路由 `POST /settings/anthropic/test`，
+只需认证不需要可写；测试成功会 `reset_backend()`，所以因为早先一次认证失败而自我停用的后端会重新启用。命令行
+`rhz settings test-anthropic` 输出同一份 JSON，失败时退出码 1。测试里用假客户端覆盖成功、各类错误、无密钥、模型不存在和
+端点的密钥不回显。
+
 ## 还需要你来做的（M0）
 
 - 导出指令已按设计文档 10-04 版定稿（见上一节）；用一段时间后若再出现校验失败，把错误报告贴回来改规则。

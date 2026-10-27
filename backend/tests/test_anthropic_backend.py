@@ -166,3 +166,74 @@ def test_cli_secret(settings, memory_keyring):
                            catch_exceptions=False)
     assert r.exit_code == 0 and secrets.get_secret("anthropic_api_key") is None
     assert CliRunner().invoke(app, ["--data-dir", str(settings.data_dir), "settings", "secret", "other"]).exit_code == 2
+
+
+# ---- the settings page's "test connection" -------------------------------------------------
+
+def _check_client(answers, model=SimpleNamespace(display_name="Claude Opus 5.5"), model_error=None):
+    msgs = FakeMessages(answers)
+
+    def retrieve(name):
+        if model_error:
+            raise model_error
+        return model
+
+    return SimpleNamespace(beta=SimpleNamespace(messages=msgs), models=SimpleNamespace(retrieve=retrieve)), msgs
+
+
+def test_check_reports_model_latency_and_usage():
+    from rhizome.inference.anthropic_api import check
+
+    client, msgs = _check_client([{"ok": True}])
+    out = check("claude-opus-5-5", "sk-test", client=client)
+    assert out["ok"] and out["display_name"] == "Claude Opus 5.5" and out["latency_ms"] >= 0
+    call = msgs.calls[0]
+    assert call["model"] == "claude-opus-5-5" and call["fallbacks"] == "default" and call["max_tokens"] <= 256
+    assert "sk-test" not in json.dumps(out)
+
+
+@pytest.mark.parametrize("exc, code", [
+    (lambda: _status_error(anthropic.AuthenticationError, 401), "auth"),
+    (lambda: _status_error(anthropic.PermissionDeniedError, 403), "permission"),
+    (lambda: _status_error(anthropic.RateLimitError, 429), "rate_limit"),
+    (lambda: _status_error(anthropic.InternalServerError, 500), "server"),
+    (lambda: anthropic.APIConnectionError(request=__import__("httpx2").Request("POST", "https://api.anthropic.com")), "network"),
+])
+def test_check_names_the_failing_stage(exc, code):
+    from rhizome.inference.anthropic_api import check
+
+    client, _ = _check_client([exc()])
+    out = check("claude-opus-5-5", "sk-test", client=client)
+    assert out["ok"] is False and out["code"] == code and "sk-test" not in out["error"]
+
+
+def test_check_without_key_or_with_unknown_model():
+    from rhizome.inference.anthropic_api import check
+
+    assert check("claude-opus-5-5", None)["code"] == "no_key"
+    client, msgs = _check_client([], model_error=_status_error(anthropic.NotFoundError, 404))
+    assert check("claude-nope", "sk-test", client=client)["code"] == "model_not_found" and not msgs.calls
+
+
+def test_api_test_endpoint_uses_stored_key_and_resets_backend(settings, session, monkeypatch):
+    from rhizome.api.app import create_app
+    from rhizome.inference import anthropic_api
+
+    seen = {}
+
+    def fake_check(model, key, client=None):
+        seen.update(model=model, key=key)
+        return {"ok": True, "model": model, "latency_ms": 1, "usage": {"input": 1, "output": 1}}
+
+    monkeypatch.setattr(anthropic_api, "check", fake_check)
+    monkeypatch.setattr(secrets, "get_secret", lambda name: "sk-from-store" if name == "anthropic_api_key" else None)
+    session.commit()
+    app = create_app(settings, start_worker=False)
+    c = TestClient(app)
+    c.headers["Authorization"] = f"Bearer {app.state.token}"
+    c.patch("/settings", json={"anthropic_model": "claude-opus-5-5"})
+    r = c.post("/settings/anthropic/test")
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert seen == {"model": "claude-opus-5-5", "key": "sk-from-store"}
+    assert "sk-from-store" not in r.text
+    assert TestClient(app).post("/settings/anthropic/test").status_code == 401
