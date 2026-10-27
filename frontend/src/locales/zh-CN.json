@@ -153,7 +153,7 @@
     "today_queue_agent": "Claude 已为 {{n}} 项给出建议",
     "today_queue_none": "没有待审核的",
     "today_week": "篇论文在最近 {{days}} 天存入",
-    "today_week_sub": "打开每周综合",
+    "today_week_sub": "查看论文列表",
     "tile_delta": "最近 {{days}} 天 +{{n}}",
     "tile_flat": "最近 {{days}} 天没有新增",
     "drop_title": "把 RXF 文件拖到这里，或点击选择",

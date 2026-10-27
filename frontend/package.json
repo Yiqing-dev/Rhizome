@@ -1,7 +1,7 @@
 {
   "name": "rhizome-frontend",
   "private": true,
-  "version": "0.1.13",
+  "version": "0.1.14",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
@@ -12,8 +12,6 @@
   },
   "dependencies": {
     "@fontsource-variable/archivo": "^5.3.0",
-    "@fontsource-variable/inter": "^5.3.0",
-    "@fontsource-variable/source-serif-4": "^5.3.0",
     "cytoscape": "^3.34.3",
     "graphology": "^0.26.0",
     "graphology-layout-forceatlas2": "^0.10.1",

@@ -196,7 +196,7 @@ export default function Home() {
             </span></span>
             <ArrowIcon />
           </a>
-          <a href={href("digest")}>
+          <a href={href("search?types=work")}>
             <span className="n">{fmtNum(s?.week?.work ?? 0, lng)}</span>
             <span><span className="t">{t("home.today_week", { days })}</span><br /><span className="s">{t("home.today_week_sub")}</span></span>
             <ArrowIcon />
