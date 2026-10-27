@@ -301,7 +301,7 @@ main > .stack, main > .page, main > .home { animation: page-in 0.18s ease-out; }
   padding: 0.15rem 0.45rem; vertical-align: 0.2em; white-space: nowrap;
   color: var(--tc); background: color-mix(in srgb, var(--tc) 12%, transparent);
 }
-.badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--tc); }
+.badge::before { content: ""; width: 6px; height: 6px; background: var(--tc); }
 .t-work { --tc: var(--c-work); } .t-dataset { --tc: var(--c-dataset); } .t-method { --tc: var(--c-method); }
 .t-idea { --tc: var(--c-idea); } .t-claim { --tc: var(--c-claim); } .t-topic { --tc: var(--c-topic); }
 .t-organism { --tc: var(--c-organism); } .t-modality { --tc: var(--c-modality); }
@@ -501,7 +501,7 @@ main > .stack, main > .page, main > .home { animation: page-in 0.18s ease-out; }
 .edge-group header { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.9rem; border-bottom: 2px solid var(--line-strong); }
 .edge-group header b { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink); font-weight: 800; }
 .edge-group header .n { color: var(--muted); font-size: 0.8rem; }
-.edge-group header .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ec, var(--line-strong)); }
+.edge-group header .dot { width: 10px; height: 10px; background: var(--ec, var(--line-strong)); }
 .edge-group ul { list-style: none; padding: 0.3rem 0; margin: 0; }
 .edge-group li { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.3rem 0.9rem; }
 .edge-group li:hover { background: var(--bg-elev); }
@@ -512,12 +512,12 @@ main > .stack, main > .page, main > .home { animation: page-in 0.18s ease-out; }
 .edge-group li:hover .edge-actions, .edge-group li:focus-within .edge-actions { opacity: 1; }
 .graph-card { background: var(--surface); border: 1px solid var(--line-strong); overflow: hidden; }
 .graph-card header { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.9rem; border-bottom: 2px solid var(--line-strong); font-weight: 700; }
-.graph { width: 100%; height: 440px; background: var(--surface); }
+.graph { width: 100%; height: 440px; background: var(--bg); }
 .graph.tall { height: 640px; }
 .legend { display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; padding: 0.5rem 0.9rem; font-size: 0.78rem; color: var(--ink-2); border-top: 1px solid var(--line); }
 .legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
 .legend i { width: 14px; height: 3px; background: var(--ec); display: inline-block; }
-.legend i.node { width: 9px; height: 9px; border-radius: 50%; }
+.legend i.node { width: 9px; height: 9px; }
 .related { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 0.4rem; }
 .related li { padding: 0.5rem 0.75rem; background: var(--surface); border: 1px solid var(--line-strong); }
 .related .via { font-size: 0.8rem; color: var(--muted); display: flex; gap: 0.5rem; flex-wrap: wrap; }
@@ -547,7 +547,7 @@ main > .stack, main > .page, main > .home { animation: page-in 0.18s ease-out; }
 .topic-list { list-style: none; padding: 0; margin: 0; max-height: 560px; overflow: auto; }
 .topic-list li { display: flex; align-items: center; gap: 0.5rem; padding: 0.35rem 0.9rem; font-size: 0.9rem; border-bottom: 1px solid var(--line); }
 .topic-list li:last-child { border-bottom: none; }
-.topic-list i { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--cc, var(--line-strong)); }
+.topic-list i { width: 10px; height: 10px; flex: none; background: var(--cc, var(--line-strong)); }
 .topic-list .n { margin-left: auto; color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 .topic-list a { color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

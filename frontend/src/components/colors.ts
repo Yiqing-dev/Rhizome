@@ -25,6 +25,8 @@ export const edgeColor = (type: string): string => cssVar(EDGE_TOKEN[type] ?? "-
 export const edgeDashed = (type: string): boolean => type === "applicable_to" || type === "cites";
 export const ink = (): string => cssVar("--ink-2", "#444");
 export const surface = (): string => cssVar("--surface", "#fff");
+/** The display face for canvas / WebGL labels (the first family of the token, unquoted). */
+export const graphFont = (): string => cssVar("--font-display", "sans-serif").split(",")[0].replace(/"/g, "").trim() || "sans-serif";
 
 export const COMMUNITY_PALETTE = ["#4a68e6", "#178f6c", "#d2650b", "#7466b8", "#d4297f", "#5e9a1b", "#c99a06", "#9c6f1d", "#1f78b4", "#b04a8e"];
 export const communityColor = (c: number | null | undefined): string =>
