@@ -160,6 +160,12 @@ function PaperCard({ card, onChanged }: { card: Card; onChanged: () => void }) {
             {ex.has_pdf ? <span className="pill">PDF</span> : null}
           </div>
           <ol className="tldr">{ex.tldr.map((x, i) => <li key={i}>{x}</li>)}</ol>
+          {ex.report ? (
+            <details className="report">
+              <summary>{t("paper.report")}{ex.reader?.model ? <span className="muted small"> · {ex.reader.model}</span> : null}</summary>
+              <pre className="report-text">{ex.report}</pre>
+            </details>
+          ) : null}
           {ex.user_insights.length ? (<>
             <div className="section-label">{t("paper.your_view")}</div>
             <div className="stack-sm">{ex.user_insights.map((u, i) => <Insight key={i} u={u} onChanged={onChanged} />)}</div>

@@ -423,6 +423,36 @@ server、network），界面按 code 给出中英文解释并附原始错误，�
 `rhz settings test-anthropic` 输出同一份 JSON，失败时退出码 1。测试里用假客户端覆盖成功、各类错误、无密钥、模型不存在和
 端点的密钥不回显。
 
+## 用 API 读新论文（2026-10-27）
+
+首页多了一块"让 Claude 读新论文"（`components/ReadPanel.tsx`）：拖入 PDF，每个文件一个 `read_paper` 任务
+（`inference/reader.py::read_paper`）。流程固定六步，进度写在 KV `job:<id>:progress`，`/jobs/{id}` 在运行中带出
+`progress.step`，面板每两秒刷新：
+
+1. **识别**：整个 PDF 作为 document 块（base64，带 cache_control）发给 Anthropic API，用结构化输出拿到 DOI / arXiv 号 /
+   标题 / 年份 / 第一作者，effort low。
+2. **查重**：在本地按 DOI（`work:doi:*`、别名、external_id）、arXiv 号折算的 DOI、标题（别名和规范名归一化后比对）找已有论文。
+   找到就停，结果 `duplicate` 带已有论文链接；只花了一次小请求。面板上的"仍然审读"用同一份暂存文件以 `force=True` 重排任务。
+3. **审读**：同一会话继续（前缀缓存命中），按 `prompts.READER_REVIEW` 做逐节审读、逻辑链、证据类型、边界与 Kill Conditions、
+   数据集 / 方法 / 问题 / 可迁移想法，markdown，界面语言，effort high，max_tokens 16000。
+4. **导出**：再续一轮"导出 RXF"。system 提示里带着用户 Project 里那份导出指令（`rxf/guide.instructions`，中英随界面语言）
+   和当前词表（`services/vocab.export_vocab`），所以主题优先落到已有规范名。要求 prompt_version `rhizome-reader-v1`、
+   depth deep、exported_at 当天、没有 user_insights、ideas 的 origin 全为 model。
+5. **校验**：`load_rxf`；不通过就把校验报告发回去修一轮（`REPAIR_ROUNDS = 1`），仍不通过结果为 `invalid`，报告和 YAML 原样
+   返回给面板。
+6. **存入**：`pipeline.ingest.ingest_text`，和收件箱文件完全一样（L0 保存 YAML 和 PDF，召回照跑）。审稿报告存进 rawstore
+   （kind `report`，.md），sha 记在该 Extraction 的 `meta.report_sha`，同时记 `meta.reader`（模型、prompt 版本、token 用量）。
+   论文页的导出卡片里多了"Claude 的审稿报告"折叠块。
+
+可用性由 `reader.availability()` 决定：推理后端是 anthropic、装了 anthropic 包、有密钥；`/stats` 带 `reader`，`/read/status`
+单独可查；不可用时面板只显示原因和去设置的链接。路由：`POST /read`（multipart，非 PDF 跳过，暂存在 `<data>/reads/<批次>/`，
+成功后删除，重复或失败保留以便重跑）、`POST /read/{job}/force`。命令行 `rhz read a.pdf b.pdf [--force]`。
+所有 API 调用带 `server-side-fallback` beta 和 `fallbacks="default"`；任何 API 错误以 `ReaderError` 结束任务，错误信息不含密钥。
+
+这是设计原则"LLM 在外，软件在内"的一处有意偏离：整篇论文离开本机。所以它两次选择加入（选 Anthropic 后端并存密钥；每次
+由用户为具体文件点下），面板提示里写明整篇论文会发出并计费。测试（`test_reader.py`）用脚本化客户端覆盖完整路径、查重短路、
+force、修复一轮、API 错误、截断、路由暂存与任务执行；真实 API 路径未在 CI 中联网验证。
+
 ## 还需要你来做的（M0）
 
 - 导出指令已按设计文档 10-04 版定稿（见上一节）；用一段时间后若再出现校验失败，把错误报告贴回来改规则。

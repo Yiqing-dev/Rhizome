@@ -97,7 +97,7 @@ export interface ExportView {
   claims: { text: string; evidence_type: string; evidence: string; boundary?: string; logic_jump?: boolean }[];
   issues: { severity: string; location?: string; text: string; test?: string }[];
   user_insights: { text: string; links_to: string[]; key?: string; entity_id?: number; name?: string; edited?: boolean }[];
-  suspect: string[]; raw: string | null; has_pdf: boolean;
+  suspect: string[]; raw: string | null; has_pdf: boolean; report?: string | null; reader?: { model?: string } | null;
 }
 export interface Card extends Hit {
   attrs: Record<string, any>; aliases: { alias: string; lang: string; source: string }[];
@@ -143,7 +143,8 @@ export interface DueCard { id: string; q: string; a: string; entity_key: string;
 export interface Stats { entities: Record<string, number>; edges: number; review_queue: number; review_queue_by_kind: Record<string, number>; cards_due: number;
   inbox?: { watching: boolean; last_scan: string | null; pending: string[]; ignored: string[] };
   update?: { latest: string; url: string | null; current: string } | null;
-  vocab?: { exported_at: string | null; stale: boolean | null } }
+  vocab?: { exported_at: string | null; stale: boolean | null };
+  reader?: ReaderStatus }
 
 export interface Decision { id: number; op: string; payload: Record<string, unknown>; created_at: string; revoked_at: string | null }
 export interface JobView {
@@ -151,6 +152,13 @@ export interface JobView {
   result: Record<string, any> | null; error: string | null; created_at: string | null; started_at: string | null; finished_at: string | null;
 }
 export interface FailedFile { name: string; report: string | null; repairable: string[]; has_pdf: boolean; modified: string }
+
+export interface ReaderStatus { enabled: boolean; reason: "backend" | "sdk_missing" | "no_key" | null; model?: string }
+export interface ReadResult {
+  status: "duplicate" | "done" | "invalid"; paper: { doi: string | null; arxiv_id: string | null; title: string; year: number | null; first_author: string | null };
+  work?: { id: number | null; key: string | null; name?: string }; errors?: string; report?: string;
+  usage?: { calls: number; input: number; output: number; cache_read: number; cache_write: number }; model?: string;
+}
 
 export interface AnthropicCheck {
   ok: boolean; model: string; display_name?: string | null; latency_ms?: number; stop_reason?: string | null;
@@ -219,6 +227,16 @@ export const api = {
   settings: () => req<Record<string, any>>("GET", "/settings"),
   patchSettings: (b: Record<string, unknown>) => req<Record<string, any>>("PATCH", "/settings", b),
   testAnthropic: () => req<AnthropicCheck>("POST", "/settings/anthropic/test"),
+  readStatus: () => req<ReaderStatus>("GET", "/read/status"),
+  readPapers: async (files: File[], force = false) => {
+    const fd = new FormData();
+    files.forEach((f) => fd.append("files", f, f.name));
+    if (force) fd.append("force", "1");
+    const r = await fetch(apiUrl("/read"), { method: "POST", headers: { Authorization: authHeader() }, body: fd });
+    if (!r.ok) throw new ApiError(r.status, await r.json().catch(() => r.statusText));
+    return (await r.json()) as { jobs: JobView[]; skipped: string[] };
+  },
+  readForce: (jobId: number) => req<JobView>("POST", `/read/${jobId}/force`),
   setSecret: (name: string, value: string | null) => req<{ name: string; source: "env" | "keyring" | null }>("POST", "/settings/secret", { name, value }),
   vocab: (includeCandidates = true, mark = false) => req<string>("GET", "/vocab", undefined, { include_candidates: includeCandidates, mark }),
   rxfInstructions: (lang: string) => req<string>("GET", "/rxf/instructions", undefined, { lang }),

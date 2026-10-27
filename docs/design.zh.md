@@ -507,6 +507,7 @@ G2 是整个计划的证伪点：如果检索基线达不到 M0 预注册的阈�
 | RXF v1 字段补充（首次导出校验失败后） | 新增可选字段 `exported_at`、`language`，claims 与各类 assets 新增文件内 `id`；`topics.new` 不收；`ideas.transfer` 保持嵌套 | 仍为 `rxf_version: 1`（向后兼容）；`links_to` / `about` 只能引用文件内 id，校验检查引用完整性；导出指令新增三条 |
 | RXF v1 第二次补充（两份导出分别因数据集缺少标识和 database 取值越界而校验失败，2026-10-04） | 数据集用 accession 或 name 标识；database 枚举定为 GEO / SRA / ENA / CNGB / ArrayExpress / Zenodo / other；骨架补齐代码已接受的字段（`paper.venue`、`datasets.name`、`datasets.role`、`methods.extends`）；`maintained`、`public` 用 true / false / unknown | 仍为 `rxf_version: 1`；导出指令重写为 17 条；没有 accession 的 Dataset 走自由概念规范化；骨架作为契约测试的正例 |
 | RXF v1 第三次补充（对照代码核查文档，2026-10-05） | `public` 与 `maintained` 一样接受 unknown；database 枚举加入 GSA；骨架补上代码已有的 `claims.stance`（contradicts 边的来源）、`topics.aliases`、`instructions_version`；导出指令改为上面的 17 条，中英两版 | 仍为 `rxf_version: 1`；骨架进入 CI 契约测试；实现状态见 docs/implementation.zh.md |
+| 用 API 读新论文（2026-10-27） | 首页可拖入 PDF，由 Anthropic API 识别、查重、深度审读、按导出指令和词表生成 RXF、校验后走普通摄入；审稿报告保存在论文页 | 对"LLM 在外"原则的有意偏离：整篇论文离开本机，因此需要选定 Anthropic 后端并存密钥，且每次由用户为具体文件发起；资料库已有的论文只花一次识别请求就停下 |
 | RXF v1 第四次补充（导出质量，2026-10-15） | 字段和枚举不变；导出指令收紧内容要求：claims.boundary 写明生物学前提与数学归纳偏置的失效边界（Kill Conditions）；ideas.text 脱离具体物种与基因故事、优先提炼可移植的局部算子 / 正则化 / 采样 / 无真值验证设计，barrier 写具体的分布错位或物理生物学障碍；methods.io 用"输入模态/张量 → [核心数学机制] → 输出表征"；applicable_to 可含跨学科算法原语；review_cards 围绕算子原理、假设死亡边界、无真值验证与防坑点出题 | 仍为 `rxf_version: 1`，`instructions_version` 仍为 "2026.10"；校验器把聊天界面自动加上的 markdown 链接（`[url](url)`）还原成纯 URL（paper.url、methods.repo） |
 
 需求和架构已经定稿；实现进度和与设计的偏差见 docs/implementation.zh.md。还没完成的 M0 事项：预注册 benchmark 问题和门槛，准备 G3 标注集。

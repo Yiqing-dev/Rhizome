@@ -58,6 +58,7 @@ The main surface is small on purpose; everything else is one click away.
 | **Home** | search box, asset counts, a one-line to-do (cards due, items in the review queue), the *Add a paper* drop zone; *Recall* folds out below it. Dropped files import as one batch with a progress dialog; the app is locked until it finishes (the dialog can be minimised, and survives a reload or restart) |
 | **Topic map** / **Review cards** | the topic layer as a graph (new topics fold out at the bottom); FSRS review session |
 | **More ▾** | the search page with filters, the review queue (its count sits on the menu), the weekly digest, the decision log |
+| **Read with Claude** (Home, optional) | drop the PDF of a new paper: with the Anthropic API selected, Claude identifies it, stops if the library already has it, otherwise reviews it in depth, writes RXF under your export instructions and vocabulary, validates and imports it; the review report is kept on the paper's page. `rhz read paper.pdf` |
 | **Settings** | appearance (language, light / dark / system theme, accent colour), chat Project setup (export instructions, vocabulary), storage folders, backups, Claude Desktop. *Advanced* holds moving the data folder, offline mode, the backup folder and restore, models and inference backend (with a *Test connection* button for the Anthropic API), review limits, remote snapshots |
 
 On a topic page merge / reject sit under *Manage topic*; on a paper or asset card rename / alias /

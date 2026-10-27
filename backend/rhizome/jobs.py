@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import os
 import threading
@@ -35,6 +36,23 @@ def handler(kind: str):
 # queued is the same work, so it is coalesced instead of running the whole thing twice.
 COALESCE = ("rebuild", "nightly", "enrich", "agent_review", "organise_tree")
 
+# The id of the job the current thread is running (handlers that report progress read it).
+CURRENT_JOB: contextvars.ContextVar[int | None] = contextvars.ContextVar("rhizome_current_job", default=None)
+
+
+def set_progress(job_id: int | None, data: dict[str, Any]) -> None:
+    """Progress of a long job, written in its own short transaction so the UI can poll it while the
+    handler's transaction is still open."""
+    if job_id is None:
+        return
+    with session_scope() as s:
+        _kv_set(s, f"job:{job_id}:progress", data)
+
+
+def progress_of(s: Session, job_id: int) -> dict[str, Any] | None:
+    row = s.get(KV, f"job:{job_id}:progress")
+    return dict(row.v) if row is not None and row.v else None
+
 
 def enqueue(s: Session, kind: str, payload: dict[str, Any] | None = None) -> Job:
     if kind not in HANDLERS:
@@ -59,10 +77,16 @@ def running(s: Session, kind: str) -> bool:
 
 
 def job_view(j: Job) -> dict[str, Any]:
-    return {"id": j.id, "kind": j.kind, "status": j.status, "payload": j.payload, "result": j.result,
-            "error": j.error, "created_at": j.created_at.isoformat() if j.created_at else None,
-            "started_at": j.started_at.isoformat() if j.started_at else None,
-            "finished_at": j.finished_at.isoformat() if j.finished_at else None}
+    from sqlalchemy.orm import object_session
+
+    out = {"id": j.id, "kind": j.kind, "status": j.status, "payload": j.payload, "result": j.result,
+           "error": j.error, "created_at": j.created_at.isoformat() if j.created_at else None,
+           "started_at": j.started_at.isoformat() if j.started_at else None,
+           "finished_at": j.finished_at.isoformat() if j.finished_at else None}
+    s = object_session(j)
+    if j.status == "running" and s is not None:
+        out["progress"] = progress_of(s, j.id)
+    return out
 
 
 def _finish(job_id: int, **values: Any) -> None:
@@ -85,6 +109,7 @@ def run_next(only_id: int | None = None) -> Job | None:
         if not claimed:
             return None
         job_id, kind, payload = j.id, j.kind, dict(j.payload or {})
+    token = CURRENT_JOB.set(job_id)
     try:
         with session_scope() as s:
             result = HANDLERS[kind](s, payload)
@@ -98,6 +123,8 @@ def run_next(only_id: int | None = None) -> Job | None:
                     _kv_set(s, "last_nightly_failure", {"at": utcnow().isoformat()})
         except Exception:  # noqa: BLE001 - the database itself may be the problem
             log.exception("could not record the failure of job %s", job_id)
+    finally:
+        CURRENT_JOB.reset(token)
     with session_scope() as s:
         return s.get(Job, job_id)
 
@@ -283,6 +310,29 @@ def _organise_topic(s: Session, p: dict[str, Any]) -> dict[str, Any]:
     from .inference.organise import organise_topic
 
     return organise_topic(s, p["topic"])
+
+
+@handler("read_paper")
+def _read_paper(s: Session, p: dict[str, Any]) -> dict[str, Any]:
+    """Read one staged PDF with the API (inference/reader.py). The staged file is removed once the
+    paper is in the library; a duplicate or a failure keeps it so the user can run it again."""
+    from pathlib import Path
+
+    from .inference.reader import read_paper
+
+    path = Path(p["path"])
+    if not path.exists():
+        raise RuntimeError(f"staged file is gone: {path.name}")
+    job_id = CURRENT_JOB.get()
+    out = read_paper(s, path.read_bytes(), p.get("name") or path.name, force=bool(p.get("force")),
+                     progress=lambda step: set_progress(job_id, {"step": step, "at": utcnow().isoformat()}))
+    if out["status"] == "done":
+        path.unlink(missing_ok=True)
+        try:
+            path.parent.rmdir()
+        except OSError:
+            pass
+    return out
 
 
 def maybe_agent_review(s: Session) -> Job | None:

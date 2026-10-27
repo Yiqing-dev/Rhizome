@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api, ApiError, errorText, type Hit } from "../api";
 import { EmptyState, HitRow, Loading } from "../components/common";
 import { SparkIcon, UploadIcon } from "../components/icons";
+import ReadPanel from "../components/ReadPanel";
 import { useLoad, useRefreshOnFocus } from "../hooks";
 import { fmtNum } from "../i18n";
 import { go, href } from "../router";
@@ -153,6 +154,7 @@ export default function Home() {
             </div>
           ) : null}
         </section>
+        <ReadPanel status={s?.reader} onChanged={stats.reload} />
         <details className="panel disclosure">
           <summary><h2><SparkIcon />{t("home.recall_title")}</h2><span className="hint">{t("home.recall_summary")}</span></summary>
           <p className="hint">{t("home.recall_hint")}</p>

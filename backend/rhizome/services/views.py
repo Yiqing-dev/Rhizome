@@ -90,6 +90,8 @@ def entity_card(s: Session, entity_id: int, touch_access: bool = True) -> dict[s
                 "user_insights": _insight_views(s, ex), "suspect": (ex.meta or {}).get("suspect", []),
                 "raw": raw.decode("utf-8") if raw else None,
                 "has_pdf": len(ex.input_hashes or []) > 1,
+                "report": _report_text(ex),
+                "reader": (ex.meta or {}).get("reader"),
             })
         card["exports"] = exports
     if touch_access:
@@ -285,18 +287,26 @@ def topic_changes(s: Session, topic_id: int, since: datetime) -> dict[str, Any]:
     }
 
 
+def _report_text(ex: Extraction) -> str | None:
+    sha = (ex.meta or {}).get("report_sha")
+    data = rawstore.read(sha, "report") if sha else None
+    return data.decode("utf-8", errors="replace") if data else None
+
+
 def home_stats(s: Session) -> dict[str, Any]:
     by_type = dict(s.execute(select(Entity.type, func.count()).group_by(Entity.type)).all())
     queue = s.execute(select(func.count()).select_from(ReviewItem).where(ReviewItem.status == "pending")).scalar_one()
     by_kind = dict(s.execute(select(ReviewItem.kind, func.count()).where(ReviewItem.status == "pending")
                              .group_by(ReviewItem.kind)).all())
+    from ..inference.reader import availability as reader_availability
     from ..jobs import update_notice
     from .vocab import vocab_status
     from .cards import due_count
 
     from .. import inbox
 
-    return {"entities": by_type, "edges": s.query(Edge).count(), "review_queue": queue,
+    return {
+        "reader": reader_availability(),"entities": by_type, "edges": s.query(Edge).count(), "review_queue": queue,
             "review_queue_by_kind": by_kind, "cards_due": due_count(s), "inbox": inbox.status(),
             "update": update_notice(s), "vocab": vocab_status(s)}
 

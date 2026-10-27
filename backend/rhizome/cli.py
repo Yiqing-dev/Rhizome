@@ -958,6 +958,47 @@ def settings_secret(name: str, clear: bool = typer.Option(False, "--clear", help
         c.set_secret(name, value)  # the running app picks it up at once
 
 
+@app.command("read")
+def read_cmd(pdfs: list[Path] = typer.Argument(..., help="PDF files"),
+             force: bool = typer.Option(False, "--force", help="Read a paper the library already has")) -> None:
+    """Read new papers with the Anthropic API: identify, skip what the library has, review, export
+    RXF, validate and ingest. Needs the Anthropic backend selected and a key (rhz settings secret)."""
+    from .db.session import session_scope
+    from .inference.reader import ReaderError, ReaderUnavailable, availability, read_paper
+
+    _require_writable()
+    avail = availability()
+    if not avail["enabled"]:
+        typer.secho(f"reader unavailable: {avail['reason']}", fg="red", err=True)
+        raise typer.Exit(2)
+    failed = 0
+    for path in pdfs:
+        typer.echo(f"== {path.name}")
+        try:
+            with session_scope() as s:
+                out = read_paper(s, path.read_bytes(), path.name, force=force,
+                                 progress=lambda step: typer.echo(f"   {step}…", err=True))
+        except (ReaderError, ReaderUnavailable) as e:
+            failed += 1
+            typer.secho(f"   failed: {e}", fg="red", err=True)
+            continue
+        if _state["json"]:
+            typer.echo(json.dumps(out, ensure_ascii=False, indent=2))
+            continue
+        u = out.get("usage", {})
+        if out["status"] == "duplicate":
+            typer.echo(f"   already in the library: {out['work']['name']} ({out['work']['key']})")
+        elif out["status"] == "invalid":
+            failed += 1
+            typer.secho("   the export did not validate:", fg="red")
+            typer.echo(out["errors"])
+        else:
+            typer.echo(f"   ingested {out['work']['key']}")
+        typer.echo(f"   tokens: {u.get('input', 0)} in / {u.get('output', 0)} out / {u.get('cache_read', 0)} cached")
+    if failed:
+        raise typer.Exit(1)
+
+
 @settings_app.command("test-anthropic")
 def settings_test_anthropic() -> None:
     """Send one tiny request with the stored key and the configured model and report what happened

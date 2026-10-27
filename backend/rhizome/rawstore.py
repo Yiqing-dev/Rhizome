@@ -23,7 +23,7 @@ from .text import sha256
 
 
 def path_for(sha: str, kind: str) -> Path:
-    ext = {"rxf": "yaml", "pdf": "pdf", "openalex": "json"}.get(kind, "bin")
+    ext = {"rxf": "yaml", "pdf": "pdf", "openalex": "json", "report": "md"}.get(kind, "bin")
     return get_settings().raw_dir / sha[:2] / f"{sha}.{ext}"
 
 

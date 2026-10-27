@@ -301,6 +301,57 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         except NothingToImport:
             raise HTTPException(422, {"code": "not_rxf"})
 
+    @app.get("/read/status", dependencies=A)
+    def read_status() -> dict[str, Any]:
+        from ..inference.reader import availability
+
+        return availability()
+
+    @app.post("/read", dependencies=W)
+    async def read_papers(request: Request, s: Session = Depends(db)) -> dict[str, Any]:
+        """Stage PDFs and queue one read_paper job per file (inference/reader.py): identify, check
+        the library, review, export RXF, validate, ingest."""
+        import uuid
+
+        from ..inference.reader import availability
+
+        avail = availability()
+        if not avail["enabled"]:
+            raise HTTPException(409, {"code": "reader_unavailable", "reason": avail["reason"]})
+        form = await request.form()
+        force = str(form.get("force", "")).lower() in ("1", "true")
+        batch_dir = get_settings().data_dir / "reads" / uuid.uuid4().hex[:12]
+        queued, skipped = [], []
+        for f in form.getlist("files"):
+            if isinstance(f, str):
+                continue
+            data = await f.read()
+            name = Path(f.filename or "paper.pdf").name
+            if not data.startswith(b"%PDF"):
+                skipped.append(name)
+                continue
+            batch_dir.mkdir(parents=True, exist_ok=True)
+            target = batch_dir / name
+            n = 1
+            while target.exists():
+                target = batch_dir / f"{Path(name).stem}-{n}{Path(name).suffix}"
+                n += 1
+            target.write_bytes(data)
+            queued.append(jobs.job_view(jobs.enqueue(s, "read_paper", {"path": str(target), "name": name, "force": force})))
+        if not queued:
+            raise HTTPException(422, {"code": "not_pdf", "skipped": skipped})
+        return {"jobs": queued, "skipped": skipped}
+
+    @app.post("/read/{job_id}/force", dependencies=W)
+    def read_force(job_id: int, s: Session = Depends(db)) -> dict[str, Any]:
+        """Read a paper the library already has anyway (a second export of the same work)."""
+        j = s.get(Job, job_id)
+        if j is None or j.kind != "read_paper":
+            raise HTTPException(404, _("api.not_found"))
+        if not Path(str((j.payload or {}).get("path", ""))).exists():
+            raise HTTPException(409, {"code": "staged_file_gone"})
+        return jobs.job_view(jobs.enqueue(s, "read_paper", {**j.payload, "force": True}))
+
     @app.get("/import/active", dependencies=A)
     def import_active(s: Session = Depends(db)) -> dict[str, Any]:
         from ..services.imports import active
