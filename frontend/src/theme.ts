@@ -6,11 +6,13 @@
 
 export type Theme = "system" | "light" | "dark";
 export const THEMES: Theme[] = ["system", "light", "dark"];
-/** Preset name -> the base colour the tokens derive light and dark shades from. */
+/** Preset name -> the base colour the tokens derive light and dark shades from. "red" is the
+ * Modernist system's accent (the default); "green" is Rhizome's own older colour. */
 export const ACCENTS: Record<string, string> = {
-  green: "#3e7d3b", teal: "#1f7f86", blue: "#2f62c9", violet: "#6a4fc2", rose: "#c23a6a",
+  red: "#ec3013", green: "#3e7d3b", teal: "#1f7f86", blue: "#2f62c9", violet: "#6a4fc2", rose: "#c23a6a",
   amber: "#b26a0b", graphite: "#4f5560",
 };
+export const DEFAULT_ACCENT = "red";
 const THEME_KEY = "rhizome.theme";
 const ACCENT_KEY = "rhizome.accent";
 
@@ -19,13 +21,13 @@ export function currentTheme(): Theme {
   return v === "light" || v === "dark" ? v : "system";
 }
 export function currentAccent(): string {
-  return document.documentElement.dataset.accent || "green";
+  return document.documentElement.dataset.accent || DEFAULT_ACCENT;
 }
 
 export function applyAppearance(theme: Theme, accent: string, remember = true): void {
   const root = document.documentElement;
   if (theme === "system") delete root.dataset.theme; else root.dataset.theme = theme;
-  root.dataset.accent = accent in ACCENTS ? accent : "green";
+  root.dataset.accent = accent in ACCENTS ? accent : DEFAULT_ACCENT;
   if (remember) {
     try {
       localStorage.setItem(THEME_KEY, theme);

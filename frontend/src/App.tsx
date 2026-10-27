@@ -7,7 +7,7 @@ import ImportOverlay from "./components/ImportOverlay";
 import { Skeleton } from "./components/Skeleton";
 import { isLocked, refresh as refreshImport, useImport } from "./importStore";
 import { showToast, Toasts } from "./components/Toast";
-import { Logo, SearchIcon } from "./components/icons";
+import { ChevronIcon, Mark, SearchIcon } from "./components/icons";
 import { useJob, useRefreshOnFocus } from "./hooks";
 import { backendLang, setLanguage } from "./i18n";
 import { go, href, useRoute } from "./router";
@@ -45,7 +45,7 @@ function MoreMenu({ head, queue }: { head: string; queue: number }) {
     <div className="more-menu">
       <button type="button" className={`nav-more ${active ? "active" : ""}`} aria-haspopup="menu" aria-expanded={open}
         onClick={() => setOpen((o) => !o)}>
-        {t("nav.more")}{queue > 0 ? <span className="nav-count">{queue}</span> : null}<span aria-hidden="true"> ▾</span>
+        {t("nav.more")}{queue > 0 ? <span className="nav-count">{queue}</span> : null}<ChevronIcon />
       </button>
       {open && (
         <div className="menu" role="menu">
@@ -252,7 +252,7 @@ export default function App() {
     <div className="shell" ref={shell} aria-busy={importing}>
       <header className="topbar">
         <div className="topbar-inner">
-          <a className="brand" href={href("")}><Logo />{t("app.name")}</a>
+          <a className="brand" href={href("")}><Mark />{t("app.name")}</a>
           <nav>
             {NAV.map(([p, k]) => (
               <a key={p} href={href(p)} className={(head ?? "") === p ? "active" : ""}>{t(k)}</a>
@@ -260,12 +260,13 @@ export default function App() {
             <MoreMenu head={head ?? ""} queue={queue} />
             <a href={href("settings")} className={head === "settings" ? "active" : ""}>{t("nav.settings")}</a>
           </nav>
-          <span className="spacer" />
-          {!isHome && <TopbarSearch />}
-          <LangToggle />
+          <div className="topbar-right">
+            {!isHome && <TopbarSearch />}
+            <LangToggle />
+          </div>
         </div>
       </header>
-      <main>
+      <main className={isHome ? "home-main" : undefined}>
         <ModeBanner />
         <UpdateBanner update={update} />
         <ModelBanner />

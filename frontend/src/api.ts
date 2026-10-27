@@ -87,6 +87,12 @@ export interface Source { work_id: number; title: string; year: number | null; e
 export interface Hit {
   id: number; key: string; type: EntityType; name: string; status: string; external_id: string | null;
   score: number | null; origin?: string | null; sources: Source[]; relevance?: number | null;
+  forgetting?: number | null; seen_days?: number | null;  // recall only
+}
+/** A paper on the Home page's "recently captured" list. */
+export interface RecentWork {
+  id: number; key: string; name: string; created_at: string | null; depth: "light" | "deep" | null;
+  via: "rxf" | "reader"; counts: Record<string, number>;
 }
 export interface EdgeView {
   id: number; type: string; direction: "in" | "out"; status: string; confidence: number; evidence: string | null;
@@ -144,7 +150,8 @@ export interface Stats { entities: Record<string, number>; edges: number; review
   inbox?: { watching: boolean; last_scan: string | null; pending: string[]; ignored: string[] };
   update?: { latest: string; url: string | null; current: string } | null;
   vocab?: { exported_at: string | null; stale: boolean | null };
-  reader?: ReaderStatus }
+  reader?: ReaderStatus;
+  week: Record<string, number>; week_days: number; recent: RecentWork[] }
 
 export interface Decision { id: number; op: string; payload: Record<string, unknown>; created_at: string; revoked_at: string | null }
 export interface JobView {

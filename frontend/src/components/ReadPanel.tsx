@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // "Let Claude read a new paper": drop PDFs, one job per file runs on the server (identify, check the
 // library, review, export RXF, validate, import). The panel follows the jobs it started plus any
-// read_paper job still running from before (another window, a reload).
+// read_paper job still running from before (another window, a reload). On the Home sheet it is the
+// lower half of the capture column: a title, a line, a "Choose PDF…" button that also takes drops.
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, ApiError, errorText, type JobView, type ReadResult, type ReaderStatus } from "../api";
 import { href } from "../router";
-import { SparkIcon, UploadIcon } from "./icons";
+import { SparkIcon } from "./icons";
 
 const POLL_MS = 2000;
 
@@ -61,20 +62,20 @@ export default function ReadPanel({ status, onChanged }: { status?: ReaderStatus
   const why = status?.reason === "no_key" ? t("home.read_disabled_no_key")
     : status?.reason === "sdk_missing" ? t("home.read_disabled_sdk") : t("home.read_disabled_backend");
   return (
-    <details className="panel disclosure read-panel" open={enabled || jobs.length > 0}>
-      <summary><h2><SparkIcon />{t("home.read_title")}</h2><span className="hint">{t("home.read_summary")}</span></summary>
-      <p className="hint">{t("home.read_hint")}</p>
+    <div className={`sub read-panel ${over ? "over" : ""}`}
+      onDragOver={(e) => { if (enabled) { e.preventDefault(); setOver(true); } }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => { if (!enabled) return; e.preventDefault(); setOver(false); onFiles(e.dataTransfer.files); }}>
+      <div className="h"><SparkIcon />{t("home.read_title")}</div>
+      <p className="hint">{t("home.read_blurb")}</p>
       {!enabled && <p className="hint">{why} <a href={href("settings")}>{t("nav.settings")} →</a></p>}
       {enabled && (
-        <label className={`drop ${over ? "over" : ""}`} tabIndex={0} role="button"
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.current?.click(); } }}
-          onDragOver={(e) => { e.preventDefault(); setOver(true); }}
-          onDragLeave={() => setOver(false)}
-          onDrop={(e) => { e.preventDefault(); setOver(false); onFiles(e.dataTransfer.files); }}>
+        <div>
           <input ref={fileInput} type="file" accept="application/pdf,.pdf" multiple hidden onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }} />
-          <UploadIcon />
-          <span>{t("home.read_drop")}</span>
-        </label>
+          <button type="button" className={`btn ${over ? "primary" : ""}`} onClick={() => fileInput.current?.click()} title={t("home.read_drop")}>
+            {t("home.read_choose")}
+          </button>
+        </div>
       )}
       {msg && <div className={`notice ${msg.ok ? "ok" : "error"}`}>{msg.text}</div>}
       {jobs.length > 0 && (
@@ -82,7 +83,7 @@ export default function ReadPanel({ status, onChanged }: { status?: ReaderStatus
           {jobs.slice().sort((a, b) => b.id - a.id).map((j) => <ReadRow key={j.id} job={j} onForce={() => force(j)} />)}
         </ul>
       )}
-    </details>
+    </div>
   );
 }
 
@@ -116,7 +117,7 @@ function ReadRow({ job, onForce }: { job: JobView; onForce: () => void }) {
       {r?.status === "duplicate" && r.work?.id != null && (
         <div className="row wrap small">
           <a href={href(`entity/${r.work.id}`)}>{r.work.name ?? r.work.key}</a>
-          <button className="ghost small" onClick={onForce}>{t("home.read_force")}</button>
+          <button className="btn" onClick={onForce}>{t("home.read_force")}</button>
         </div>
       )}
       {r?.status === "invalid" && (

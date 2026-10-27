@@ -13,7 +13,7 @@ def test_theme_and_accent_round_trip(settings, session):
     c = TestClient(app)
     c.headers["Authorization"] = f"Bearer {app.state.token}"
     h = c.get("/health").json()
-    assert h["theme"] == "system" and h["accent"] == "green"
+    assert h["theme"] == "system" and h["accent"] == "red"
     r = c.patch("/settings", json={"theme": "dark", "accent": "violet"})
     assert r.status_code == 200 and r.json()["theme"] == "dark" and r.json()["accent"] == "violet"
     h = c.get("/health").json()

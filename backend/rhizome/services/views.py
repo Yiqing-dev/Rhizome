@@ -6,14 +6,14 @@ The full paper graph is never sent to the client; every view caps elements (~300
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import case, func, literal, select
 from sqlalchemy.orm import Session
 
 from .. import rawstore
-from ..db.models import Edge, Entity, EntityAlias, Extraction, KV, ReviewItem, Work
+from ..db.models import Edge, Entity, EntityAlias, Extraction, KV, ReviewItem, Work, utcnow
 from .recall import touch
 from .search import SOURCE_EDGE_TYPES, source_works, summarize, topic_subtree
 
@@ -293,8 +293,48 @@ def _report_text(ex: Extraction) -> str | None:
     return data.decode("utf-8", errors="replace") if data else None
 
 
+RECENT_WORKS = 5
+WEEK_DAYS = 7
+
+
+def recent_works(s: Session, limit: int = RECENT_WORKS) -> list[dict[str, Any]]:
+    """The newest papers for the Home page: when each was captured, how (an RXF export or
+    Claude's reader), at which depth, and how many assets of each type it brought."""
+    works = s.execute(select(Entity).where(Entity.type == "work", Entity.status != "rejected")
+                      .order_by(Entity.id.desc()).limit(limit)).scalars().all()
+    if not works:
+        return []
+    ids = [w.id for w in works]
+    counts: dict[int, Counter] = defaultdict(Counter)
+    rows = s.execute(select(Edge.src, Entity.type, func.count()).join(Entity, Entity.id == Edge.dst)
+                     .where(Edge.src.in_(ids), Edge.type.in_(SOURCE_EDGE_TYPES), Edge.status != "rejected")
+                     .group_by(Edge.src, Entity.type)).all()
+    for src, etype, n in rows:
+        counts[src][etype] += n
+    exports: dict[str, Extraction] = {}
+    for ex in s.execute(select(Extraction).where(Extraction.work_key.in_([w.key for w in works]),
+                                                 Extraction.kind == "rxf", Extraction.is_current)
+                        .order_by(Extraction.id)).scalars():
+        exports[ex.work_key or ""] = ex  # the latest current export wins
+    out = []
+    for w in works:
+        ex = exports.get(w.key)
+        out.append({
+            "id": w.id, "key": w.key, "name": w.canonical_name,
+            "created_at": w.created_at.isoformat() if w.created_at else None,
+            "depth": (ex.output or {}).get("depth") if ex else None,
+            "via": "reader" if ex and (ex.meta or {}).get("reader") else "rxf",
+            "counts": dict(counts.get(w.id, {})),
+        })
+    return out
+
+
 def home_stats(s: Session) -> dict[str, Any]:
     by_type = dict(s.execute(select(Entity.type, func.count()).group_by(Entity.type)).all())
+    since = utcnow() - timedelta(days=WEEK_DAYS)
+    week = dict(s.execute(select(Entity.type, func.count())
+                          .where(Entity.created_at >= since, Entity.status != "rejected")
+                          .group_by(Entity.type)).all())
     queue = s.execute(select(func.count()).select_from(ReviewItem).where(ReviewItem.status == "pending")).scalar_one()
     by_kind = dict(s.execute(select(ReviewItem.kind, func.count()).where(ReviewItem.status == "pending")
                              .group_by(ReviewItem.kind)).all())
@@ -306,9 +346,10 @@ def home_stats(s: Session) -> dict[str, Any]:
     from .. import inbox
 
     return {
-        "reader": reader_availability(),"entities": by_type, "edges": s.query(Edge).count(), "review_queue": queue,
-            "review_queue_by_kind": by_kind, "cards_due": due_count(s), "inbox": inbox.status(),
-            "update": update_notice(s), "vocab": vocab_status(s)}
+        "reader": reader_availability(), "entities": by_type, "edges": s.query(Edge).count(), "review_queue": queue,
+        "review_queue_by_kind": by_kind, "cards_due": due_count(s), "inbox": inbox.status(),
+        "update": update_notice(s), "vocab": vocab_status(s),
+        "week": week, "week_days": WEEK_DAYS, "recent": recent_works(s)}
 
 
 def work_sources(s: Session, entity_id: int) -> list[dict[str, Any]]:

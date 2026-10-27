@@ -3,6 +3,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/source-serif-4";
+import "@fontsource-variable/archivo";  // the Modernist display face (shell, Home)
 import { api, captureToken } from "./api";
 import { applyBackendLanguage } from "./i18n";
 import { applyBackendAppearance } from "./theme";

@@ -208,7 +208,8 @@ class Settings(BaseSettings):
     database_url: str | None = None
     language: Literal["auto", "en", "zh_CN"] = "auto"
     theme: Literal["system", "light", "dark"] = "system"  # UI appearance; the UI reads both at boot
-    accent: Literal["green", "teal", "blue", "violet", "rose", "amber", "graphite"] = "green"
+    # "red" is the Modernist system's own accent (the Home dashboard design); "green" is Rhizome's older one
+    accent: Literal["red", "green", "teal", "blue", "violet", "rose", "amber", "graphite"] = "red"
     inbox_dir: Path | None = None
     # None -> <data_dir>/backups. Point it at another disk or a synced folder: backups are closed,
     # consistent copies, unlike the live database (never sync the data dir itself while it runs).

@@ -252,7 +252,7 @@ def test_api_contract_matches_the_frontend_types(settings, library, session):
     stats = c.get("/stats").json()
     assert _ts_interface("Stats") <= set(stats)
     hit = c.get("/search", params={"q": "DomainGAT"}).json()["results"][0]
-    assert _ts_interface("Hit") - {"relevance", "origin"} <= set(hit)
+    assert _ts_interface("Hit") - {"relevance", "origin", "forgetting", "seen_days"} <= set(hit)
     card = c.get(f"/entity/{hit['id']}").json()
     assert _ts_interface("Card") - {"work", "exports", "edge_counts", "relevance", "origin"} <= set(card)
     g = Graph(session)

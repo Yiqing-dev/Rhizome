@@ -89,7 +89,8 @@ def _bind_url(settings) -> str:
     return str(get_engine(settings).url)
 
 
-def forgetting(s: Session, entities: list[Entity], now: datetime | None = None) -> dict[int, float]:
+def days_since_seen(s: Session, entities: list[Entity], now: datetime | None = None) -> dict[int, float]:
+    """Days since you last looked at each entity (its capture, when never opened)."""
     now = now or utcnow()
     seen = {r.entity_key: r.last_seen_at for r in
             s.execute(select(AccessLog).where(AccessLog.entity_key.in_([e.key for e in entities]))).scalars()}
@@ -102,9 +103,12 @@ def forgetting(s: Session, entities: list[Entity], now: datetime | None = None) 
     out = {}
     for e in entities:
         last = seen.get(e.key) or e.created_at or now
-        days = max(0.0, (now - last).total_seconds() / 86400)
-        out[e.id] = 1.0 - math.exp(-days / TAU_DAYS)
+        out[e.id] = max(0.0, (now - last).total_seconds() / 86400)
     return out
+
+
+def forgetting(s: Session, entities: list[Entity], now: datetime | None = None) -> dict[int, float]:
+    return {i: 1.0 - math.exp(-days / TAU_DAYS) for i, days in days_since_seen(s, entities, now).items()}
 
 
 def recall(s: Session, context: str, limit: int | None = None, types: tuple[str, ...] = ASSET_TYPES + ("work",),
@@ -118,7 +122,8 @@ def recall(s: Session, context: str, limit: int | None = None, types: tuple[str,
     if not hits:
         return []
     ents = {e.id: e for e in s.execute(select(Entity).where(Entity.id.in_([h["id"] for h in hits]))).scalars()}
-    forget = forgetting(s, list(ents.values()))
+    days = days_since_seen(s, list(ents.values()))
+    forget = {i: 1.0 - math.exp(-d / TAU_DAYS) for i, d in days.items()}
     out = []
     for h in hits:
         rel = h.get("relevance") or 0.0
@@ -126,6 +131,7 @@ def recall(s: Session, context: str, limit: int | None = None, types: tuple[str,
             continue
         weight = 2.0 if h.get("origin") == "user" else 1.0
         h = dict(h, relevance=round(rel, 4), forgetting=round(forget.get(h["id"], 0.0), 4),
+                 seen_days=round(days.get(h["id"], 0.0)),  # the Home page says "last seen N days ago"
                  score=round(rel * (0.5 + 0.5 * forget.get(h["id"], 0.0)) * weight, 4))
         out.append(h)
     out.sort(key=lambda h: -h["score"])
