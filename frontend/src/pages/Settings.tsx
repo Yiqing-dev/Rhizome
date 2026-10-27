@@ -258,6 +258,38 @@ export default function SettingsPage() {
               </details>
             )}
           </section>
+          <section className="panel claude-api">
+            <h2>{t("settings.claude_api")}</h2>
+            <p className="hint">{t("settings.claude_api_hint")}</p>
+            {si && !si.anthropic_available ? <div className="notice warn">{t("settings.anthropic_test_err.sdk_missing")}</div> : (
+              <div className="row wrap">
+                <div className="segmented" role="radiogroup" aria-label={t("settings.claude_api")}>
+                  <button className={s.inference_backend !== "anthropic" ? "active" : ""} onClick={() => patch({ inference_backend: "queue" })}>{t("settings.claude_api_off")}</button>
+                  <button className={s.inference_backend === "anthropic" ? "active" : ""} onClick={() => patch({ inference_backend: "anthropic" })}>{t("settings.claude_api_on")}</button>
+                </div>
+                {s.inference_backend === "local" && <span className="hint">{t("settings.claude_api_local_note")}</span>}
+              </div>
+            )}
+            {s.inference_backend === "anthropic" && (
+            <div className="stack-sm anthropic">
+              <p className="hint">{t("settings.anthropic_hint")}</p>
+              <div className="form-grid">
+                <label>{t("settings.anthropic_model")}
+                  <input defaultValue={s.anthropic_model} onBlur={(e) => patch({ anthropic_model: e.target.value.trim() || null })} /></label>
+                <label>{t("settings.anthropic_key")}
+                  <input type="password" autoComplete="off" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+                    placeholder={keySource === "env" ? t("settings.anthropic_key_env") : keySource === "keyring" ? t("settings.anthropic_key_stored") : t("settings.anthropic_key_missing")} /></label>
+              </div>
+              <div className="row wrap">
+                <button className="primary" disabled={!apiKey.trim()} onClick={() => saveKey(apiKey.trim())}>{t("settings.anthropic_key_save")}</button>
+                {keySource === "keyring" && <button className="ghost" onClick={() => saveKey(null)}>{t("settings.anthropic_key_clear")}</button>}
+                <button onClick={testConnection} disabled={testing}>{testing ? t("settings.anthropic_testing") : t("settings.anthropic_test")}</button>
+                <span className="hint">{keySource === "env" ? t("settings.anthropic_key_env") : keySource === "keyring" ? t("settings.anthropic_key_stored") : t("settings.anthropic_key_missing")}</span>
+              </div>
+              {keyMsg && <div className={`notice ${keyMsg.ok ? "ok" : "error"}`} style={{ whiteSpace: "pre-wrap" }}>{keyMsg.text}</div>}
+            </div>
+            )}
+          </section>
           <details className="disclosure advanced" open={adv} onToggle={(e) => rememberAdv((e.target as HTMLDetailsElement).open)}>
             <summary><h2>{t("settings.advanced")}</h2><span className="hint">{t("settings.advanced_hint")}</span></summary>
             <div className="stack">
@@ -329,25 +361,7 @@ export default function SettingsPage() {
                   <option value="anthropic" disabled={si ? !si.anthropic_available : false}>{t("settings.inference_anthropic")}</option>
                 </select></label>
             </div>
-            {s.inference_backend === "anthropic" && (
-              <div className="stack-sm anthropic">
-                <p className="hint">{t("settings.anthropic_hint")}</p>
-                <div className="form-grid">
-                  <label>{t("settings.anthropic_model")}
-                    <input defaultValue={s.anthropic_model} onBlur={(e) => patch({ anthropic_model: e.target.value.trim() || null })} /></label>
-                  <label>{t("settings.anthropic_key")}
-                    <input type="password" autoComplete="off" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
-                      placeholder={keySource === "env" ? t("settings.anthropic_key_env") : keySource === "keyring" ? t("settings.anthropic_key_stored") : t("settings.anthropic_key_missing")} /></label>
-                </div>
-                <div className="row wrap">
-                  <button className="primary" disabled={!apiKey.trim()} onClick={() => saveKey(apiKey.trim())}>{t("settings.anthropic_key_save")}</button>
-                  {keySource === "keyring" && <button className="ghost" onClick={() => saveKey(null)}>{t("settings.anthropic_key_clear")}</button>}
-                  <button onClick={testConnection} disabled={testing}>{testing ? t("settings.anthropic_testing") : t("settings.anthropic_test")}</button>
-                  <span className="hint">{keySource === "env" ? t("settings.anthropic_key_env") : keySource === "keyring" ? t("settings.anthropic_key_stored") : t("settings.anthropic_key_missing")}</span>
-                </div>
-                {keyMsg && <div className={`notice ${keyMsg.ok ? "ok" : "error"}`} style={{ whiteSpace: "pre-wrap" }}>{keyMsg.text}</div>}
-              </div>
-            )}
+            {s.inference_backend === "anthropic" && <p className="hint">{t("settings.anthropic_see_panel")}</p>}
             <div className="row wrap">
               <button onClick={rebuild.start} disabled={rebuild.running}>{rebuild.running ? t("jobs.running") : t("settings.rebuild")}</button>
               <span className="hint">{t("settings.rebuild_hint")}</span>

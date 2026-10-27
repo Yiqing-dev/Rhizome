@@ -423,6 +423,13 @@ server、network），界面按 code 给出中英文解释并附原始错误，�
 `rhz settings test-anthropic` 输出同一份 JSON，失败时退出码 1。测试里用假客户端覆盖成功、各类错误、无密钥、模型不存在和
 端点的密钥不回显。
 
+## Claude API 面板（2026-10-27）
+
+Anthropic API 的开关、模型和密钥原来藏在 设置 → 高级设置 → 本地模型 → 生成式判定 下拉里，选了才出现，用户找不到。现在设置页
+一级多了"Claude API"面板（Claude Desktop 面板之下、高级设置之上）：一个"不使用 / 使用 Anthropic API"分段开关直接改
+`inference_backend`（queue / anthropic），开启后显示模型、密钥、保存、删除和测试连接；没装 anthropic 包时显示说明。高级设置里
+的"生成式判定"下拉保留（本地小模型只能在那里选），选了 Anthropic 时给一行提示指向上面的面板。
+
 ## 用 API 读新论文（2026-10-27）
 
 首页多了一块"让 Claude 读新论文"（`components/ReadPanel.tsx`）：拖入 PDF，每个文件一个 `read_paper` 任务
