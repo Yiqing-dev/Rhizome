@@ -173,9 +173,9 @@ jobs:
           New-Item -ItemType Directory -Force ..\dist | Out-Null
           # the bundler downloads NSIS and its plugins from GitHub on first use; a timeout there is not
           # a build failure, so each build gets three attempts (the compiled app is reused)
-          function Build-Tauri {
+          function Build-Tauri([string[]]$extra) {
             for ($i = 1; $i -le 3; $i++) {
-              npx tauri build --bundles nsis @args
+              npx tauri build --bundles nsis @extra
               if (-not $LASTEXITCODE) { return }
               Write-Host "tauri build failed (attempt $i of 3)"
               Start-Sleep -Seconds 30
@@ -183,11 +183,11 @@ jobs:
             exit 1
           }
           # standard: small installer, WebView2 bootstrapper embedded (installs the runtime only if missing)
-          Build-Tauri
+          Build-Tauri @()
           $std = Get-ChildItem src-tauri\target\release\bundle\nsis\*-setup.exe | Select-Object -First 1
           Copy-Item $std.FullName ..\dist\
           # offline: the full WebView2 runtime embedded, for machines without internet access
-          Build-Tauri --config src-tauri/offline.conf.json
+          Build-Tauri @('--config', 'src-tauri/offline.conf.json')
           # the offline build overwrote the bundle folder: resolve it freshly, and prove it is the
           # variant with the runtime inside (>100 MB larger, different hash) before publishing it
           $off = Get-ChildItem src-tauri\target\release\bundle\nsis\*-setup.exe | Select-Object -First 1
