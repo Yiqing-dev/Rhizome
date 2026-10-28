@@ -16,6 +16,7 @@
     "cytoscape": "^3.34.3",
     "graphology": "^0.26.0",
     "graphology-layout-forceatlas2": "^0.10.1",
+    "graphology-layout-noverlap": "^0.4.2",
     "i18next": "^26.4.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

@@ -5,6 +5,7 @@ The full paper graph is never sent to the client; every view caps elements (~300
 
 from __future__ import annotations
 
+import logging
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from typing import Any
@@ -13,9 +14,11 @@ from sqlalchemy import case, func, literal, select
 from sqlalchemy.orm import Session
 
 from .. import rawstore
-from ..db.models import Edge, Entity, EntityAlias, Extraction, KV, ReviewItem, Work, utcnow
+from ..db.models import Edge, Entity, EntityAlias, Extraction, ReviewItem, Work, utcnow
 from .recall import touch
 from .search import SOURCE_EDGE_TYPES, source_works, summarize, topic_subtree
+
+log = logging.getLogger(__name__)
 
 MAX_ELEMENTS = 300
 
@@ -250,13 +253,31 @@ def topic_map(s: Session, include_candidates: bool = False) -> dict[str, Any]:
             counts[dst][etype] += n
     ranked = sorted(topics, key=lambda t: -sum(counts[t].values()))[:MAX_ELEMENTS - 50]
     keep = set(ranked)
-    comm = (s.get(KV, "communities") or KV(v={})).v or {}
+    # colour = family: the connected component of the is_a forest among the drawn topics, numbered
+    # by size; a topic with no parent or child stays uncoloured (null). This needs no nightly run
+    # and matches what the organiser builds, unlike the whole-graph communities, which collapse
+    # into one blob once papers share assets.
+    is_a = list(s.execute(select(Edge).where(Edge.type == "is_a", Edge.src.in_(keep), Edge.dst.in_(keep),
+                                           Edge.status != "rejected")).scalars())
+    parent = {t: t for t in keep}
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for ed in is_a:
+        a, b = find(ed.src), find(ed.dst)
+        if a != b:
+            parent[a] = b
+    comp = {t: find(t) for t in keep}
+    sizes = Counter(comp.values())
+    order = {c: i for i, (c, n) in enumerate(sizes.most_common()) if n >= 2}
     nodes = [{"id": t, "key": topics[t].key, "name": topics[t].canonical_name, "status": topics[t].status,
-              "counts": dict(counts[t]), "size": sum(counts[t].values()), "community": comm.get(topics[t].key)}
+              "counts": dict(counts[t]), "size": sum(counts[t].values()), "community": order.get(comp[t])}
              for t in ranked]
-    edges = [{"src": ed.src, "dst": ed.dst, "status": ed.status}
-             for ed in s.execute(select(Edge).where(Edge.type == "is_a", Edge.src.in_(keep), Edge.dst.in_(keep),
-                                                    Edge.status != "rejected")).scalars()]
+    edges = [{"src": ed.src, "dst": ed.dst, "status": ed.status} for ed in is_a]
     return {"nodes": nodes, "edges": edges, "total_topics": len(topics)}
 
 

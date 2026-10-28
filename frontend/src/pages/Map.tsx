@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { api, type OrganiseRun } from "../api";
 import TopicGraph from "../components/TopicGraph";
 import { EmptyState, Loading } from "../components/common";
-import { communityColor, surface, tint } from "../components/colors";
+import { communityColor, cssVar, tint } from "../components/colors";
 import { GraphIcon } from "../components/icons";
 import { useJob, useLoad } from "../hooks";
 import { go, href } from "../router";
@@ -13,6 +13,8 @@ export default function MapPage() {
   const { t } = useTranslation();
   const [cands, setCands] = useState(false);
   const [hover, setHover] = useState<number | null>(null);
+  const [focus, setFocus] = useState<number | null>(null);
+  const [filter, setFilter] = useState("");
   const map = useLoad(() => api.topicMap(cands), [cands]);
   const [form, setForm] = useState({ name: "", definition: "", examples: "", counter: "", parent: "" });
   const [busy, setBusy] = useState(false);
@@ -38,7 +40,14 @@ export default function MapPage() {
   }
 
   const nodes = map.data ? [...map.data.nodes].sort((a, b) => b.size - a.size) : [];
-  const communities = new Set(nodes.map((n) => n.community).filter((c) => c !== null)).size;
+  const members = new Map<number, number>();
+  nodes.forEach((n) => { if (n.community !== null) members.set(n.community, (members.get(n.community) ?? 0) + 1); });
+  const communities = [...members.values()].filter((n) => n >= 2).length;
+  const bg = cssVar("--bg", "#ffffff"), ink = cssVar("--ink", "#1c1f1a");
+  const colourOf = (n: (typeof nodes)[number]) =>
+    n.community !== null && (members.get(n.community) ?? 0) >= 2 ? communityColor(n.community) : tint(ink, bg, 0.6);
+  const needle = filter.trim().toLowerCase();
+  const shown = needle ? nodes.filter((n) => n.name.toLowerCase().includes(needle)) : nodes;
   return (
     <div className="stack">
       <div className="page-head">
@@ -75,21 +84,24 @@ export default function MapPage() {
               <GraphIcon />
               <b>{t("map.graph_title", { n: map.data.total_topics })}</b>
               <span className="grow" />
-              <span className="muted small">{communities > 0 ? t("map.communities", { n: communities }) : ""}</span>
+              <span className="muted small">{communities > 0 ? t("map.communities", { n: communities }) : t("map.no_communities")}</span>
             </header>
-            <TopicGraph map={map.data} onHover={onHover} />
+            <TopicGraph map={map.data} onHover={onHover} focus={focus} />
             <div className="legend"><span className="muted">{t("map.legend")}</span></div>
           </section>
           <aside className="map-side">
             <section className="card">
-              <header style={{ padding: "0.55rem 0.9rem", borderBottom: "1px solid var(--line)" }}><h3>{t("map.list_title")}</h3></header>
-              <ul className="topic-list">
-                {nodes.map((n) => (
-                  <li key={n.id} style={{ "--cc": n.status === "candidate" ? tint(communityColor(n.community), surface(), 0.55) : communityColor(n.community),
-                    background: hover === n.id ? "var(--accent-soft)" : undefined } as React.CSSProperties}>
+              <header className="topic-list-head"><h3>{t("map.list_title")}</h3>
+                <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={t("map.find")} aria-label={t("map.find")} /></header>
+              <ul className="topic-list" onMouseLeave={() => setFocus(null)}>
+                {shown.map((n) => (
+                  <li key={n.id} onMouseEnter={() => setFocus(n.id)}
+                    style={{ "--cc": n.status === "candidate" ? tint(colourOf(n), bg, 0.55) : colourOf(n),
+                    background: hover === n.id || focus === n.id ? "var(--accent-soft)" : undefined } as React.CSSProperties}>
                     <i /><a href={href(`topic/${n.id}`)}>{n.name}</a><span className="n">{n.size}</span>
                   </li>
                 ))}
+                {needle && !shown.length && <li className="muted small">{t("common.no_results")}</li>}
               </ul>
             </section>
           </aside>

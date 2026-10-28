@@ -2,12 +2,14 @@
 import { NodeSquareProgram } from "@sigma/node-square";
 import Graph from "graphology";
 import forceAtlas2 from "graphology-layout-forceatlas2";
+import noverlap from "graphology-layout-noverlap";
 import { useEffect, useRef, useState } from "react";
 import Sigma from "sigma";
 import type { Settings } from "sigma/settings";
+import { useTranslation } from "react-i18next";
 import type { TopicMap } from "../api";
 import { go } from "../router";
-import { communityColor, cssVar, graphFont, ink, tint } from "./colors";
+import { communityColor, cssVar, graphFont, tint } from "./colors";
 
 type LabelData = { x: number; y: number; size: number; label?: string | null; color?: string };
 
@@ -15,7 +17,7 @@ type LabelData = { x: number; y: number; size: number; label?: string | null; co
 function drawLabel(ctx: CanvasRenderingContext2D, data: LabelData, settings: Settings): void {
   if (!data.label) return;
   ctx.font = `${settings.labelWeight} ${settings.labelSize}px ${settings.labelFont}`;
-  ctx.fillStyle = settings.labelColor.color ?? ink();
+  ctx.fillStyle = settings.labelColor.color ?? "#1c1f1a";
   ctx.fillText(data.label, data.x + data.size + 5, data.y + settings.labelSize / 3);
 }
 
@@ -38,57 +40,99 @@ function drawHover(ctx: CanvasRenderingContext2D, data: LabelData, settings: Set
   ctx.fillText(data.label, x, data.y + size / 3);
 }
 
+/** Positions: a phyllotaxis spiral by size (the biggest topics in the middle) as the start, the
+ * force layout on top of it when there are is_a edges to pull families together, then a
+ * no-overlap pass so squares never sit on each other. */
+function layout(g: Graph): void {
+  const ids = g.nodes().sort((a, b) => g.getNodeAttribute(b, "size") - g.getNodeAttribute(a, "size"));
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  ids.forEach((id, i) => {
+    const r = 16 * Math.sqrt(i + 1), t = i * golden;
+    g.setNodeAttribute(id, "x", r * Math.cos(t));
+    g.setNodeAttribute(id, "y", r * Math.sin(t));
+  });
+  const n = g.order;
+  if (g.size > 0 && n > 1) {
+    forceAtlas2.assign(g, {
+      iterations: Math.min(700, 150 + n * 2),
+      settings: { ...forceAtlas2.inferSettings(g), gravity: 0.12, scalingRatio: 60, adjustSizes: true, barnesHutOptimize: n > 150, slowDown: 4, outboundAttractionDistribution: true },
+    });
+  }
+  noverlap.assign(g, { maxIterations: 200, settings: { margin: 12, ratio: 1.8, expansion: 1.4 } });
+}
+
 /** Topic layer only (WebGL), aggregated server-side: square nodes sized by assets per topic,
- * coloured by community; candidates are washed toward the ground. */
-export default function TopicGraph({ map, onHover }: { map: TopicMap; onHover?: (id: number | null) => void }) {
+ * coloured by community (a community of one stays neutral); candidates are washed toward the
+ * ground. `focus` centres and highlights a node (the list beside the map drives it). */
+export default function TopicGraph({ map, onHover, focus }: { map: TopicMap; onHover?: (id: number | null) => void; focus?: number | null }) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
+  const sigmaRef = useRef<Sigma | null>(null);
+  const hoverRef = useRef<{ set: (id: string | null) => void } | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   useEffect(() => {
     if (!ref.current) return;
     const g = new Graph({ type: "directed", multi: false });
-    const bg = cssVar("--bg", "#ffffff");
-    const edgeCol = cssVar("--line-strong");
-    map.nodes.forEach((n, i) => {
-      const angle = (2 * Math.PI * i) / Math.max(1, map.nodes.length);
+    const bg = cssVar("--bg", "#ffffff"), inkCol = cssVar("--ink", "#1c1f1a");
+    const neutral = tint(inkCol, bg, 0.6), edgeCol = tint(inkCol, bg, 0.72), dim = tint(inkCol, bg, 0.88);
+    const members = new Map<number, number>();
+    map.nodes.forEach((n) => { if (n.community !== null) members.set(n.community, (members.get(n.community) ?? 0) + 1); });
+    const colourOf = (n: TopicMap["nodes"][number]) =>
+      n.community !== null && (members.get(n.community) ?? 0) >= 2 ? communityColor(n.community) : neutral;
+    map.nodes.forEach((n) => {
       g.addNode(String(n.id), {
-        label: n.name, x: Math.cos(angle), y: Math.sin(angle), size: 4 + Math.sqrt(n.size) * 3,
-        // candidates keep their community hue but washed out, so an early (all-candidate) library is still readable
-        color: n.status === "candidate" ? tint(communityColor(n.community), bg, 0.55) : communityColor(n.community),
-        type: "square",
+        label: n.name, x: 0, y: 0, size: 4 + Math.sqrt(n.size) * 3,
+        color: n.status === "candidate" ? tint(colourOf(n), bg, 0.55) : colourOf(n), type: "square",
       });
     });
     map.edges.forEach((e) => {
       const s = String(e.src), d = String(e.dst);
       if (g.hasNode(s) && g.hasNode(d) && !g.hasEdge(s, d)) g.addEdge(s, d, { size: 1.2, color: edgeCol, type: "arrow" });
     });
-    if (g.order > 1) forceAtlas2.assign(g, { iterations: 250, settings: { ...forceAtlas2.inferSettings(g), gravity: 1.5, scalingRatio: 6 } });
+    layout(g);
     let sigma: Sigma;
     try {
       sigma = new Sigma(g, ref.current, {
         nodeProgramClasses: { square: NodeSquareProgram }, defaultNodeType: "square",
-        renderEdgeLabels: false, labelRenderedSizeThreshold: 0, labelColor: { color: ink() },
+        renderEdgeLabels: false, labelColor: { color: inkCol },
         labelFont: graphFont(), labelSize: 12, labelWeight: "600", defaultEdgeType: "arrow",
+        // the biggest topic in each cell of a coarse grid gets a label; zooming in shows more
+        labelRenderedSizeThreshold: 5, labelDensity: 0.16, labelGridCellSize: 140,
         defaultDrawNodeLabel: drawLabel, defaultDrawNodeHover: drawHover,
       });
     } catch (e) {
       setFailed(String((e as Error)?.message ?? e)); // no WebGL (old GPU driver, remote desktop)
       return;
     }
+    sigmaRef.current = sigma;
     let hovered: string | null = null;
     sigma.setSetting("nodeReducer", (node, data) => {
       if (!hovered) return data;
-      if (node === hovered || g.areNeighbors(node, hovered)) return { ...data, zIndex: 1, highlighted: node === hovered };
-      return { ...data, color: cssVar("--line"), label: "" };
+      if (node === hovered || g.areNeighbors(node, hovered)) return { ...data, zIndex: 1, highlighted: node === hovered, forceLabel: true };
+      return { ...data, color: dim, label: "" };
     });
     sigma.setSetting("edgeReducer", (edge, data) => {
       if (!hovered) return data;
-      return g.hasExtremity(edge, hovered) ? { ...data, color: cssVar("--ink"), size: 2 } : { ...data, hidden: true };
+      return g.hasExtremity(edge, hovered) ? { ...data, color: inkCol, size: 2 } : { ...data, hidden: true };
     });
-    sigma.on("enterNode", ({ node }) => { hovered = node; onHover?.(Number(node)); sigma.refresh(); });
-    sigma.on("leaveNode", () => { hovered = null; onHover?.(null); sigma.refresh(); });
+    const setHover = (id: string | null) => { hovered = id; sigma.refresh(); };
+    hoverRef.current = { set: setHover };
+    sigma.on("enterNode", ({ node }) => { setHover(node); onHover?.(Number(node)); });
+    sigma.on("leaveNode", () => { setHover(null); onHover?.(null); });
     sigma.on("clickNode", ({ node }) => go(`topic/${node}`));
-    return () => sigma.kill();
+    return () => { sigmaRef.current = null; hoverRef.current = null; sigma.kill(); };
   }, [map, onHover]);
+
+  useEffect(() => {  // the list beside the map: hover a row to find its square
+    const sigma = sigmaRef.current;
+    if (!sigma) return;
+    if (focus === null || focus === undefined || !sigma.getGraph().hasNode(String(focus))) { hoverRef.current?.set(null); return; }
+    hoverRef.current?.set(String(focus));
+    const d = sigma.getNodeDisplayData(String(focus));
+    if (d) sigma.getCamera().animate({ x: d.x, y: d.y, ratio: Math.min(sigma.getCamera().ratio, 0.5) }, { duration: 300 });
+  }, [focus]);
+
+  const cam = (fn: (c: ReturnType<Sigma["getCamera"]>) => void) => { const s = sigmaRef.current; if (s) fn(s.getCamera()); };
   if (failed) {
     return (
       <div className="graph tall stack-sm" style={{ overflow: "auto", padding: "1rem" }}>
@@ -97,5 +141,14 @@ export default function TopicGraph({ map, onHover }: { map: TopicMap; onHover?: 
       </div>
     );
   }
-  return <div className="graph tall" ref={ref} />;
+  return (
+    <div className="graph-wrap">
+      <div className="graph tall" ref={ref} />
+      <div className="graph-controls" role="group" aria-label={t("map.zoom")}>
+        <button type="button" onClick={() => cam((c) => c.animatedZoom({ duration: 200 }))} title={t("map.zoom_in")} aria-label={t("map.zoom_in")}>+</button>
+        <button type="button" onClick={() => cam((c) => c.animatedUnzoom({ duration: 200 }))} title={t("map.zoom_out")} aria-label={t("map.zoom_out")}>−</button>
+        <button type="button" onClick={() => cam((c) => c.animatedReset({ duration: 250 }))} title={t("map.fit")} aria-label={t("map.fit")}>⤢</button>
+      </div>
+    </div>
+  );
 }
