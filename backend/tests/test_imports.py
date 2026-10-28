@@ -114,3 +114,102 @@ def test_resume_after_restart_and_interrupted(api, settings, session):
     act = api.get("/import/active").json()["active"]
     assert act["status"] == "interrupted" and "boom" in act["error"]
     assert api.delete(f"/import/{prog['batch']}").json() == {"dismissed": True}
+
+
+# ---- cancel / resume, and importing without the model -------------------------------------------
+
+def test_cancel_before_start_then_resume(api, settings, session):
+    from rhizome.services import imports
+
+    r = _upload(api, [("a.yaml", example("deep-grn-atlas.yaml").encode()), ("b.yaml", example("light-spatial-domains.yaml").encode())])
+    batch = r.json()["batch"]
+    assert api.post(f"/import/{batch}/cancel").json()["cancel"] is True
+    _run_all()  # the queued job runs, sees the flag, and stops before the first file
+    act = api.get("/import/active").json()["active"]
+    assert act["status"] == "cancelled" and act["remaining"] == 2 and act["results"] == {}
+    assert api.post(f"/import/{batch}/repair").status_code == 200  # nothing repairable: a no-op, not an error
+    assert api.post(f"/import/{batch}/resume").json()["status"] == "queued"
+    assert batch not in imports.CANCELLED
+    _run_all()
+    act = api.get("/import/active").json()["active"]
+    assert act["status"] == "done" and len(act["results"]) == 2 and all(r["ok"] for r in act["results"].values())
+    assert api.delete(f"/import/{batch}").json()["dismissed"] is True
+    assert api.post(f"/import/{batch}/cancel").status_code == 404
+
+
+def test_cancel_mid_batch_stops_after_the_file_in_hand(api, settings, session, monkeypatch):
+    from rhizome.services import imports
+    from rhizome.pipeline import ingest as ingest_mod
+
+    real = ingest_mod.ingest_text
+    seen = []
+
+    def slow_ingest(s, text, name, pdf=None, **kw):
+        seen.append(name)
+        if len(seen) == 1:
+            imports.CANCELLED.add(kw.get("_batch") or next(iter(imports.CANCELLED), None) or batch)  # the user presses cancel while file 1 runs
+        return real(s, text, name, pdf, **kw)
+
+    monkeypatch.setattr(imports, "ingest_text", slow_ingest, raising=False)
+    import rhizome.services.imports as m
+    monkeypatch.setattr("rhizome.pipeline.ingest.ingest_text", slow_ingest)
+    r = _upload(api, [("a.yaml", example("deep-grn-atlas.yaml").encode()), ("b.yaml", example("light-spatial-domains.yaml").encode()),
+                      ("c.yaml", example("light-scenic-benchmark.yaml").encode())])
+    batch = r.json()["batch"]
+    _run_all()
+    act = api.get("/import/active").json()["active"]
+    assert seen == ["a.yaml"] and act["status"] == "cancelled" and act["remaining"] == 2
+    assert act["results"]["a.yaml"]["ok"] is True  # the file in hand was finished, not rolled back
+    assert m.progress(session, batch)["cancel"] is False
+
+
+def test_import_without_inference_makes_no_model_calls(api, settings, session, monkeypatch):
+    from rhizome.inference import cache, reset_backend
+    from rhizome.db.models import KV, ReviewCard
+
+    calls = []
+
+    class Chatty:
+        name = "fake"
+        model = "m"
+
+        def make_card(self, text):
+            calls.append(("card", text[:20]))
+            return ("Q?", "A.")
+
+        def judge_breadth(self, a, b):
+            calls.append(("breadth", a, b))
+            return ("none", 0.9)
+
+        def classify_topic_relation(self, *a):
+            return None
+
+    monkeypatch.setattr(cache, "get_backend", lambda: Chatty())
+    assert api.patch("/settings", json={"infer_on_import": False}).json()["infer_on_import"] is False
+    assert api.get("/stats").json()["inference"]["infer_on_import"] is False
+    r = _upload(api, [("a.yaml", example("light-spatial-domains.yaml").encode())])
+    assert r.json()["infer"] is False
+    _run_all()
+    assert api.get("/import/active").json()["active"]["status"] == "done"
+    assert calls == []  # the switch is honoured: template cards, questions queued
+    session.rollback()  # the job wrote in its own session: read past this session's snapshot
+    origins = {c.origin for c in session.query(ReviewCard).all()}
+    assert "local_llm" not in origins  # whatever cards exist came from the export or a template
+    # a form field overrides the setting for one batch
+    api.delete(f"/import/{r.json()['batch']}")
+    r = _upload(api, [("b.yaml", example("deep-grn-atlas.yaml").encode())], infer="1")
+    assert r.json()["infer"] is True
+    _run_all()
+    assert any(c[0] == "card" for c in calls)
+    # cached answers are served even when inference is off
+    session.rollback()
+    cached = session.query(KV).filter(KV.k.like("inf:%")).count()
+    assert cached > 0
+    n = len(calls)
+    token = cache.INFER_ENABLED.set(False)
+    try:
+        assert cache.judged(session, "make_card", "something new") is None  # not cached: no call
+        assert len(calls) == n
+    finally:
+        cache.INFER_ENABLED.reset(token)
+    reset_backend()

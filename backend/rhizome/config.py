@@ -231,6 +231,7 @@ class Settings(BaseSettings):
     # queue: defer to review queue / Claude via MCP. local: local small LLM. anthropic: the Anthropic
     # API (key in the credential store or ANTHROPIC_API_KEY, never here). Plugins add more.
     inference_backend: str = "queue"
+    infer_on_import: bool = True  # ask the model (API / local) while importing; off: template cards, queued questions
     anthropic_model: str = "claude-opus-5-5"
 
     thresholds: Thresholds = Field(default_factory=Thresholds)

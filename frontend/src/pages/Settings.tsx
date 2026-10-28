@@ -270,6 +270,13 @@ export default function SettingsPage() {
                 {s.inference_backend === "local" && <span className="hint">{t("settings.claude_api_local_note")}</span>}
               </div>
             )}
+            {s.inference_backend !== "queue" && (
+              <label className="check">
+                <input type="checkbox" checked={s.infer_on_import !== false} onChange={(e) => patch({ infer_on_import: e.target.checked })} />
+                {t("settings.infer_on_import")}
+                <span className="hint">{t("settings.infer_on_import_hint")}</span>
+              </label>
+            )}
             {s.inference_backend === "anthropic" && (
             <div className="stack-sm anthropic">
               <p className="hint">{t("settings.anthropic_hint")}</p>

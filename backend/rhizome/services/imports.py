@@ -26,6 +26,9 @@ from ..db.models import KV, Job, utcnow
 
 ACTIVE = "import:active"
 RXF_SUFFIXES = (".yaml", ".yml", ".rxf")
+# Batches cancelled from this process: the running job sees it at once, even mid-file (the model
+# calls stop; the file in hand finishes), without waiting for the KV flag behind its transaction.
+CANCELLED: set[str] = set()
 
 
 class ImportBusy(RuntimeError):
@@ -89,7 +92,8 @@ def _unique(name: str, taken: set[str]) -> str:
     return out
 
 
-def stage(s: Session, uploads: list[tuple[str, bytes]], repair: bool = False) -> dict[str, Any]:
+def stage(s: Session, uploads: list[tuple[str, bytes]], repair: bool = False,
+          infer: bool | None = None) -> dict[str, Any]:
     """Store the uploaded files for a new batch, pair them, and queue the import job."""
     from .. import jobs
     from ..inbox import looks_like_rxf
@@ -124,9 +128,10 @@ def stage(s: Session, uploads: list[tuple[str, bytes]], repair: bool = False) ->
         raise NothingToImport()
     for name in skipped:
         (d / name).unlink(missing_ok=True)
+    infer = get_settings().infer_on_import if infer is None else infer
     job = jobs.enqueue(s, "ingest_batch", {"batch": batch, "repair": repair})
     prog = {"batch": batch, "status": "queued", "job": job.id, "files": files, "skipped": skipped,
-            "results": {}, "total": len(files), "done": 0, "current": None, "repair": repair,
+            "results": {}, "total": len(files), "done": 0, "current": None, "repair": repair, "infer": infer,
             "created_at": utcnow().isoformat(), "finished_at": None}
     _save(s, prog)
     row = s.get(KV, ACTIVE)
@@ -140,20 +145,50 @@ def stage(s: Session, uploads: list[tuple[str, bytes]], repair: bool = False) ->
 
 def run_batch(s: Session, batch: str, only: list[str] | None = None, repair: bool = False) -> dict[str, Any]:
     """The job: ingest every staged file that has no result yet (or exactly `only`)."""
-    from ..pipeline.ingest import ingest_text
-    from ..rxf.loader import RxfEncodingError, decode_rxf
+
+    from ..inference.cache import CANCELLED as CANCEL_CHECK
 
     prog = progress(s, batch)
     if prog is None:
         return {"batch": batch, "missing": True}
+    # a cancel pressed while the batch was still queued (either flag) must hold; resume() clears them
+    cancel_token = CANCEL_CHECK.set(lambda: batch in CANCELLED)
+    try:
+        return _run_batch(s, batch, prog, only, repair)
+    finally:
+        CANCEL_CHECK.reset(cancel_token)
+
+
+def _cancel_requested(s: Session, batch: str) -> bool:
+    """In-process flag first; the KV flag (set by another process, e.g. the CLI) is read between
+    files, when this job holds no transaction."""
+    if batch in CANCELLED:
+        return True
+    from sqlalchemy import select
+
+    # a column select bypasses the identity map: the row this job already holds would be stale
+    v = s.execute(select(KV.v).where(KV.k == _key(batch))).scalar_one_or_none()
+    return bool(isinstance(v, dict) and v.get("cancel"))
+
+
+def _run_batch(s: Session, batch: str, prog: dict[str, Any], only: list[str] | None, repair: bool) -> dict[str, Any]:
+    from ..pipeline.ingest import ingest_text
+    from ..rxf.loader import RxfEncodingError, decode_rxf
+
     names = only or [f["name"] for f in prog["files"] if f["name"] not in prog["results"]]
+    infer = prog.get("infer")
     pdf_of = {f["name"]: f.get("pdf") for f in prog["files"]}
     prog.update(status="running", total=len(names) if only else prog["total"],
                 done=0 if only else len(prog["results"]), current=None, error=None)
     _save(s, prog)
     s.commit()
     d = _dir(batch)
+    cancelled = False
     for name in names:
+        if _cancel_requested(s, batch):
+            cancelled = True
+            break
+        prog = progress(s, batch) or prog
         prog["current"] = name
         _save(s, prog)
         s.commit()
@@ -161,7 +196,7 @@ def run_batch(s: Session, batch: str, only: list[str] | None = None, repair: boo
         try:
             text = decode_rxf((d / name).read_bytes())
             pdf = (d / pdf_of[name]).read_bytes() if pdf_of.get(name) and (d / pdf_of[name]).exists() else None
-            res = ingest_text(s, text, name, pdf, repair=repair)
+            res = ingest_text(s, text, name, pdf, repair=repair, infer=infer)
             if res.ok:
                 s.commit()
                 out.update(ok=True, work_key=res.work_key, work_id=res.work_id, duplicate=res.duplicate,
@@ -183,10 +218,45 @@ def run_batch(s: Session, batch: str, only: list[str] | None = None, repair: boo
         prog["done"] = prog.get("done", 0) + 1
         _save(s, prog)
         s.commit()
-    prog.update(status="done", current=None, finished_at=utcnow().isoformat())
+    remaining = [f["name"] for f in prog["files"] if f["name"] not in prog["results"]]
+    prog.update(status="cancelled" if cancelled and remaining else "done", current=None, cancel=False,
+                remaining=len(remaining), finished_at=utcnow().isoformat())
     _save(s, prog)
+    CANCELLED.discard(batch)
     ok = sum(1 for r in prog["results"].values() if r.get("ok"))
-    return {"batch": batch, "ok": ok, "failed": len(prog["results"]) - ok}
+    return {"batch": batch, "ok": ok, "failed": len(prog["results"]) - ok, "cancelled": cancelled, "remaining": len(remaining)}
+
+
+def cancel(s: Session, batch: str) -> dict[str, Any]:
+    """Stop a running or queued batch after the file in hand (its model calls stop at once). The
+    files not reached stay staged; `resume` picks them up, `dismiss` throws them away."""
+    prog = progress(s, batch)
+    if prog is None:
+        raise KeyError(batch)
+    CANCELLED.add(batch)
+    if prog.get("status") in ("queued", "running"):
+        prog["cancel"] = True
+        _save(s, prog)
+    return prog
+
+
+def resume(s: Session, batch: str) -> dict[str, Any]:
+    """Import the files a cancelled (or interrupted) batch did not reach."""
+    from .. import jobs
+
+    prog = progress(s, batch)
+    if prog is None:
+        raise KeyError(batch)
+    if prog.get("status") in ("queued", "running"):
+        raise ImportBusy(batch)
+    names = [f["name"] for f in prog["files"] if f["name"] not in prog["results"]]
+    if not names:
+        return prog
+    CANCELLED.discard(batch)
+    job = jobs.enqueue(s, "ingest_batch", {"batch": batch, "repair": bool(prog.get("repair"))})
+    prog.update(status="queued", job=job.id, cancel=False, error=None)
+    _save(s, prog)
+    return prog
 
 
 def repair_failed(s: Session, batch: str) -> dict[str, Any]:
@@ -194,7 +264,7 @@ def repair_failed(s: Session, batch: str) -> dict[str, Any]:
     from .. import jobs
 
     prog = progress(s, batch)
-    if prog is None or prog.get("status") not in ("done", "interrupted"):
+    if prog is None or prog.get("status") not in ("done", "interrupted", "cancelled"):
         raise ImportBusy(batch)
     names = [n for n, r in prog["results"].items() if not r.get("ok") and r.get("repairable")]
     if not names:

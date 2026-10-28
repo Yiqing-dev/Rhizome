@@ -128,6 +128,7 @@ class SettingsPatch(BaseModel):
     nli: str | None = None
     inference_backend: str | None = None
     anthropic_model: str | None = None
+    infer_on_import: bool | None = None
     local_llm_path: str | None = None
     backup_dir: str | None = None
     backup_keep_daily: int | None = None
@@ -295,7 +296,9 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         form = await request.form()
         uploads = [(f.filename or "upload", await f.read()) for f in form.getlist("files") if not isinstance(f, str)]
         try:
-            return await run_in_threadpool(lambda: stage(s, uploads, repair=str(form.get("repair", "")).lower() in ("1", "true")))
+            infer_raw = str(form.get("infer", "")).lower()
+            infer = None if infer_raw == "" else infer_raw in ("1", "true")
+            return await run_in_threadpool(lambda: stage(s, uploads, repair=str(form.get("repair", "")).lower() in ("1", "true"), infer=infer))
         except ImportBusy:
             raise HTTPException(409, _("api.import_busy"))
         except NothingToImport:
@@ -357,6 +360,27 @@ def create_app(settings: Settings | None = None, read_only: bool = False, start_
         from ..services.imports import active
 
         return {"active": active(s)}
+
+    @app.post("/import/{batch}/cancel", dependencies=W)
+    def import_cancel(batch: str, s: Session = Depends(db)) -> dict[str, Any]:
+        """Stop the batch after the file in hand; the rest stays staged for resume or dismiss."""
+        from ..services.imports import cancel
+
+        try:
+            return cancel(s, batch)
+        except KeyError:
+            raise HTTPException(404, _("api.not_found"))
+
+    @app.post("/import/{batch}/resume", dependencies=W)
+    def import_resume(batch: str, s: Session = Depends(db)) -> dict[str, Any]:
+        from ..services.imports import ImportBusy, resume
+
+        try:
+            return resume(s, batch)
+        except KeyError:
+            raise HTTPException(404, _("api.not_found"))
+        except ImportBusy:
+            raise HTTPException(409, _("api.import_busy"))
 
     @app.post("/import/{batch}/repair", dependencies=W)
     def import_repair(batch: str, s: Session = Depends(db)) -> dict[str, Any]:

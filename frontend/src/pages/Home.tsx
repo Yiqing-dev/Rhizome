@@ -151,9 +151,15 @@ export default function Home() {
   const [ingestMsg, setIngestMsg] = useState<{ ok: boolean; text: string; related?: any[] } | null>(null);
   const failed = useLoad(() => api.inboxFailed(), []);
   const fixes = (codes: string[]) => codes.map((c) => t(`home.fix.${c}`)).join("; ");
+  const inference = s?.inference;
+  const modelOn = !!inference && inference.backend !== "queue";
   function onFiles(list: FileList | File[] | null) {
     setIngestMsg(null);
-    startImport(Array.from(list ?? []));  // progress, results and repair live in the import overlay
+    startImport(Array.from(list ?? []), modelOn ? inference!.infer_on_import : undefined);  // progress, results and repair live in the import overlay
+  }
+  async function setInfer(on: boolean) {
+    await api.patchSettings({ infer_on_import: on });
+    stats.reload();
   }
   async function retryFailed(name: string, repair: boolean) {
     try {
@@ -253,6 +259,12 @@ export default function Home() {
             <button className="btn" onClick={() => api.openFolder("inbox")}><FolderIcon />{t("home.open_inbox")}</button>
             <span className="inbox-state">{pending ? t("home.inbox_waiting", { n: pending }) : t("home.inbox_empty")}</span>
           </div>
+          {modelOn && (
+            <label className="check small" title={t("home.infer_hint")}>
+              <input type="checkbox" checked={inference!.infer_on_import} onChange={(e) => void setInfer(e.target.checked)} />
+              {t("home.infer_on_import")}
+            </label>
+          )}
           {s?.vocab?.stale ? <p className="hint">{t("home.vocab_stale")} <a href={href("settings")}>{t("settings.vocab_download")}</a></p> : null}
           {pending ? <p className="hint">{t("home.inbox_pending", { n: pending, files: s!.inbox!.pending.slice(0, 5).join("、") })}</p> : null}
           {s?.inbox?.ignored.length ? <p className="hint">{t("home.inbox_ignored", { n: s.inbox.ignored.length, files: s.inbox.ignored.slice(0, 5).join("、") })}</p> : null}

@@ -139,9 +139,9 @@ export interface ImportResult {
   related?: { work_id: number; title: string; via: { dimension: string }[] }[]; report?: string | null; repairable?: string[];
 }
 export interface ImportProgress {
-  batch: string; status: "queued" | "running" | "done" | "interrupted"; total: number; done: number;
+  batch: string; status: "queued" | "running" | "done" | "interrupted" | "cancelled"; total: number; done: number;
   current: string | null; files: { name: string; pdf: string | null }[]; skipped: string[];
-  results: Record<string, ImportResult>; error?: string | null;
+  results: Record<string, ImportResult>; error?: string | null; cancel?: boolean; remaining?: number; infer?: boolean;
 }
 export interface AgentVerdict { action?: string; confidence?: number; reason?: string; error?: string; model?: string }
 export interface AgentSummary { enabled: boolean; unjudged?: number; applicable?: number; min_confidence?: number }
@@ -151,7 +151,8 @@ export interface Stats { entities: Record<string, number>; edges: number; review
   update?: { latest: string; url: string | null; current: string } | null;
   vocab?: { exported_at: string | null; stale: boolean | null };
   reader?: ReaderStatus;
-  week: Record<string, number>; week_days: number; recent: RecentWork[] }
+  week: Record<string, number>; week_days: number; recent: RecentWork[];
+  inference?: { backend: string; infer_on_import: boolean } }
 
 export interface Decision { id: number; op: string; payload: Record<string, unknown>; created_at: string; revoked_at: string | null }
 export interface JobView {
@@ -222,6 +223,8 @@ export const api = {
   inboxFailed: () => req<{ files: FailedFile[] }>("GET", "/inbox/failed"),
   importActive: () => req<{ active: ImportProgress | null }>("GET", "/import/active"),
   importRepair: (batch: string) => req<ImportProgress>("POST", `/import/${batch}/repair`),
+  importCancel: (batch: string) => req<ImportProgress>("POST", `/import/${batch}/cancel`),
+  importResume: (batch: string) => req<ImportProgress>("POST", `/import/${batch}/resume`),
   importDismiss: (batch: string) => req<{ dismissed: boolean }>("DELETE", `/import/${batch}`),
   inboxRetry: (name: string, repair: boolean) => req<any>("POST", `/inbox/failed/${encodeURIComponent(name)}`, { repair }),
   recall: (text: string) => req<{ results: Hit[] }>("POST", "/recall", { text }),

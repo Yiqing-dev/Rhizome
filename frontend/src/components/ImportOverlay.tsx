@@ -2,7 +2,7 @@
 import { useTranslation } from "react-i18next";
 import type { ImportResult } from "../api";
 import { href } from "../router";
-import { clearError, dismiss, repair, setMinimized, useImport } from "../importStore";
+import { cancel, clearError, dismiss, repair, resume, setMinimized, useImport } from "../importStore";
 import { UploadIcon } from "./icons";
 
 function Bar({ value, max }: { value: number; max: number }) {
@@ -46,11 +46,14 @@ export default function ImportOverlay() {
   }
   if (!st.uploading && !st.progress) return null;
   const p = st.progress;
-  const finished = !!p && (p.status === "done" || p.status === "interrupted");
+  const finished = !!p && (p.status === "done" || p.status === "interrupted" || p.status === "cancelled");
+  const cancelling = !!p && !finished && !!p.cancel;
+  const remaining = p?.remaining ?? (p ? p.files.filter((f) => !(f.name in p.results)).length : 0);
   const results = p ? Object.values(p.results) : [];
   const ok = results.filter((r) => r.ok).length;
   const repairable = results.filter((r) => !r.ok && r.repairable?.length).length;
-  const title = st.uploading ? t("import.uploading") : finished ? t("import.finished") : p?.status === "queued" ? t("import.queued") : t("import.running");
+  const title = st.uploading ? t("import.uploading") : p?.status === "cancelled" ? t("import.cancelled_title") : finished ? t("import.finished")
+    : cancelling ? t("import.cancelling") : p?.status === "queued" ? t("import.queued") : t("import.running");
   const line = st.uploading
     ? t("import.uploaded", { mb: (st.uploading.loaded / 1048576).toFixed(1), total: (st.uploading.total / 1048576).toFixed(1) })
     : p ? t("import.count", { done: p.done, total: p.total }) : "";
@@ -76,7 +79,14 @@ export default function ImportOverlay() {
           <>
             <Bar value={st.uploading ? st.uploading.loaded : p?.done ?? 0} max={st.uploading ? st.uploading.total : p?.total ?? 1} />
             <div className="row between small"><span>{line}</span>{p?.current && <span className="muted">{p.current}</span>}</div>
+            {p && p.infer === false && <p className="hint">{t("import.no_infer_note")}</p>}
             <p className="hint">{t("import.locked_hint")}</p>
+            {p && (
+              <div className="row wrap">
+                <span className="grow" />
+                <button onClick={() => void cancel()} disabled={cancelling}>{cancelling ? t("import.cancelling") : t("import.cancel")}</button>
+              </div>
+            )}
           </>
         )}
         {finished && p && (
@@ -84,9 +94,13 @@ export default function ImportOverlay() {
             <p>{t("import.summary", { ok, failed: results.length - ok })}
               {p.skipped.length ? <span className="muted"> · {t("import.skipped", { n: p.skipped.length, files: p.skipped.slice(0, 4).join("、") })}</span> : null}</p>
             {p.status === "interrupted" && <div className="notice warn small">{t("import.interrupted")}{p.error ? `: ${p.error}` : ""}</div>}
+            {p.status === "cancelled" && <div className="notice warn small">{t("import.cancelled", { n: remaining })}</div>}
             <ul className="plain import-results">{results.map((r) => <ResultRow key={r.name} r={r} />)}</ul>
             <div className="row wrap">
               <span className="grow" />
+              {(p.status === "cancelled" || p.status === "interrupted") && remaining > 0 && (
+                <button onClick={() => void resume()}>{t("import.resume", { n: remaining })}</button>
+              )}
               {repairable > 0 && <button onClick={() => void repair()}>{t("import.repair", { n: repairable })}</button>}
               <button className="primary" autoFocus onClick={() => void dismiss()}>{t("import.done")}</button>
             </div>

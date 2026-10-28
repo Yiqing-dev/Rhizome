@@ -330,6 +330,9 @@ def recent_works(s: Session, limit: int = RECENT_WORKS) -> list[dict[str, Any]]:
 
 
 def home_stats(s: Session) -> dict[str, Any]:
+    from ..config import get_settings
+
+    st = get_settings()
     by_type = dict(s.execute(select(Entity.type, func.count()).group_by(Entity.type)).all())
     since = utcnow() - timedelta(days=WEEK_DAYS)
     week = dict(s.execute(select(Entity.type, func.count())
@@ -349,7 +352,8 @@ def home_stats(s: Session) -> dict[str, Any]:
         "reader": reader_availability(), "entities": by_type, "edges": s.query(Edge).count(), "review_queue": queue,
         "review_queue_by_kind": by_kind, "cards_due": due_count(s), "inbox": inbox.status(),
         "update": update_notice(s), "vocab": vocab_status(s),
-        "week": week, "week_days": WEEK_DAYS, "recent": recent_works(s)}
+        "week": week, "week_days": WEEK_DAYS, "recent": recent_works(s),
+        "inference": {"backend": st.inference_backend, "infer_on_import": st.infer_on_import}}
 
 
 def work_sources(s: Session, entity_id: int) -> list[dict[str, Any]]:

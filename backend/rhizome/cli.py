@@ -240,15 +240,21 @@ def _print_ingest(name: str, r: dict[str, Any]) -> None:
 def ingest(files: list[Path], move: bool = typer.Option(False, help="Move files to done/ or error/"),
            repair: bool = typer.Option(False, help="Fix known export drift first (the original stays in L0, "
                                                     "the fix is recorded in L1)"),
-           replace: bool = typer.Option(False, help="This export supersedes the paper's earlier ones")) -> None:
+           replace: bool = typer.Option(False, help="This export supersedes the paper's earlier ones"),
+           infer: Optional[bool] = typer.Option(None, "--infer/--no-infer",
+                                                help="Ask the model (API / local) during the import; default: the infer_on_import setting")) -> None:
     """Ingest RXF files (a same-named .pdf is attached automatically)."""
+    if infer is not None:
+        from .inference.cache import INFER_ENABLED
+
+        INFER_ENABLED.set(infer)
     if move:
         from .db.session import init_db
         from .pipeline.ingest import ingest_file
 
         init_db()
         for f in files:
-            _print_ingest(f.name, ingest_file(f, repair=repair, replace=replace).to_dict())
+            _print_ingest(f.name, ingest_file(f, repair=repair, replace=replace, infer=infer).to_dict())
         return
     from .pipeline.ingest import read_inbox_file
     from .rxf.loader import RxfEncodingError

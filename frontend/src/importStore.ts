@@ -62,10 +62,11 @@ export async function refresh(): Promise<void> {
   }
 }
 
-export function start(files: File[]): void {
+export function start(files: File[], infer?: boolean): void {
   if (isLocked() || !files.length) return;
   const form = new FormData();
   for (const f of files) form.append("files", f, f.name);
+  if (infer !== undefined) form.append("infer", infer ? "1" : "0");
   const xhr = new XMLHttpRequest();
   xhr.open("POST", apiUrl("/import"));
   xhr.setRequestHeader("Authorization", authHeader());
@@ -91,6 +92,27 @@ export async function repair(): Promise<void> {
   if (!state.progress) return;
   try {
     set({ progress: await api.importRepair(state.progress.batch) });
+  } catch (e) {
+    set({ error: e instanceof ApiError ? String(e.detail) : String(e) });
+  }
+  void refresh();
+}
+
+/** Stop after the file in hand; the files not reached stay staged until resume or dismiss. */
+export async function cancel(): Promise<void> {
+  if (!state.progress || !running(state.progress)) return;
+  try {
+    set({ progress: await api.importCancel(state.progress.batch) });
+  } catch (e) {
+    set({ error: e instanceof ApiError ? String(e.detail) : String(e) });
+  }
+  void refresh();
+}
+
+export async function resume(): Promise<void> {
+  if (!state.progress || running(state.progress)) return;
+  try {
+    set({ progress: await api.importResume(state.progress.batch) });
   } catch (e) {
     set({ error: e instanceof ApiError ? String(e.detail) : String(e) });
   }

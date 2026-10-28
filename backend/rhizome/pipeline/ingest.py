@@ -110,7 +110,25 @@ MAX_PDF_BYTES = 200_000_000
 
 def ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes | None = None,
                 recall: bool = True, repair: bool = False, replace: bool = False, *,
-                openalex_record: Any = _FETCH, captured_at: datetime | None = None) -> IngestResult:
+                openalex_record: Any = _FETCH, captured_at: datetime | None = None,
+                infer: bool | None = None) -> IngestResult:
+    """``infer`` (default: the ``infer_on_import`` setting) says whether the generative backend may
+    be asked during this import (cards, breadth suggestions); off, the import takes template cards
+    and queues the questions, and cached answers are still used."""
+    from ..inference.cache import INFER_ENABLED
+
+    allow = get_settings().infer_on_import if infer is None else infer
+    token = INFER_ENABLED.set(allow)
+    try:
+        return _ingest_text(s, text, filename, pdf, recall=recall, repair=repair, replace=replace,
+                            openalex_record=openalex_record, captured_at=captured_at)
+    finally:
+        INFER_ENABLED.reset(token)
+
+
+def _ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: bytes | None = None,
+                 recall: bool = True, repair: bool = False, replace: bool = False, *,
+                 openalex_record: Any = _FETCH, captured_at: datetime | None = None) -> IngestResult:
     """``repair`` applies the known-drift fixes (rxf/repair.py): L0 keeps the original bytes, the L1
     row holds the repaired document and records the fixes in ``meta.repairs``. ``openalex_record``
     (a stored response or None) and ``captured_at`` replay a capture from raw/ without going
@@ -294,10 +312,11 @@ def read_inbox_file(path: Path) -> tuple[str, bytes | None]:
     return decode_rxf(path.read_bytes()), (pdf_path.read_bytes() if pdf_path.exists() else None)
 
 
-def ingest_path(s: Session, path: Path, repair: bool = False, replace: bool = False) -> IngestResult:
+def ingest_path(s: Session, path: Path, repair: bool = False, replace: bool = False,
+                infer: bool | None = None) -> IngestResult:
     """Ingest an inbox file (and a same-named PDF). Does not move anything: the caller commits first."""
     text, pdf = read_inbox_file(path)
-    return ingest_text(s, text, path.name, pdf, repair=repair, replace=replace)
+    return ingest_text(s, text, path.name, pdf, repair=repair, replace=replace, infer=infer)
 
 
 def file_done(path: Path, result: IngestResult | None, error: str | None = None) -> Path:
@@ -323,7 +342,7 @@ def file_done(path: Path, result: IngestResult | None, error: str | None = None)
     return dest
 
 
-def ingest_file(path: Path, repair: bool = False, replace: bool = False) -> IngestResult:
+def ingest_file(path: Path, repair: bool = False, replace: bool = False, infer: bool | None = None) -> IngestResult:
     """Own transaction per file; the move happens only after the commit succeeded."""
     import traceback
 
@@ -335,7 +354,7 @@ def ingest_file(path: Path, repair: bool = False, replace: bool = False) -> Inge
 
     try:
         with session_scope() as s:
-            result = ingest_path(s, path, repair=repair, replace=replace)
+            result = ingest_path(s, path, repair=repair, replace=replace, infer=infer)
     except RxfEncodingError as e:  # the file itself: moved to error/ with the plain explanation
         result = IngestResult(ok=False, report=f"{path.name}: {e}")
         file_done(path, result)

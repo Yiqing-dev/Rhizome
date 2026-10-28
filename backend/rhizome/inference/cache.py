@@ -10,14 +10,25 @@ nothing.
 
 from __future__ import annotations
 
+import contextvars
 import json
-from typing import Any
+from typing import Any, Callable
 
 from sqlalchemy.orm import Session
 
 from ..db.models import KV
 from ..text import sha256
 from . import get_backend
+
+# Switches for the current context (an import, a CLI run): whether the model may be asked at all,
+# and whether the work has been cancelled meanwhile. Cached answers are still served either way.
+INFER_ENABLED: contextvars.ContextVar[bool] = contextvars.ContextVar("rhizome_infer_enabled", default=True)
+CANCELLED: contextvars.ContextVar[Callable[[], bool] | None] = contextvars.ContextVar("rhizome_cancel_check", default=None)
+
+
+def inference_allowed() -> bool:
+    check = CANCELLED.get()
+    return INFER_ENABLED.get() and not (check is not None and check())
 
 
 def _key(backend: Any, method: str, args: tuple) -> str:
@@ -35,6 +46,8 @@ def judged(s: Session, method: str, *args: Any, backend: Any = None) -> Any:
     row = s.get(KV, k)
     if row is not None and row.v is not None:
         return tuple(row.v)
+    if not inference_allowed():  # inference switched off for this import, or it was cancelled
+        return None
     out = getattr(backend, method)(*args)
     if out is not None and not s.info.get("read_only"):
         s.add(KV(k=k, v=list(out)))
