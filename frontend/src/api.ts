@@ -144,7 +144,7 @@ export interface ImportProgress {
   results: Record<string, ImportResult>; error?: string | null; cancel?: boolean; remaining?: number; infer?: boolean;
 }
 export interface AgentVerdict { action?: string; confidence?: number; reason?: string; error?: string; model?: string }
-export interface AgentSummary { enabled: boolean; unjudged?: number; applicable?: number; min_confidence?: number }
+export interface AgentSummary { enabled: boolean; unjudged?: number; applicable?: number; min_confidence?: number; limit?: number }
 export interface DueCard { id: string; q: string; a: string; entity_key: string; entity_name: string | null; origin: string; new: boolean }
 export interface Stats { entities: Record<string, number>; edges: number; review_queue: number; review_queue_by_kind: Record<string, number>; cards_due: number;
   inbox?: { watching: boolean; last_scan: string | null; pending: string[]; ignored: string[] };

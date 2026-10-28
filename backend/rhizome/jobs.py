@@ -285,9 +285,9 @@ def _nightly(s: Session, p: dict[str, Any]) -> dict[str, Any]:
 
 @handler("agent_review")
 def _agent_review(s: Session, p: dict[str, Any]) -> dict[str, Any]:
-    from .inference.agent import DEFAULT_LIMIT, review_with_agent
+    from .inference.agent import review_with_agent
 
-    return review_with_agent(s, limit=int(p.get("limit", DEFAULT_LIMIT)), item_ids=p.get("item_ids"),
+    return review_with_agent(s, limit=int(p["limit"]) if p.get("limit") else None, item_ids=p.get("item_ids"),
                              force=bool(p.get("force")))
 
 

@@ -310,10 +310,13 @@ def _annotate(it: ReviewItem, verdict: dict[str, Any]) -> None:
     it.payload = payload  # a new dict: JSON columns only notice reassignment
 
 
-def review_with_agent(s: Session, limit: int = DEFAULT_LIMIT, item_ids: list[int] | None = None,
+def review_with_agent(s: Session, limit: int | None = None, item_ids: list[int] | None = None,
                       force: bool = False, agent: TopicAgent | None = None) -> dict[str, Any]:
-    """Judge pending topic items that have no verdict yet (``force``: judge again)."""
+    """Judge pending topic items that have no verdict yet (``force``: judge again). ``limit`` caps
+    the paid verdicts in this run; None takes the ``agent_review_limit`` setting."""
     st = get_settings()
+    if limit is None:
+        limit = max(1, int(st.agent_review_limit or DEFAULT_LIMIT))
     if agent is None:
         if st.inference_backend != "anthropic":
             return {"skipped": "inference_backend is not anthropic"}

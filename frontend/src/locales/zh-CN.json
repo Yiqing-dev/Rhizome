@@ -364,7 +364,8 @@
       "applied": "已采纳 {{n}} 条建议，可在“决策记录”里撤销任何一条。",
       "done": "Claude 判断了 {{judged}} 项；还有 {{remaining}} 项待判断。",
       "skipped": "Claude 没有运行：{{reason}}",
-      "why": "Claude 的理由"
+      "why": "Claude 的理由",
+      "batch": "每次"
     },
     "suggestion": {
       "definition": "把“{{topic_name}}”定义为：{{value}}",
@@ -556,7 +557,9 @@
     "accent_violet": "紫",
     "accent_rose": "玫红",
     "accent_amber": "琥珀",
-    "accent_graphite": "石墨"
+    "accent_graphite": "石墨",
+    "agent_review_limit": "每次“请 Claude 判断”的条数",
+    "agent_review_limit_hint": "审核队列里点一次按钮最多判断这么多条；每条要花几次请求，命中缓存的不计。可以在审核队列旁边直接改。"
   },
   "lang": {
     "short_en": "EN",

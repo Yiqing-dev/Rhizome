@@ -421,14 +421,14 @@ def organise_tree_cmd() -> None:
 
 
 @app.command("agent-review")
-def agent_review(limit: int = typer.Option(25, help="Items to judge in this run"),
+def agent_review(limit: Optional[int] = typer.Option(None, help="Items to judge in this run (default: the agent_review_limit setting)"),
                  force: bool = typer.Option(False, help="Judge again items that already have a verdict"),
                  apply_min: Optional[float] = typer.Option(None, "--apply-min",
                                                            help="Then apply every suggestion at least this confident (e.g. 0.8)")) -> None:
     """Let the Claude topic agent judge pending topic questions (needs the Anthropic backend)."""
     _require_writable()
     c = _client()
-    job = c.run_job("agent_review", {"limit": limit, "force": force})
+    job = c.run_job("agent_review", {"force": force, **({"limit": limit} if limit else {})})
     res = job.get("result") or {}
     if _out(res):
         return

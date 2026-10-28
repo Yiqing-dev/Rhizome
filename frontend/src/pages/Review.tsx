@@ -55,13 +55,21 @@ export default function ReviewPage({ query }: { query?: URLSearchParams }) {
 
   const [err, setErr] = useState<string | null>(null);
   const [agentMsg, setAgentMsg] = useState<string | null>(null);
+  const agent = q.data?.agent;
+  const [limit, setLimit] = useState<number | null>(null);  // null: the agent_review_limit setting
+  const batch = limit ?? agent?.limit ?? 25;
   const agentRun = useJob("agent_review", (j) => {
     const r = j.result ?? {};
     setAgentMsg(j.status === "failed" ? (j.error ?? "") : r.skipped ? t("review.agent.skipped", { reason: r.skipped })
       : t("review.agent.done", { judged: r.judged ?? 0, remaining: r.remaining ?? 0 }) + (r.stopped ? ` (${r.stopped})` : ""));
     q.reload();
-  });
-  const agent = q.data?.agent;
+  }, { limit: batch });
+  function pickLimit(v: string) {  // remembered as the setting so the CLI and the next visit use it too
+    const n = Math.round(Number(v));
+    if (!(n >= 1 && n <= 500)) return;
+    setLimit(n);
+    if (n !== agent?.limit) api.patchSettings({ agent_review_limit: n }).catch(() => undefined);
+  }
   async function applyAgent() {
     const n = agent?.applicable ?? 0;
     if (!n || !window.confirm(t("review.agent.apply_confirm", { n, pct: Math.round((agent?.min_confidence ?? 0.8) * 100) }))) return;
@@ -127,8 +135,13 @@ export default function ReviewPage({ query }: { query?: URLSearchParams }) {
         <div className="notice row wrap">
           <span className="grow small">{t("review.agent.hint")}</span>
           {((agent.unjudged ?? 0) > 0 || agentRun.running) && (
-            <button onClick={agentRun.start} disabled={agentRun.running}>
-              {agentRun.running ? t("review.agent.running") : t("review.agent.run", { n: agent.unjudged ?? 0 })}</button>
+            <span className="row agent-run">
+              <label className="small">{t("review.agent.batch")}
+                <input type="number" min={1} max={500} value={batch} disabled={agentRun.running}
+                  onChange={(e) => setLimit(Math.round(Number(e.target.value)) || batch)} onBlur={(e) => pickLimit(e.target.value)} /></label>
+              <button onClick={agentRun.start} disabled={agentRun.running}>
+                {agentRun.running ? t("review.agent.running") : t("review.agent.run", { n: agent.unjudged ?? 0 })}</button>
+            </span>
           )}
           {(agent.applicable ?? 0) > 0 && (
             <button className="primary" onClick={applyAgent}>{t("review.agent.apply", { n: agent.applicable })}</button>

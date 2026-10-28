@@ -537,6 +537,13 @@ Archivo（Inter 和 Source Serif 4 两个字体包已移除）。标题 800 字�
 
 **从列表找**：右侧列表顶上加了筛选框，输入即过滤；鼠标移到一行，图上把该主题移到视野中并高亮它和它的邻居（`focus`）。
 
+## 审核队列："请 Claude 判断"每次的条数可调（2026-10-28）
+
+原来每次点击固定判断 25 条（`inference/agent.py` 的 `DEFAULT_LIMIT`），界面没有地方改；命令行有 `--limit`。现在是设置
+`agent_review_limit`（默认 25，1–500）：`review_with_agent(limit=None)` 读它，任务 `agent_review` 不带 `limit` 时也读它，
+`rhz agent-review --limit` 不给时同样。`/review` 的 `agent` 摘要多了 `limit`，审核队列的"请 Claude 判断"旁边有一个数字框，
+改了就写回设置（命令行和下次打开都用新值）；设置页 Claude API 面板里也能改。命中缓存的判断不占这个额度。
+
 ## 还需要你来做的（M0）
 
 - 导出指令已按设计文档 10-04 版定稿（见上一节）；用一段时间后若再出现校验失败，把错误报告贴回来改规则。

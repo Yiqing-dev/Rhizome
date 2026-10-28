@@ -283,6 +283,10 @@ export default function SettingsPage() {
               <div className="form-grid">
                 <label>{t("settings.anthropic_model")}
                   <input defaultValue={s.anthropic_model} onBlur={(e) => patch({ anthropic_model: e.target.value.trim() || null })} /></label>
+                <label>{t("settings.agent_review_limit")}
+                  <input type="number" min={1} max={500} defaultValue={s.agent_review_limit ?? 25}
+                    onBlur={(e) => { const n = Math.round(Number(e.target.value)); if (n >= 1 && n <= 500) patch({ agent_review_limit: n }); }} />
+                  <span className="hint">{t("settings.agent_review_limit_hint")}</span></label>
                 <label>{t("settings.anthropic_key")}
                   <input type="password" autoComplete="off" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
                     placeholder={keySource === "env" ? t("settings.anthropic_key_env") : keySource === "keyring" ? t("settings.anthropic_key_stored") : t("settings.anthropic_key_missing")} /></label>

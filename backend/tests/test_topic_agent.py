@@ -172,6 +172,11 @@ def test_review_api_reports_and_applies(settings, library, session):
         assert c.post("/review/agent/apply", json={"min_confidence": 0.2}).status_code == 422
         j = c.post("/jobs", json={"kind": "agent_review", "payload": {}}).json()
         assert j["kind"] == "agent_review"
+        # the batch size is a setting the queue page shows and lets you change
+        assert c.get("/review").json()["agent"]["limit"] == 25
+        assert c.patch("/settings", json={"agent_review_limit": 3}).json()["agent_review_limit"] == 3
+        assert c.get("/review").json()["agent"]["limit"] == 3
+        assert c.patch("/settings", json={"agent_review_limit": 0}).status_code == 422
     finally:
         c.patch("/settings", json={"inference_backend": "queue"})
 
@@ -212,3 +217,18 @@ def test_rebuild_does_not_ask_the_backend_again(settings, session, monkeypatch):
     rebuild(session, backup=False)
     session.commit()
     assert fake.calls == asked  # every judgement came from the library's memory
+
+
+def test_the_batch_size_setting_caps_paid_verdicts(settings, library, session):
+    """No explicit limit: the run judges at most ``agent_review_limit`` items and reports the rest."""
+    g, a, b = _pair(session)
+    from rhizome.db.models import Entity
+
+    extra = [e for e in session.execute(select(Entity).where(Entity.type == "topic")).scalars() if e.id not in (a.id, b.id)]
+    items = [_queue_pair(g, a, b, kind="merge")] + [_queue_pair(g, a, e) for e in extra[:3]]
+    session.commit()
+    settings.agent_review_limit = 2
+    answers = [("end_turn", [_text({"action": "skip", "confidence": 0.6, "reason": "unclear"})])] * 10
+    agent, msgs = scripted_agent(*answers)
+    out = review_with_agent(session, agent=agent, item_ids=[it.id for it in items])
+    assert out["judged"] == 2 and out["remaining"] == len(items) - 2 and len(msgs.calls) == 2

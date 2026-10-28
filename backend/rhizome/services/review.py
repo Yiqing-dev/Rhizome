@@ -60,11 +60,13 @@ def _applicable(it: ReviewItem, min_confidence: float) -> bool:
 def agent_summary(s: Session) -> dict[str, Any]:
     from ..config import get_settings
 
-    if get_settings().inference_backend != "anthropic":
+    st = get_settings()
+    if st.inference_backend != "anthropic":
         return {"enabled": False}
     items = _agent_items(s)
     return {"enabled": True, "unjudged": sum(1 for it in items if it.kind != "suggestion" and not (it.payload or {}).get("agent")),
-            "applicable": sum(1 for it in items if _applicable(it, APPLY_MIN)), "min_confidence": APPLY_MIN}
+            "applicable": sum(1 for it in items if _applicable(it, APPLY_MIN)), "min_confidence": APPLY_MIN,
+            "limit": st.agent_review_limit}
 
 
 def apply_agent(s: Session, min_confidence: float = APPLY_MIN) -> dict[str, Any]:

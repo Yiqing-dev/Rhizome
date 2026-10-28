@@ -364,7 +364,8 @@
       "applied": "Applied {{n}} suggestions. Undo any of them under Decisions.",
       "done": "Claude judged {{judged}} items; {{remaining}} still waiting.",
       "skipped": "Claude did not run: {{reason}}",
-      "why": "Claude's reason"
+      "why": "Claude's reason",
+      "batch": "Per run"
     },
     "suggestion": {
       "definition": "Define “{{topic_name}}” as: {{value}}",
@@ -556,7 +557,9 @@
     "accent_violet": "Violet",
     "accent_rose": "Rose",
     "accent_amber": "Amber",
-    "accent_graphite": "Graphite"
+    "accent_graphite": "Graphite",
+    "agent_review_limit": "Items per “Ask Claude” run",
+    "agent_review_limit_hint": "How many items one click on the review queue judges at most; each takes a few requests, cached verdicts do not count. Adjustable beside the button too."
   },
   "lang": {
     "short_en": "EN",

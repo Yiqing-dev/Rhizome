@@ -233,6 +233,7 @@ class Settings(BaseSettings):
     inference_backend: str = "queue"
     infer_on_import: bool = True  # ask the model (API / local) while importing; off: template cards, queued questions
     anthropic_model: str = "claude-opus-5-5"
+    agent_review_limit: int = 25  # items "Ask Claude" judges per run (each costs a few requests)
 
     thresholds: Thresholds = Field(default_factory=Thresholds)
     review_daily_new: int = 20

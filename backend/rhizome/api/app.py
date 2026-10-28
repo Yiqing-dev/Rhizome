@@ -129,6 +129,7 @@ class SettingsPatch(BaseModel):
     inference_backend: str | None = None
     anthropic_model: str | None = None
     infer_on_import: bool | None = None
+    agent_review_limit: int | None = Field(None, ge=1, le=500)
     local_llm_path: str | None = None
     backup_dir: str | None = None
     backup_keep_daily: int | None = None
