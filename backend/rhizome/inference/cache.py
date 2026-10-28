@@ -36,6 +36,20 @@ def _key(backend: Any, method: str, args: tuple) -> str:
     return "inf:" + sha256(json.dumps([who, method, list(args)], ensure_ascii=False, default=str))[:48]
 
 
+def can_ask() -> bool:
+    """A model backend is configured and this context allows asking it."""
+    return get_backend().name != "queue" and inference_allowed()
+
+
+def cached(s: Session, method: str, *args: Any, backend: Any = None) -> Any:
+    """The remembered answer only; never asks."""
+    backend = backend if backend is not None else get_backend()
+    if backend.name == "queue":
+        return None
+    row = s.get(KV, _key(backend, method, args))
+    return tuple(row.v) if row is not None and row.v is not None else None
+
+
 def judged(s: Session, method: str, *args: Any, backend: Any = None) -> Any:
     """``backend.<method>(*args)`` (default: the configured backend), answered from the library
     when the same backend and model were asked the same question before."""

@@ -230,3 +230,34 @@ def test_inbox_file_waits_while_the_library_is_busy(settings, monkeypatch):
     monkeypatch.setattr(ing, "ingest_text", locked)
     assert not ingest_file(f).ok
     assert f.exists() and not (settings.inbox / "error" / "busy.yaml").exists()
+
+
+def test_external_lookups_run_side_by_side(settings, session, monkeypatch):
+    """OpenAlex, the taxonomy and every accession / repo check used to go one after another."""
+    import threading
+    import time
+
+    import rhizome.pipeline.ingest as ing
+    from rhizome.external import openalex
+
+    seen, threads = [], set()
+
+    def slow(answer):
+        def fn(*a, **kw):
+            seen.append(a[0] if a else kw.get("doi"))
+            threads.add(threading.get_ident())
+            time.sleep(0.25)
+            return answer
+        return fn
+
+    monkeypatch.setattr(ing, "check_accession", slow("verified"))
+    monkeypatch.setattr(ing, "check_repo", slow("verified"))
+    monkeypatch.setattr(ing, "taxonomy_lookup", slow(("3702", "verified")))
+    monkeypatch.setattr(openalex, "fetch", slow((None, "not_found")))
+    t0 = time.monotonic()
+    r = ingest_text(session, example("deep-with-ids.yaml"), "ids.yaml")
+    took = time.monotonic() - t0
+    assert r.ok and len(seen) >= 3 and len(threads) > 1
+    assert took < 0.25 * len(seen) * 0.6, (took, len(seen))  # overlapped, not summed
+    ex = session.execute(select(Extraction).where(Extraction.kind == "rxf")).scalars().first()
+    assert ex.meta["openalex"] == "not_found" and all(v == "verified" for v in ex.meta["checks"].values())

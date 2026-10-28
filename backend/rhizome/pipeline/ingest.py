@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -62,11 +63,9 @@ def _check_taxa(doc: RxfDocument) -> dict[str, str]:
     """Organism name -> NCBI taxid (or 'not_found' / 'unverified'), resolved here, before anything
     is written, and stored in the extraction: materialisation and rebuild never go online."""
     names = list(dict.fromkeys([*doc.paper.organisms, *(d.organism for d in doc.assets.datasets if d.organism)]))
-    out: dict[str, str] = {}
-    for name in names:
-        tid, status = taxonomy_lookup(name)
-        out[name] = tid or status
-    return out
+    with ThreadPoolExecutor(max_workers=max(1, min(4, len(names)))) as pool:
+        found = list(pool.map(taxonomy_lookup, names))
+    return {name: tid or status for name, (tid, status) in zip(names, found)}
 
 
 def _already_verified(s: Session | None, etype: str, external_id: str) -> bool:
@@ -78,7 +77,10 @@ def _already_verified(s: Session | None, etype: str, external_id: str) -> bool:
 
 
 def _check_ids(doc: RxfDocument, s: Session | None = None) -> tuple[dict[str, str], list[str]]:
+    """Format checks and ids the library already verified are answered here; the rest are looked
+    up side by side (NCBI keeps its own spacing). The session is only read in this thread."""
     checks: dict[str, str] = {}
+    lookups: dict[str, tuple[Any, ...]] = {}
     for d in doc.assets.datasets:
         if not d.accession:
             continue
@@ -88,7 +90,7 @@ def _check_ids(doc: RxfDocument, s: Session | None = None) -> tuple[dict[str, st
         elif _already_verified(s, "dataset", acc):
             checks[acc] = "verified"
         else:
-            checks[acc] = check_accession(acc, d.database)
+            lookups.setdefault(acc, (check_accession, acc, d.database))
     for m in doc.assets.methods:
         if m.repo:
             repo = normalize_repo(m.repo)
@@ -98,7 +100,12 @@ def _check_ids(doc: RxfDocument, s: Session | None = None) -> tuple[dict[str, st
             elif _already_verified(s, "method", repo):
                 checks[repo] = "verified"
             else:
-                checks[repo] = check_repo(repo)
+                lookups.setdefault(repo, (check_repo, repo))
+    if lookups:
+        with ThreadPoolExecutor(max_workers=min(6, len(lookups))) as pool:
+            futures = {k: pool.submit(fn, *args) for k, (fn, *args) in lookups.items()}
+            for k, f in futures.items():
+                checks[k] = f.result()
     suspect = [k for k, v in checks.items() if v in ("not_found", "bad_format")]
     return checks, suspect
 
@@ -173,13 +180,21 @@ def _ingest_text(s: Session, text: str, filename: str = "inline.yaml", pdf: byte
     max_before = s.execute(select(func.coalesce(func.max(Entity.id), 0))).scalar_one()
 
     # resolve canonical work id (T0) and verify external ids before anything enters the graph
-    if openalex_record is _FETCH:
-        oa, oa_status = openalex.fetch(doi=doc.paper.doi) if doc.paper.doi else (None, "no_doi")
-    else:
-        oa, oa_status = openalex_record, "ok" if openalex_record else "replayed"
-    checks, suspect = _check_ids(doc, s)
+    # OpenAlex, the taxonomy and the id checks go online at the same time (the id checks keep the
+    # session, so they run here; the other two need nothing of it)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f_oa = pool.submit(openalex.fetch, doi=doc.paper.doi) if openalex_record is _FETCH and doc.paper.doi else None
+        f_taxa = pool.submit(_check_taxa, doc)
+        checks, suspect = _check_ids(doc, s)
+        taxa = f_taxa.result()
+        if f_oa is not None:
+            oa, oa_status = f_oa.result()
+        elif openalex_record is _FETCH:
+            oa, oa_status = None, "no_doi"
+        else:
+            oa, oa_status = openalex_record, "ok" if openalex_record else "replayed"
     meta = {"openalex_id": oa["id"] if oa else None, "checks": checks, "suspect": suspect,
-            "filename": filename, "taxa": _check_taxa(doc), "openalex": oa_status}
+            "filename": filename, "taxa": taxa, "openalex": oa_status}
     if res.repairs:
         meta["repairs"] = res.repairs
     wkey = work_key(meta["openalex_id"], doc.paper.doi, doc.paper.title)

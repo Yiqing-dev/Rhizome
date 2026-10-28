@@ -10,10 +10,10 @@ from typing import Any
 from sqlalchemy import func, select, update
 
 from ..config import get_settings
-from ..db.models import Edge, Entity, Extraction, ReviewCard, Work, utcnow
+from ..db.models import KV, Edge, Entity, Extraction, ReviewCard, Work, utcnow
 from ..external.ids import effective_database, normalize_biotools, normalize_doi, normalize_repo, normalize_zenodo
 from ..i18n import _
-from ..inference.cache import judged
+from ..inference.cache import cached, can_ask, judged
 from ..rxf.schema import RxfDocument, parse_stored, uses_ids
 from ..text import alias_default, norm, sha256
 from .canonicalize import is_user, resolve_claim, resolve_free, resolve_modality, resolve_organism
@@ -473,7 +473,12 @@ def reconcile_cards(g: Graph) -> dict[str, int]:
     return out
 
 
+PENDING_CARDS = "cards_pending"  # KV: [asset key, work key] pairs whose model card the make_cards job owes
+
+
 def _make_cards(g: Graph, doc: RxfDocument, work: Entity, assets: list[Entity], lookup, dropped=lambda ref: False) -> None:
+    """Cards the export wrote, then one per remaining asset: a remembered model answer, else a
+    template now and the model later (the ``make_cards`` job), so an import never waits on it."""
     covered: set[str] = set()
     for rc in doc.review_cards:
         target = lookup(rc.about, ("method", "dataset", "idea", "claim", "topic")) if rc.about else None
@@ -482,17 +487,77 @@ def _make_cards(g: Graph, doc: RxfDocument, work: Entity, assets: list[Entity], 
         target = target or work
         covered.add(target.key)
         upsert_card(g, target.key, rc.q, rc.a, "rxf", priority=10 if target.attrs.get("origin") == "user" else 0)
+    deferred: list[list[str]] = []
+    ask = can_ask()
     for e in assets:
         if e.key in covered or e.type == "claim" or (e.attrs or {}).get("no_cards"):
             continue
-        prio = 10 if (e.attrs or {}).get("origin") == "user" else 0  # your ideas first, whoever wrote the card
-        qa = judged(g.s, "make_card", _card_context(e, work))
+        prio = _card_priority(e)
+        qa = cached(g.s, "make_card", _card_context(e, work))
         if qa:
             upsert_card(g, e.key, qa[0], qa[1], "local_llm", priority=prio)
             continue
         qa = template_card(e, work)
         if qa:
             upsert_card(g, e.key, qa[0], qa[1], "template", priority=prio)
+        if ask:
+            deferred.append([e.key, work.key])
+    if deferred:
+        from .. import jobs
+
+        _set_pending_cards(g.s, _pending_cards(g.s) + [d for d in deferred if d not in _pending_cards(g.s)])
+        jobs.enqueue(g.s, "make_cards", {})
+
+
+def _card_priority(e: Entity) -> int:
+    return 10 if (e.attrs or {}).get("origin") == "user" else 0  # your ideas first, whoever wrote the card
+
+
+def _pending_cards(s) -> list[list[str]]:
+    row = s.get(KV, PENDING_CARDS)
+    return [list(x) for x in (row.v or [])] if row is not None else []
+
+
+def _set_pending_cards(s, pairs: list[list[str]]) -> None:
+    row = s.get(KV, PENDING_CARDS)
+    if row is None:
+        s.add(KV(k=PENDING_CARDS, v=pairs))
+    else:
+        row.v = pairs  # a new list: JSON columns only notice reassignment
+    s.flush()
+
+
+def make_pending_cards(s, limit: int = 500) -> dict[str, Any]:
+    """The ``make_cards`` job: ask the model for the cards imports deferred, newest last. Each answer
+    replaces the asset's template card (same generated slot) and is remembered, so a rebuild finds
+    it in the cache. A declined asset keeps its template. With no model backend the list waits."""
+    from .. import jobs
+
+    pairs = _pending_cards(s)
+    if not pairs:
+        return {"made": 0, "declined": 0, "left": 0}
+    if not can_ask():
+        return {"skipped": "no model backend", "left": len(pairs)}
+    g = Graph(s)
+    total, made, declined = len(pairs), 0, 0
+    batch = pairs[:limit]
+    for i, (key, wkey) in enumerate(batch, 1):
+        e, w = g.by_key(key), g.by_key(wkey)
+        if e is not None and w is not None and not (e.attrs or {}).get("no_cards"):
+            qa = judged(s, "make_card", _card_context(e, w))
+            if qa:
+                upsert_card(g, e.key, qa[0], qa[1], "local_llm", priority=_card_priority(e))
+                made += 1
+            else:
+                declined += 1
+        if i % 10 == 0 or i == len(batch):  # each answer was paid for: keep it even if a later one fails
+            _set_pending_cards(s, [x for x in _pending_cards(s) if x not in batch[:i]])
+            s.commit()
+            jobs.set_progress(jobs.CURRENT_JOB.get(), {"done": i, "total": total})
+    left = len(_pending_cards(s))
+    if left:
+        jobs.enqueue(s, "make_cards", {})
+    return {"made": made, "declined": declined, "left": left}
 
 
 def _card_context(e: Entity, work: Entity) -> str:

@@ -34,7 +34,7 @@ def handler(kind: str):
 
 # Kinds whose result only depends on the library state: a second request while one is still
 # queued is the same work, so it is coalesced instead of running the whole thing twice.
-COALESCE = ("rebuild", "nightly", "enrich", "agent_review", "organise_tree")
+COALESCE = ("rebuild", "nightly", "enrich", "agent_review", "organise_tree", "make_cards")
 
 # The id of the job the current thread is running (handlers that report progress read it).
 CURRENT_JOB: contextvars.ContextVar[int | None] = contextvars.ContextVar("rhizome_current_job", default=None)
@@ -289,6 +289,13 @@ def _agent_review(s: Session, p: dict[str, Any]) -> dict[str, Any]:
 
     return review_with_agent(s, limit=int(p["limit"]) if p.get("limit") else None, item_ids=p.get("item_ids"),
                              force=bool(p.get("force")))
+
+
+@handler("make_cards")
+def _make_cards_job(s: Session, p: dict[str, Any]) -> dict[str, Any]:
+    from .pipeline.materialize import make_pending_cards
+
+    return make_pending_cards(s, limit=int(p.get("limit", 500)))
 
 
 @handler("ingest_batch")

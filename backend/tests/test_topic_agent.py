@@ -209,14 +209,24 @@ def test_rebuild_does_not_ask_the_backend_again(settings, session, monkeypatch):
     fake = CountingBackend()
     monkeypatch.setattr(inference, "_backend", fake)
     monkeypatch.setattr(inference, "_backend_for", (settings.inference_backend, settings.anthropic_model))
+    from rhizome import jobs
+    from rhizome.db.models import KV, ReviewCard
+    from rhizome.pipeline.materialize import PENDING_CARDS
+
     for f in ("deep-grn-atlas.yaml", "deep-with-ids.yaml"):
         assert ingest_text(session, example(f), f).ok
     session.commit()
+    # the import itself asks for nothing card-related: template cards now, the model in a job
+    assert fake.calls == 0 or all(c.origin != "local_llm" for c in session.query(ReviewCard))
+    assert session.get(KV, PENDING_CARDS).v and jobs.run_all() >= 1
+    session.expire_all()
     asked = fake.calls
-    assert asked > 0
+    assert asked > 0 and not session.get(KV, PENDING_CARDS).v
+    assert any(c.origin == "local_llm" for c in session.query(ReviewCard))  # the templates were replaced
     rebuild(session, backup=False)
     session.commit()
     assert fake.calls == asked  # every judgement came from the library's memory
+    assert not session.get(KV, PENDING_CARDS).v  # and nothing was deferred again
 
 
 def test_the_batch_size_setting_caps_paid_verdicts(settings, library, session):
