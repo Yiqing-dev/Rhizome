@@ -571,6 +571,15 @@ cytoscape 3.34 会先对鼠标滚轮做归一化（把每格折算成 3 个单�
 （`test_rebuild_does_not_ask_the_backend_again`）；四类校验各延时 0.25 秒时导入耗时明显小于串行之和
 （`test_external_lookups_run_side_by_side`）。
 
+## 读新论文：大 PDF 走 Files API（2026-10-28）
+
+Anthropic 单次请求上限 32 MB，PDF 内嵌时是 base64（体积乘 4/3）再加提示词，所以内嵌实际只容得下约 24 MB。`reader.py`
+现在按大小分流：不超过 `INLINE_PDF_BYTES`（22 MiB）照旧内嵌；更大的先用 Files API 上传一次（`client.files.upload`，
+单文件上限 500 MB），文档块的 source 改为 `{"type": "file", "file_id": ...}`，识别、审读、导出各轮都引用同一个 id，提示缓存
+行为不变；`read_paper` 用 try/finally 在结束时删除上传的文件（成功、重复、校验失败、异常都删，删不掉只记日志）。上传失败
+归为 ReaderError。返回值多了 `transport: inline | file`。600 页的模型读取上限仍然存在，与传输方式无关。
+本地 200 MB 的 `MAX_PDF_BYTES` 检查保留。测试：大文件上传、各轮引用、结束删除；小文件不上传；中途失败也删除。
+
 ## 还需要你来做的（M0）
 
 - 导出指令已按设计文档 10-04 版定稿（见上一节）；用一段时间后若再出现校验失败，把错误报告贴回来改规则。

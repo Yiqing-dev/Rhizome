@@ -35,6 +35,9 @@ log = logging.getLogger(__name__)
 STEPS = ("identify", "dedupe", "review", "export", "validate", "ingest")
 PROMPT_VERSION = "deep-review-v2"  # the user's review prompt, rhizome/data/deep-review-v2.md
 MAX_OUTPUT = 16000
+# A request may be 32 MB; an inline PDF is base64 (4/3 of its size) plus the prompts, so PDFs above
+# this go through the Files API instead (one upload, referenced by id, deleted when the read ends).
+INLINE_PDF_BYTES = 22 * 1024 * 1024
 REPAIR_ROUNDS = 1
 
 
@@ -145,25 +148,38 @@ def _call(client: Any, usage: _Usage, **kw: Any) -> Any:
     return resp
 
 
+def _upload(client: Any, pdf: bytes, filename: str) -> str:
+    import anthropic
+
+    try:
+        return client.files.upload(file=(filename, pdf, "application/pdf")).id
+    except (anthropic.APIStatusError, anthropic.APIConnectionError) as e:
+        raise ReaderError(f"upload: {type(e).__name__}: {getattr(e, 'message', None) or e}") from e
+
+
+def _delete_quietly(client: Any, file_id: str) -> None:
+    try:
+        client.files.delete(file_id)
+    except Exception as e:  # the read is done either way; a leftover file only costs storage
+        log.warning("could not delete uploaded file %s: %s", file_id, e)
+
+
 def read_paper(s: Session, pdf: bytes, filename: str, *, force: bool = False, client: Any = None,
                model: str | None = None, lang: str | None = None, today: date | None = None,
                progress: Callable[[str], None] | None = None) -> dict[str, Any]:
     """Run the whole pipeline for one PDF. Returns ``{"status": "duplicate" | "done" | "invalid", ...}``;
-    raises ReaderUnavailable / ReaderError. ``client`` and ``model`` are for tests and the CLI."""
-    from ..config import get_settings, ui_language
-    from ..pipeline.ingest import MAX_PDF_BYTES, ingest_text
-    from ..rxf.guide import instructions
-    from ..rxf.loader import error_report, load_rxf
+    raises ReaderUnavailable / ReaderError. ``client`` and ``model`` are for tests and the CLI.
+    A PDF up to INLINE_PDF_BYTES travels inline; a bigger one is uploaded once with the Files API,
+    referenced by id in every turn, and deleted when the read ends however it ends."""
+    from ..config import get_settings
+    from ..pipeline.ingest import MAX_PDF_BYTES
     from ..secrets import get_secret
-    from ..services.vocab import export_vocab
 
     if not pdf.startswith(b"%PDF"):
         raise ReaderError("not a PDF")
     if len(pdf) > MAX_PDF_BYTES:
         raise ReaderError("PDF too large")
-    st = get_settings()
-    lang = lang or ui_language()
-    model = model or st.anthropic_model
+    model = model or get_settings().anthropic_model
     if client is None:
         avail = availability()
         if not avail["enabled"]:
@@ -171,6 +187,31 @@ def read_paper(s: Session, pdf: bytes, filename: str, *, force: bool = False, cl
         import anthropic
 
         client = anthropic.Anthropic(api_key=get_secret("anthropic_api_key"), max_retries=2, timeout=600.0)
+    file_id = None
+    try:
+        if len(pdf) > INLINE_PDF_BYTES:
+            file_id = _upload(client, pdf, filename)
+            source: dict[str, Any] = {"type": "file", "file_id": file_id}
+        else:
+            source = {"type": "base64", "media_type": "application/pdf", "data": base64.b64encode(pdf).decode("ascii")}
+        out = _read(s, pdf, filename, source, force=force, client=client, model=model, lang=lang, today=today,
+                    progress=progress)
+    finally:
+        if file_id:
+            _delete_quietly(client, file_id)
+    out["transport"] = "file" if file_id else "inline"
+    return out
+
+
+def _read(s: Session, pdf: bytes, filename: str, source: dict[str, Any], *, force: bool, client: Any, model: str,
+          lang: str | None, today: date | None, progress: Callable[[str], None] | None) -> dict[str, Any]:
+    from ..config import ui_language
+    from ..pipeline.ingest import ingest_text
+    from ..rxf.guide import instructions
+    from ..rxf.loader import error_report, load_rxf
+    from ..services.vocab import export_vocab
+
+    lang = lang or ui_language()
     step = progress or (lambda _s: None)
     usage = _Usage()
     slug = slug_of(filename)
@@ -182,9 +223,7 @@ def read_paper(s: Session, pdf: bytes, filename: str, *, force: bool = False, cl
                                  + instructions(lang) + "\n\nThe library vocabulary (rhizome-vocab.yaml):\n\n" + export_vocab(s),
          "cache_control": {"type": "ephemeral"}},
     ]
-    doc_block = {"type": "document", "source": {"type": "base64", "media_type": "application/pdf",
-                                                "data": base64.b64encode(pdf).decode("ascii")},
-                 "title": filename, "cache_control": {"type": "ephemeral"}}
+    doc_block = {"type": "document", "source": source, "title": filename, "cache_control": {"type": "ephemeral"}}
     messages: list[dict[str, Any]] = [{"role": "user", "content": [doc_block, {"type": "text", "text": prompts.READER_IDENTIFY}]}]
 
     # 1. identify

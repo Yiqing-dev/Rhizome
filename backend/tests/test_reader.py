@@ -24,7 +24,13 @@ class Client:
     def __init__(self, answers):
         self.answers = list(answers)
         self.calls = []
+        self.uploads, self.deleted = [], []
         self.beta = SimpleNamespace(messages=SimpleNamespace(create=self.create))
+        self.files = SimpleNamespace(upload=self.upload, delete=self.deleted.append)
+
+    def upload(self, file):
+        self.uploads.append(file)
+        return SimpleNamespace(id=f"file_{len(self.uploads)}")
 
     def create(self, **kw):
         self.calls.append(kw)
@@ -159,3 +165,25 @@ def test_read_routes_stage_pdfs_and_queue_jobs(settings, session, monkeypatch, t
     fj = c.post(f"/read/{body['jobs'][1]['id']}/force").json()
     assert fj["payload"]["force"] is True and fj["payload"]["path"] == str(paths[1])
     assert c.post(f"/read/{jid}/force").status_code == 409  # its file is gone
+
+
+def test_a_big_pdf_goes_through_the_files_api_and_is_deleted_after(settings, session):
+    big = PDF + b"\0" * (reader.INLINE_PDF_BYTES + 1)
+    yaml = (EXAMPLES / "light-spatial-domains.yaml").read_text("utf-8")
+    c = Client([IDENT, "report", yaml])
+    out = read_paper(session, big, "big.pdf", client=c, lang="en")
+    assert out["status"] == "done" and out["transport"] == "file"
+    assert [u[0] for u in c.uploads] == ["big.pdf"] and c.uploads[0][2] == "application/pdf"
+    assert c.calls[0]["messages"][0]["content"][0]["source"] == {"type": "file", "file_id": "file_1"}
+    assert all(call["messages"][0]["content"][0]["source"]["type"] == "file" for call in c.calls)
+    assert c.deleted == ["file_1"]
+    # the small one stays inline, no upload
+    c = Client([IDENT, "report", yaml])
+    out = read_paper(session, PDF, "small.pdf", client=c, lang="en")
+    assert out["transport"] == "inline" and c.uploads == [] and c.deleted == []
+    assert c.calls[0]["messages"][0]["content"][0]["source"]["type"] == "base64"
+    # a failure after the upload still deletes the file
+    c = Client([IDENT, ("max_tokens", "half")])
+    with pytest.raises(ReaderError, match="truncated"):
+        read_paper(session, big, "big.pdf", client=c, lang="en")
+    assert c.deleted == ["file_1"]
