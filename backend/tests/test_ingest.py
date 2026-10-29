@@ -240,13 +240,15 @@ def test_external_lookups_run_side_by_side(settings, session, monkeypatch):
     import rhizome.pipeline.ingest as ing
     from rhizome.external import openalex
 
-    seen, threads = [], set()
+    seen, threads, spans = [], set(), []
 
     def slow(answer):
         def fn(*a, **kw):
             seen.append(a[0] if a else kw.get("doi"))
             threads.add(threading.get_ident())
+            t0 = time.monotonic()
             time.sleep(0.25)
+            spans.append((t0, time.monotonic()))
             return answer
         return fn
 
@@ -258,6 +260,9 @@ def test_external_lookups_run_side_by_side(settings, session, monkeypatch):
     r = ingest_text(session, example("deep-with-ids.yaml"), "ids.yaml")
     took = time.monotonic() - t0
     assert r.ok and len(seen) >= 3 and len(threads) > 1
-    assert took < 0.25 * len(seen) * 0.6, (took, len(seen))  # overlapped, not summed
+    # at least two lookups were in flight at the same time, and the whole thing took less than
+    # their sum (a loose bound: Windows runners sleep in coarse ticks)
+    overlaps = [(x, y) for x in spans for y in spans if x is not y and x[0] < y[1] and y[0] < x[1]]
+    assert overlaps and took < 0.25 * len(seen) - 0.1, (took, len(seen), spans)
     ex = session.execute(select(Extraction).where(Extraction.kind == "rxf")).scalars().first()
     assert ex.meta["openalex"] == "not_found" and all(v == "verified" for v in ex.meta["checks"].values())
