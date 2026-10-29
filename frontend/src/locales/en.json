@@ -688,6 +688,9 @@
     "no_infer_note": "No model calls in this import: review questions come from templates and topic questions go to the review queue.",
     "repair": "Repair and import ({{n}})",
     "open": "Open",
-    "duplicate": "Already in the library"
+    "duplicate": "Already in the library",
+    "existing": "This paper already had {{n}} export(s); both are kept.",
+    "replace": "Replace the earlier ones",
+    "replaced": "{{n}} earlier export(s) retracted, rebuilding; undo under Decisions."
   }
 }

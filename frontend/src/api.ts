@@ -137,6 +137,7 @@ export interface OrganiseRun { summary?: string; queued?: number; by_what?: Reco
 export interface ImportResult {
   name: string; ok?: boolean; work_key?: string; work_id?: number; duplicate?: boolean; repairs?: string[];
   related?: { work_id: number; title: string; via: { dimension: string }[] }[]; report?: string | null; repairable?: string[];
+  existing_exports?: number[]; replaced?: number[];  // the paper was in the library before: its earlier exports (kept / retracted)
 }
 export interface ImportProgress {
   batch: string; status: "queued" | "running" | "done" | "interrupted" | "cancelled"; total: number; done: number;

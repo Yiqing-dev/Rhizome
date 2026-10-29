@@ -580,6 +580,14 @@ Anthropic 单次请求上限 32 MB，PDF 内嵌时是 base64（体积乘 4/3）�
 归为 ReaderError。返回值多了 `transport: inline | file`。600 页的模型读取上限仍然存在，与传输方式无关。
 本地 200 MB 的 `MAX_PDF_BYTES` 检查保留。测试：大文件上传、各轮引用、结束删除；小文件不上传；中途失败也删除。
 
+## 导入对话框：同一篇论文的第二份导出（2026-10-29）
+
+同一篇论文（DOI、OpenAlex id 或标题加年份匹配）再导一份不同的 RXF 时，后端一直是两份都保留并在结果里列出
+`existing_exports`，但批次结果只带了少数字段，对话框看不到。现在 `services/imports` 把 `existing_exports` 和 `replaced`
+一起写进批次结果；对话框里这一行显示"这篇论文之前已有 N 份导出，两份都保留"，旁边"用这份替换旧的"按钮发送
+`POST /decision` 的 `retract` 决策（`extraction_ids` 为旧导出，`reason: replaced`），和 `rhz ingest --replace` 走的是同一条
+路：可在决策记录里撤销，随后自动排一次 rebuild。字节完全相同的文件仍显示"库里已有"，不写任何东西。
+
 ## 还需要你来做的（M0）
 
 - 导出指令已按设计文档 10-04 版定稿（见上一节）；用一段时间后若再出现校验失败，把错误报告贴回来改规则。

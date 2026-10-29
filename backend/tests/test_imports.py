@@ -213,3 +213,27 @@ def test_import_without_inference_makes_no_model_calls(api, settings, session, m
     finally:
         cache.INFER_ENABLED.reset(token)
     reset_backend()
+
+
+def test_a_second_export_of_a_paper_is_reported_and_can_replace_the_first(api, settings, session):
+    from rhizome.db.models import Extraction
+
+    first = example("deep-grn-atlas.yaml").encode()
+    _upload(api, [("a.yaml", first)])
+    _run_all()
+    res = api.get("/import/active").json()["active"]["results"]["a.yaml"]
+    assert res["ok"] and res["existing_exports"] == [] and res["replaced"] == []
+    api.delete("/import/" + api.get("/import/active").json()["active"]["batch"])
+    # the same paper again, corrected: both exports stay current and the dialog is told
+    fixed = first.replace(b"accession: GSE999001", b"accession: GSE999009")
+    _upload(api, [("b.yaml", fixed)])
+    _run_all()
+    res = api.get("/import/active").json()["active"]["results"]["b.yaml"]
+    assert res["ok"] and not res["duplicate"] and len(res["existing_exports"]) == 1 and res["replaced"] == []
+    old = res["existing_exports"][0]
+    # "replace the earlier ones" is the retract decision the dialog sends
+    r = api.post("/decision", json={"op": "retract", "payload": {"work": res["work_key"], "extraction_ids": [old], "reason": "replaced"}})
+    assert r.status_code == 200 and r.json()["rebuild_job"]
+    session.rollback()
+    current = [e.id for e in session.query(Extraction).filter(Extraction.work_key == res["work_key"], Extraction.kind == "rxf", Extraction.is_current)]
+    assert old not in current and len(current) == 1

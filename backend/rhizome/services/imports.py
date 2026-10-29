@@ -200,7 +200,8 @@ def _run_batch(s: Session, batch: str, prog: dict[str, Any], only: list[str] | N
             if res.ok:
                 s.commit()
                 out.update(ok=True, work_key=res.work_key, work_id=res.work_id, duplicate=res.duplicate,
-                           repairs=res.repairs, related=res.related[:5])
+                           repairs=res.repairs, related=res.related[:5], existing_exports=res.existing_exports,
+                           replaced=res.replaced)
                 (d / name).unlink(missing_ok=True)  # kept in raw/ now; only failures stay staged
                 if pdf_of.get(name):
                     (d / pdf_of[name]).unlink(missing_ok=True)

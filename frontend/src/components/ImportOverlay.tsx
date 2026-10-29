@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import type { ImportResult } from "../api";
+import { api, ApiError, type ImportResult } from "../api";
 import { href } from "../router";
 import { cancel, clearError, dismiss, repair, resume, setMinimized, useImport } from "../importStore";
 import { UploadIcon } from "./icons";
@@ -10,6 +11,33 @@ function Bar({ value, max }: { value: number; max: number }) {
   return (
     <div className="progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
       <div style={{ width: `${pct}%` }} />
+    </div>
+  );
+}
+
+/** The paper was in the library before this file: say so, and offer to retract the earlier exports
+ * (an undoable decision, then a rebuild) so this one is the only current description. */
+function EarlierExports({ r }: { r: ImportResult }) {
+  const { t } = useTranslation();
+  const [state, setState] = useState<"idle" | "busy" | "done" | string>("idle");
+  const n = r.existing_exports?.length ?? 0;
+  if (r.replaced?.length) return <div className="small muted">{t("import.replaced", { n: r.replaced.length })}</div>;
+  if (!n || !r.work_key) return null;
+  async function replace() {
+    setState("busy");
+    try {
+      await api.decide("retract", { work: r.work_key, extraction_ids: r.existing_exports, reason: "replaced" });
+      setState("done");
+    } catch (e) {
+      setState(e instanceof ApiError ? String(e.detail) : String(e));
+    }
+  }
+  if (state === "done") return <div className="small muted">{t("import.replaced", { n })}</div>;
+  return (
+    <div className="row wrap small earlier-exports">
+      <span className="muted">{t("import.existing", { n })}</span>
+      <button type="button" className="ghost small" disabled={state === "busy"} onClick={() => void replace()}>{t("import.replace")}</button>
+      {state !== "idle" && state !== "busy" && <span className="danger">{state}</span>}
     </div>
   );
 }
@@ -24,6 +52,7 @@ function ResultRow({ r }: { r: ImportResult }) {
         {r.ok && r.work_id ? <a href={href(`entity/${r.work_id}`)} onClick={() => void dismiss()}>{t(r.duplicate ? "import.duplicate" : "import.open")}</a> : null}
       </div>
       {fixes && <div className="small muted">{t("home.repaired", { fixes })}</div>}
+      {r.ok && <EarlierExports r={r} />}
       {!r.ok && r.report && <details><summary className="small">{t("home.show_report")}</summary><pre>{r.report}</pre></details>}
       {r.related?.length ? (
         <div className="small muted">{t("home.related")} {r.related.map((x) => x.title).join(" · ")}</div>
